@@ -1,4 +1,3 @@
-
 target_sources(${LIBRARY_NAME} PRIVATE las++.cpp)
 
 target_sources(${LIBRARY_NAME} PUBLIC las++.hpp)
