@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -67,10 +68,10 @@ class __attribute__((packed)) LASHeader {
   double m_y_offset;
   double m_z_offset;
   double m_max_x;
+  double m_min_x;  // Spec seems to disagree with this ordering :(
   double m_max_y;
-  double m_max_z;
-  double m_min_x;
   double m_min_y;
+  double m_max_z;
   double m_min_z;
   uint64_t m_start_of_waveform_data_packet_record;
   uint64_t m_start_of_first_extended_variable_length_record;
@@ -85,6 +86,11 @@ class __attribute__((packed)) LASHeader {
     return header;
   }
 
+  bool is_laz_compressed() const {
+    return m_point_data_record_format &
+           128;  // The spec says laz adds 100 but other implementations use 128
+  }
+
   size_t num_points() const {
     return m_legacy_number_of_point_records == 0 ? m_number_of_point_records
                                                  : m_legacy_number_of_point_records;
@@ -95,8 +101,18 @@ class __attribute__((packed)) LASHeader {
   unsigned int offset_to_point_data() const { return m_offset_to_point_data; }
 
   unsigned int VLR_offset() const { return m_header_size; }
+  unsigned int VLR_count() const { return m_number_of_variable_length_records; }
 
-  size_t EVLR_offset() const { return m_start_of_first_extended_variable_length_record; }
+  size_t EVLR_offset() const {
+    return offsetof(LASHeader, m_start_of_first_extended_variable_length_record) < m_header_size
+               ? m_start_of_first_extended_variable_length_record
+               : 0;
+  }
+  size_t EVLR_count() const {
+    return offsetof(LASHeader, m_start_of_first_extended_variable_length_record) < m_header_size
+               ? m_number_of_extended_variable_length_records
+               : 0;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LASHeader& header) {
     os << "File signature: " << header.m_file_signature[0] << header.m_file_signature[1]

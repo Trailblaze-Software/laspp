@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <iostream>
 
+#include "lazvlr.hpp"
+
 namespace laspp {
 
 #pragma pack(push, 1)
@@ -126,10 +128,54 @@ struct __attribute__((packed)) LASVariableLengthRecord {
   }
 
   bool is_waveform_data_packets() const { return is_spec() && record_id == 65535; }
+
+  bool is_laz_vlr() const {
+    return (reserved == 0 || reserved == 43707) &&
+           (std::string(user_id) == "LAZ encoded" || std::string(user_id) == "laszip encoded") &&
+           record_id == 22204;
+  }
 };
 
-using LASEVLR = LASVariableLengthRecord;
 using LASVLR = LASVariableLengthRecord;
+
+class LASVLRWithGlobalOffset : public LASVariableLengthRecord {
+  uint64_t m_global_offset;
+
+ public:
+  LASVLRWithGlobalOffset(const LASVariableLengthRecord& vlr, uint64_t global_offset)
+      : LASVariableLengthRecord(vlr), m_global_offset(global_offset) {}
+
+  uint64_t global_offset() const { return m_global_offset; }
+};
+
+struct __attribute__((packed)) LASExtendedVariableLengthRecord {
+  uint16_t reserved;
+  char user_id[16];
+  uint16_t record_id;
+  uint64_t record_length_after_header;
+  char description[32];
+
+  friend std::ostream& operator<<(std::ostream& os, const LASExtendedVariableLengthRecord& evlr) {
+    os << "Reserved: " << evlr.reserved << std::endl;
+    os << "User ID: " << evlr.user_id << std::endl;
+    os << "Record ID: " << evlr.record_id << std::endl;
+    os << "Record length after header: " << evlr.record_length_after_header << std::endl;
+    os << "Description: " << evlr.description << std::endl;
+    return os;
+  }
+};
+
+using LASEVLR = LASExtendedVariableLengthRecord;
+
+class LASEVLRWithGlobalOffset : public LASExtendedVariableLengthRecord {
+  uint64_t m_global_offset;
+
+ public:
+  LASEVLRWithGlobalOffset(const LASExtendedVariableLengthRecord& evlr, uint64_t global_offset)
+      : LASExtendedVariableLengthRecord(evlr), m_global_offset(global_offset) {}
+
+  uint64_t global_offset() const { return m_global_offset; }
+};
 
 #pragma pack(pop)
 

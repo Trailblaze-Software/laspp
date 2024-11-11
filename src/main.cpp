@@ -3,7 +3,7 @@
 
 #include "lasreader.hpp"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <filename>" << std::endl;
     return 1;
@@ -22,11 +22,17 @@ int main(int argc, char *argv[]) {
   laspp::LASReader reader(ifs);
   std::cout << reader.header() << std::endl;
 
-  std::vector<std::byte> point_data = reader.read_point_data(reader.header());
+  // std::cout << reader.get_first_point() << std::endl;
 
-  std::cout << "Read " << point_data.size() << " bytes of point data" << std::endl;
+  auto vlrs = reader.read_vlrs();
+  for (const auto& vlr : vlrs) {
+    std::cout << vlr << std::endl;
+  }
 
-  std::cout << reader.get_first_point() << std::endl;
+  auto evlrs = reader.read_evlrs();
+  for (const auto& evlr : evlrs) {
+    std::cout << evlr << std::endl;
+  }
 
   return 0;
 }
