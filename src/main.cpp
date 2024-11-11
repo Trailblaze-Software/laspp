@@ -1,7 +1,9 @@
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
 #include "lasreader.hpp"
+#include "lazvlr.hpp"
 
 int main(int argc, char* argv[]) {
   if (argc != 2) {
@@ -27,6 +29,16 @@ int main(int argc, char* argv[]) {
   auto vlrs = reader.read_vlrs();
   for (const auto& vlr : vlrs) {
     std::cout << vlr << std::endl;
+    if (vlr.is_laz_vlr()) {
+      std::cout << "Found LAZ VLR" << std::endl;
+      ifs.seekg(vlr.global_offset());
+      laspp::LAZSpecialVLRPt1 laz_vlr_pt1;
+      ifs.read(reinterpret_cast<char*>(&laz_vlr_pt1), sizeof(laspp::LAZSpecialVLRPt1));
+      std::cout << laz_vlr_pt1 << std::endl;
+
+      laspp::LAZSpecialVLR laz_vlr(laz_vlr_pt1, ifs);
+      std::cout << laz_vlr << std::endl;
+    }
   }
 
   auto evlrs = reader.read_evlrs();
