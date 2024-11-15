@@ -130,7 +130,7 @@ struct __attribute__((packed)) LASVariableLengthRecord {
   bool is_waveform_data_packets() const { return is_spec() && record_id == 65535; }
 
   bool is_laz_vlr() const {
-    return (reserved == 0 || reserved == 43707) &&
+    return (reserved == 0 || reserved == 0xAABB) &&  // 43707
            (std::string(user_id) == "LAZ encoded" || std::string(user_id) == "laszip encoded") &&
            record_id == 22204;
   }

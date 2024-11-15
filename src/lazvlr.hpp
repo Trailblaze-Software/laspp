@@ -214,6 +214,9 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
       : LAZSpecialVLRPt1(pt1), items_records(pt1.num_item_records) {
     for (auto& item : items_records) {
       is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord));
+      if (is.fail()) {
+        throw std::runtime_error("Failed to read LAZ item record");
+      }
       assert(check_size_from_type(item.item_type, item.item_size));
     }
   }
