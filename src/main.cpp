@@ -7,6 +7,7 @@
 #include "laz/bit_symbol_encoder.hpp"
 #include "laz/lazchunktable.hpp"
 #include "laz/lazvlr.hpp"
+#include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
 
@@ -99,6 +100,7 @@ int main(int argc, char* argv[]) {
       symbol_encoder.encode_bit(ostream, 0);
       symbol_encoder.encode_bit(ostream, 1);
       symbol_encoder.encode_bit(ostream, 1);
+      laspp::raw_encode(ostream, 2445, 36);
       symbol_encoder.encode_bit(ostream, 1);
       symbol_encoder.encode_bit(ostream, 0);
       symbol_encoder.encode_bit(ostream, 1);
@@ -113,7 +115,13 @@ int main(int argc, char* argv[]) {
     {
       laspp::InStream instream(encoded_stream);
       laspp::BitSymbolEncoder symbol_encoder;
-      for (size_t i = 0; i < 6; i++) {
+      for (size_t i = 0; i < 3; i++) {
+        uint32_t bit = symbol_encoder.decode_bit(instream);
+        std::cout << "Symbol: " << bit << std::endl;
+        ;
+      }
+      std::cout << "Raw: " << laspp::raw_decode(instream, 36) << std::endl;
+      for (size_t i = 0; i < 3; i++) {
         uint32_t bit = symbol_encoder.decode_bit(instream);
         std::cout << "Symbol: " << bit << std::endl;
         ;
