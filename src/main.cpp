@@ -1,10 +1,14 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #include "lasreader.hpp"
-#include "lazchunktable.hpp"
-#include "lazvlr.hpp"
+#include "laz/bit_symbol_encoder.hpp"
+#include "laz/lazchunktable.hpp"
+#include "laz/lazvlr.hpp"
+#include "laz/stream.hpp"
+#include "laz/symbol_encoder.hpp"
 
 int main(int argc, char* argv[]) {
   if (argc != 2) {
@@ -56,6 +60,66 @@ int main(int argc, char* argv[]) {
   ifs.seekg(chunk_table_offset);
   laspp::LAZChunkTable chunk_table(ifs);
   std::cout << "Chunk table:\n" << chunk_table;
+
+  {
+    std::stringstream encoded_stream;
+    {
+      laspp::OutStream ostream(encoded_stream);
+      laspp::SymbolEncoder<3> symbol_encoder;
+      symbol_encoder.encode_symbol(ostream, 0);
+      symbol_encoder.encode_symbol(ostream, 1);
+      symbol_encoder.encode_symbol(ostream, 2);
+      symbol_encoder.encode_symbol(ostream, 1);
+      symbol_encoder.encode_symbol(ostream, 0);
+      symbol_encoder.encode_symbol(ostream, 2);
+    }
+
+    std::cout << "Encoded stream:";
+    for (char c : encoded_stream.str()) {
+      std::cout << " " << (uint32_t)c;
+    }
+    std::cout << std::endl;
+
+    {
+      laspp::InStream instream(encoded_stream);
+      laspp::SymbolEncoder<3> symbol_encoder;
+      for (size_t i = 0; i < 6; i++) {
+        uint32_t symbol = symbol_encoder.decode_symbol(instream);
+        std::cout << "Symbol: " << symbol << std::endl;
+        ;
+      }
+    }
+  }
+
+  {
+    std::stringstream encoded_stream;
+    {
+      laspp::OutStream ostream(encoded_stream);
+      laspp::BitSymbolEncoder symbol_encoder;
+      symbol_encoder.encode_bit(ostream, 0);
+      symbol_encoder.encode_bit(ostream, 1);
+      symbol_encoder.encode_bit(ostream, 1);
+      symbol_encoder.encode_bit(ostream, 1);
+      symbol_encoder.encode_bit(ostream, 0);
+      symbol_encoder.encode_bit(ostream, 1);
+    }
+
+    std::cout << "Encoded stream:";
+    for (char c : encoded_stream.str()) {
+      std::cout << " " << (uint32_t)c;
+    }
+    std::cout << std::endl;
+
+    {
+      laspp::InStream instream(encoded_stream);
+      laspp::BitSymbolEncoder symbol_encoder;
+      for (size_t i = 0; i < 6; i++) {
+        uint32_t bit = symbol_encoder.decode_bit(instream);
+        std::cout << "Symbol: " << bit << std::endl;
+        ;
+      }
+    }
+  }
 
   auto evlrs = reader.read_evlrs();
   for (const auto& evlr : evlrs) {

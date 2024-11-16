@@ -4,8 +4,6 @@
 #include <cstdint>
 #include <iostream>
 
-#include "lazvlr.hpp"
-
 namespace laspp {
 
 #pragma pack(push, 1)
