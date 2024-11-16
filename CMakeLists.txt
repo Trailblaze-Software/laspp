@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
+
 project(
   LAS++
   VERSION 0.0.0
@@ -9,6 +11,10 @@ project(
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 add_compile_definitions(LASPP_VERSION="${PROJECT_VERSION}")
+if(LASPP_DEBUG_ASSERTS)
+  message("Enabling LAS++ debugging asserts. May be slow.")
+  add_compile_definitions(LASPP_DEBUG_ASSERTS)
+endif()
 execute_process(
   COMMAND git rev-parse HEAD
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

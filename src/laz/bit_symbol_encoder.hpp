@@ -46,6 +46,8 @@ class BitSymbolEncoder {
       update_distribution();
     }
 
+    stream.get_value();
+
     return bit;
   }
 

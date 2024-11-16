@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include "laz/stream.hpp"
+#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -45,7 +46,7 @@ class SymbolEncoder {
 
   uint16_t decode_symbol(InStream& stream) {
     uint32_t value = stream.get_value();
-    uint32_t l_tmp = stream.length() >> 15;
+    uint32_t l_tmp = (stream.length() >> 15);
     uint16_t symbol;
 
     for (size_t s = 0; s < NSymbols; s++) {
@@ -64,11 +65,14 @@ class SymbolEncoder {
       update_distribution();
     }
 
+    stream.get_value();
+
     return symbol;
   }
 
   void encode_symbol(OutStream& stream, uint16_t symbol) {
-    uint32_t l_tmp = stream.length() >> 15;
+    AssertGT(NSymbols, symbol);
+    uint32_t l_tmp = (stream.length() >> 15);
 
     stream.update_range(distribution[symbol] * l_tmp, symbol < NSymbols - 1
                                                           ? (distribution[symbol + 1] * l_tmp)
