@@ -106,18 +106,15 @@ class IntegerEncoder {
 
     m_k_encoder.encode_symbol(stream, k);
 
-    std::cout << integer << " " << (int)k << std::endl;
     if (k < 32) {
       if (integer < 0) {
         integer += (1ul << k) - 1;
       } else {
         integer -= 1;
       }
-      std::cout << integer << " " << (int)k << std::endl;
       if (k <= 8) {
         m_symbol_encoders.encode(stream, k, integer);
       } else {
-        std::cout << "Encoding " << (integer >> (k - 8)) << std::endl;
         m_symbol_encoders.encode(stream, k, integer >> (k - 8));
         integer = integer & ((1 << (k - 8)) - 1);
         raw_encode(stream, integer, k - 8);

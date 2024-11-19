@@ -36,11 +36,12 @@ class SymbolEncoder {
   }
 
  public:
-  SymbolEncoder() : update_cycle((NSymbols + 6) / 2) {
+  SymbolEncoder() {
     for (size_t s = 0; s < NSymbols; s++) {
       symbol_count[s] = 1;
     }
     update_distribution();
+    update_cycle = (NSymbols + 6) / 2;
     symbols_until_update = update_cycle;
   }
 

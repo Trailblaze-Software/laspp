@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"
 #include "utilities/printing.hpp"
 
@@ -33,7 +34,12 @@ class LAZChunkTable : LAZChunkTableHeader {
     istream.read(reinterpret_cast<char*>(this), sizeof(LAZChunkTableHeader));
 
     InStream decoder(istream);
-    std::cout << "Decoded value: " << decoder.get_value() << std::endl;
+    IntegerEncoder<32> int_decoder;
+    for (size_t i = 0; i < number_of_chunks; i++) {
+      int32_t decoded_int = int_decoder.decode_int(decoder);
+      int32_t previous_int = i == 0 ? 0 : compressed_chunk_size[i - 1];
+      compressed_chunk_size.push_back(decoded_int + previous_int);
+    }
   }
 
   friend std::ostream& operator<<(std::ostream& os, const LAZChunkTable& chunk_table) {
