@@ -3,14 +3,28 @@
 #include <iostream>
 #include <sstream>
 
+#include "laspoint.hpp"
 #include "lasreader.hpp"
 #include "laz/bit_symbol_encoder.hpp"
 #include "laz/integer_encoder.hpp"
-#include "laz/lazchunktable.hpp"
-#include "laz/lazvlr.hpp"
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
+
+class LASPoint {
+  std::array<int32_t, 3> position;
+
+ public:
+  LASPoint(laspp::LASPointFormat0 point) : position({point.x, point.y, point.z}) {}
+
+  LASPoint() = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPoint& point) {
+    os << "Position: (" << point.position[0] << ", " << point.position[1] << ", "
+       << point.position[2] << ")";
+    return os;
+  }
+};
 
 int main(int argc, char* argv[]) {
   if (argc != 2) {
@@ -31,37 +45,10 @@ int main(int argc, char* argv[]) {
   laspp::LASReader reader(ifs);
   std::cout << reader.header() << std::endl;
 
-  // std::cout << reader.get_first_point() << std::endl;
-
-  auto vlrs = reader.read_vlrs();
+  auto vlrs = reader.vlr_headers();
   for (const auto& vlr : vlrs) {
     std::cout << vlr << std::endl;
-    if (vlr.is_laz_vlr()) {
-      std::cout << "Found LAZ VLR" << std::endl;
-      ifs.seekg(vlr.global_offset());
-      laspp::LAZSpecialVLRPt1 laz_vlr_pt1;
-      ifs.read(reinterpret_cast<char*>(&laz_vlr_pt1), sizeof(laspp::LAZSpecialVLRPt1));
-      laspp::LAZSpecialVLR laz_vlr(laz_vlr_pt1, ifs);
-      std::cout << laz_vlr << std::endl;
-
-      ifs.seekg(laz_vlr.offset_of_special_evlrs);
-      for (int i = 0; i < laz_vlr.num_special_evlrs; i++) {
-        laspp::LASEVLR laz_evlr;
-        ifs.read(reinterpret_cast<char*>(&laz_evlr), sizeof(laspp::LASEVLR));
-        std::cout << laz_evlr << std::endl;
-      }
-    }
   }
-
-  ifs.seekg(reader.header().offset_to_point_data());
-  int64_t chunk_table_offset;
-  // if (chunk_table_offset == -1) use last 8 bytes of file
-  ifs.read(reinterpret_cast<char*>(&chunk_table_offset), sizeof(size_t));
-  std::cout << "Chunk table offset: " << chunk_table_offset << std::endl;
-
-  ifs.seekg(chunk_table_offset);
-  laspp::LAZChunkTable chunk_table(ifs);
-  std::cout << "Chunk table:\n" << chunk_table;
 
   {
     std::stringstream encoded_stream;
@@ -140,9 +127,17 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  auto evlrs = reader.read_evlrs();
+  auto evlrs = reader.evlr_headers();
   for (const auto& evlr : evlrs) {
     std::cout << evlr << std::endl;
+  }
+
+  std::vector<LASPoint> points(54);
+
+  auto read_points = reader.read_chunk<LASPoint>(points, 0);
+
+  for (const auto& point : read_points) {
+    std::cout << point << std::endl;
   }
 
   return 0;

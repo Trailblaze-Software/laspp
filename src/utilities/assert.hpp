@@ -60,7 +60,7 @@ inline void _AssertBinOp(const A &a, const B &b, const std::string &a_str, const
   Assert(false, __VA_ARGS__); \
   unreachable()
 
-#define Unimplemented(...) Assert(false, "Unimplemented");
+#define Unimplemented(...) Fail("Unimplemented")
 
 #define AssertGE(expr, val) AssertBinOp(expr, val, >=, <)
 #define AssertLE(expr, val) AssertBinOp(expr, val, <=, >)

@@ -144,6 +144,8 @@ class LASVLRWithGlobalOffset : public LASVariableLengthRecord {
       : LASVariableLengthRecord(vlr), m_global_offset(global_offset) {}
 
   uint64_t global_offset() const { return m_global_offset; }
+
+  using record_type = LASVariableLengthRecord;
 };
 
 struct __attribute__((packed)) LASExtendedVariableLengthRecord {
@@ -173,6 +175,8 @@ class LASEVLRWithGlobalOffset : public LASExtendedVariableLengthRecord {
       : LASExtendedVariableLengthRecord(evlr), m_global_offset(global_offset) {}
 
   uint64_t global_offset() const { return m_global_offset; }
+
+  using record_type = LASExtendedVariableLengthRecord;
 };
 
 #pragma pack(pop)

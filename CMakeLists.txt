@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
+option(LASPP_BUILD_TESTS "Build tests" ON)
 
 project(
   LAS++
@@ -12,15 +13,9 @@ set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 add_compile_definitions(LASPP_VERSION="${PROJECT_VERSION}")
 if(LASPP_DEBUG_ASSERTS)
-  message("Enabling LAS++ debugging asserts. May be slow.")
+  message(WARNING "Enabling LAS++ debugging asserts. May be slow.")
   add_compile_definitions(LASPP_DEBUG_ASSERTS)
 endif()
-execute_process(
-  COMMAND git rev-parse HEAD
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  OUTPUT_VARIABLE GIT_COMMIT_HASH
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-add_compile_definitions(GIT_COMMIT_HASH="${GIT_COMMIT_HASH}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,9 +45,15 @@ add_executable(${EXE_NAME})
 
 find_package(OpenMP REQUIRED)
 
-target_link_libraries(${EXE_NAME} PRIVATE ${LIBRARY_NAME} OpenMP::OpenMP_CXX)
+target_link_libraries(${LIBRARY_NAME} PRIVATE OpenMP::OpenMP_CXX)
+target_link_libraries(${EXE_NAME} PRIVATE ${LIBRARY_NAME})
 
 add_subdirectory(src)
+
+# if(LASPP_BUILD_TESTS) enable_testing()
+#
+# add_executable(las++-tests) target_link_libraries(las++-tests PRIVATE
+# ${LIBRARY_NAME}) endif()
 
 include(GNUInstallDirs)
 
