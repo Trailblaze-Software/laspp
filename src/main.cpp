@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
     std::cout << evlr << std::endl;
   }
 
-  std::vector<LASPoint> points(54);
+  std::vector<LASPoint> points(20);
 
   auto read_points = reader.read_chunk<LASPoint>(points, 0);
 

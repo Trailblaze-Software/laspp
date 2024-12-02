@@ -8,6 +8,8 @@
 
 namespace laspp {
 
+inline std::ostream& operator<<(std::ostream& os, const std::byte& b) { return os << (int)b; };
+
 template <typename T>
 inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
   os << "[";

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <optional>
-#include <ranges>
 #include <span>
 #include <vector>
 
@@ -21,11 +20,11 @@ class LASReader {
   std::vector<LASVLRWithGlobalOffset> m_vlr_headers;
   std::vector<LASEVLRWithGlobalOffset> m_evlr_headers;
 
-  LASHeader read_header() {
-    m_ifs.seekg(0);
-    LASHeader header;
-    m_ifs.read(reinterpret_cast<char*>(&header), sizeof(LASHeader));
-    return header;
+  static LASHeader read_header(std::ifstream& ifs) {
+    ifs.seekg(0);
+    LASHeader las_header;
+    ifs.read(reinterpret_cast<char*>(&las_header), sizeof(LASHeader));
+    return las_header;
   }
 
   template <typename T>
@@ -60,9 +59,9 @@ class LASReader {
   }
 
  public:
-  LASReader(std::ifstream& ifs)
+  explicit LASReader(std::ifstream& ifs)
       : m_ifs(ifs),
-        m_header(read_header()),
+        m_header(read_header(m_ifs)),
         m_vlr_headers(read_vlr_headers()),
         m_evlr_headers(read_evlr_headers()) {
     if (m_header.is_laz_compressed()) {
@@ -116,12 +115,20 @@ class LASReader {
       std::vector<std::byte> compressed_data(
           m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index));
       m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
-      return m_laz_data->decompress_chunk(
-          compressed_data,
-          output_location.subspan(0, m_laz_data->m_chunk_table->points_per_chunk()[chunk_index]));
+      // size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
+      size_t n_points = 2;
+      return m_laz_data->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
     }
     Assert(chunk_index == 0);
-    Unimplemented();
+    size_t n_points = 2;
+    m_ifs.seekg(header().offset_to_point_data());
+    for (size_t i = 0; i < n_points; i++) {
+      LASPointFormat1 las_point;
+      m_ifs.read(reinterpret_cast<char*>(&las_point), sizeof(las_point) + 5);
+      std::cout << las_point << std::endl;
+      output_location[i] = las_point;
+    }
+    return output_location.subspan(0, n_points);
   }
 
   LASPointFormat0 get_first_point() {
