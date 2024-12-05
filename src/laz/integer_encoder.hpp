@@ -96,12 +96,12 @@ class IntegerEncoder {
       int32_t val = m_symbol_encoders->decode(stream, k);
       if (k > 8) {
         int32_t lower_bits = raw_decode(stream, k - 8);
-        val = (val << (k - 8)) + lower_bits;
+        val = (val << (k - 8)) | lower_bits;
       }
       if (val >= (1 << (k - 1))) {
         return val + 1;
       } else {
-        return val - (1 << k) - 1;
+        return val - ((1 << k) - 1);
       }
     } else {
       return std::numeric_limits<int32_t>::min();

@@ -1,0 +1,126 @@
+#pragma once
+
+#include <array>
+#include <cstdint>
+
+#include "laspoint.hpp"
+#include "laz/integer_encoder.hpp"
+#include "laz/stream.hpp"
+#include "utilities/assert.hpp"
+namespace laspp {
+
+class GPSTime11Encoder {
+  struct ReferenceFrame {
+    int64_t delta;
+    uint64_t counter;
+    GPSTime prev_gps_time;
+
+    ReferenceFrame() : delta(0), counter(0), prev_gps_time(0) {}
+
+    friend std::ostream& operator<<(std::ostream& os, const ReferenceFrame& rf) {
+      return os << "Delta: " << rf.delta << " Counter: " << rf.counter
+                << " Prev GPS Time: " << rf.prev_gps_time;
+    }
+  };
+
+  std::array<ReferenceFrame, 4> m_reference_frames;
+  uint8_t m_current_frame;
+  MultiInstanceIntegerEncoder<32, 9> m_dgps_time_low_encoder;
+  SymbolEncoder<516> m_case_encoder;
+  SymbolEncoder<6> m_case_0delta_encoder;
+
+ public:
+  explicit GPSTime11Encoder(GPSTime last_gps_time) : m_current_frame(0) {
+    m_reference_frames[0].prev_gps_time = last_gps_time;
+  }
+
+  GPSTime decode(InStream& in_stream) {
+    uint16_t case_delta;
+    std::cout << "Current frame: " << m_reference_frames[m_current_frame] << std::endl;
+    if (m_reference_frames[m_current_frame].delta == 0) {
+      case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
+      std::cout << case_delta << std::endl;
+      if (case_delta >= 3) {
+        m_current_frame = (m_current_frame + case_delta - 2) % 4;
+        std::cout << "Current frame: " << m_reference_frames[m_current_frame] << std::endl;
+        if (m_reference_frames[m_current_frame].delta == 0) {
+          case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
+          AssertLE(case_delta, 2);
+        } else {
+          case_delta = m_case_encoder.decode_symbol(in_stream);
+          AssertLE(case_delta, 512);
+        }
+      }
+      if (case_delta == 0) {
+        case_delta = 511;
+      } else if (case_delta == 2) {
+        case_delta = 512;
+      }
+    } else {
+      case_delta = m_case_encoder.decode_symbol(in_stream);
+      if (case_delta >= 513) {
+        m_current_frame = (m_current_frame + case_delta - 512) % 4;
+        if (m_reference_frames[m_current_frame].delta == 0) {
+          case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
+          AssertLE(case_delta, 2);
+        } else {
+          case_delta = m_case_encoder.decode_symbol(in_stream);
+          AssertLE(case_delta, 512);
+        }
+      }
+    }
+    std::cout << "Case delta: " << case_delta << std::endl;
+
+    if (case_delta < 510) {
+      // int32_t dgps_time_low;
+      if (case_delta == 0) {
+        int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(7, in_stream);
+        reinterpret_cast<int64_t&>(m_reference_frames[m_current_frame].prev_gps_time.gps_time) +=
+            dgps_time_low;
+        m_reference_frames[m_current_frame].counter++;
+        if (m_reference_frames[m_current_frame].counter > 3) {
+          m_reference_frames[m_current_frame].delta = dgps_time_low;
+          m_reference_frames[m_current_frame].counter = 0;
+        }
+        return m_reference_frames[m_current_frame].prev_gps_time;
+      } else if (case_delta == 1) {
+        int instance = m_reference_frames[m_current_frame].delta == 0 ? 1 : 0;
+        int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(instance, in_stream);
+        std::cout << "Delta: " << m_reference_frames[m_current_frame].delta
+                  << " Instance: " << instance << " dgps_time_low: " << dgps_time_low << std::endl;
+        reinterpret_cast<int64_t&>(m_reference_frames[m_current_frame].prev_gps_time.gps_time) +=
+            m_reference_frames[m_current_frame].delta + dgps_time_low;
+        m_reference_frames[m_current_frame].counter = 0;
+        if (m_reference_frames[m_current_frame].delta == 0) {
+          m_reference_frames[m_current_frame].delta = dgps_time_low;
+        }
+        return m_reference_frames[m_current_frame].prev_gps_time;
+      } else if (case_delta < 500) {
+        int32_t dgps_time_low =
+            m_dgps_time_low_encoder.decode_int(case_delta < 10 ? 2 : 3, in_stream);
+        reinterpret_cast<int64_t&>(m_reference_frames[m_current_frame].prev_gps_time.gps_time) +=
+            case_delta * m_reference_frames[m_current_frame].delta + dgps_time_low;
+        return m_reference_frames[m_current_frame].prev_gps_time;
+      } else if (case_delta == 500) {
+        int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(4, in_stream);
+        reinterpret_cast<int64_t&>(m_reference_frames[m_current_frame].prev_gps_time.gps_time) +=
+            case_delta * m_reference_frames[m_current_frame].delta + dgps_time_low;
+        m_reference_frames[m_current_frame].counter++;
+        if (m_reference_frames[m_current_frame].counter > 3) {
+          m_reference_frames[m_current_frame].delta = 500 * case_delta + dgps_time_low;
+          m_reference_frames[m_current_frame].counter = 0;
+        }
+        return m_reference_frames[m_current_frame].prev_gps_time;
+      }
+    }
+    if (case_delta == 511) {
+      return m_reference_frames[m_current_frame].prev_gps_time;
+    }
+
+    std::cout << "Delta: " << case_delta << std::endl;
+
+    Unimplemented();
+  }
+};
+
+}  // namespace laspp

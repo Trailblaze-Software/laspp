@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <ostream>
 
@@ -183,9 +184,18 @@ struct __attribute__((packed)) LASPointFormat0 {
 
 struct __attribute__((packed)) GPSTime {
   double gps_time;
+
+  friend std::ostream& operator<<(std::ostream& os, const GPSTime& gpst) {
+    return os << "GPS Time: " << std::setprecision(20) << gpst.gps_time << " ( "
+              << *reinterpret_cast<const int64_t*>(&gpst.gps_time) << " )" << std::endl;
+  }
 };
 
-struct __attribute__((packed)) LASPointFormat1 : LASPointFormat0, GPSTime {};
+struct __attribute__((packed)) LASPointFormat1 : LASPointFormat0, GPSTime {
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat1& lpf1) {
+    return os << (LASPointFormat0)(lpf1) << (GPSTime)(lpf1) << std::endl;
+  }
+};
 
 struct __attribute__((packed)) ColorData {
   uint16_t red;

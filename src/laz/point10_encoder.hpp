@@ -29,7 +29,7 @@ class LASPointFormat0Encoder {
 
  public:
   explicit LASPointFormat0Encoder(const LASPointFormat0& initial_las_point)
-      : m_last_las_point(initial_las_point) {}
+      : m_last_las_point(initial_las_point), m_prev_dz({0, 0, 0, 0, 0, 0, 0, 0}) {}
 
   LASPointFormat0 decompress(InStream& stream) {
     uint8_t changed_values = m_changed_values_encoder.decode_symbol(stream);
@@ -105,12 +105,13 @@ class LASPointFormat0Encoder {
     las_point.y = m_last_las_point.y + dy;
     m_dy_streamed_median[m].insert(dy);
 
-    uint8_t kxy = (dx_k + m_dy_encoder[las_point.bit_byte.number_of_returns == 1].prev_k()) / 2;
+    uint8_t kxy = (dx_k + m_dy_encoder[dy_instance].prev_k()) / 2;
     uint8_t dz_instance = (kxy < 18) ? (kxy ^ 1) : 18;
     if (las_point.bit_byte.number_of_returns == 1) {
       dz_instance++;
     }
-    las_point.z = m_prev_dz[l] + m_dz_encoder[dz_instance].decode_int(stream);
+    double dz = m_dz_encoder[dz_instance].decode_int(stream);
+    las_point.z = m_prev_dz[l] + dz;
     m_prev_dz[l] = las_point.z;
 
     m_last_las_point = las_point;
