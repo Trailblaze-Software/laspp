@@ -41,7 +41,7 @@ class LASPointFormat0Encoder {
       las_point.bit_byte = m_last_las_point.bit_byte;
     }
 
-    static uint8_t return_map_m[8][8] = {
+    static const uint8_t return_map_m[8][8] = {
         {15, 14, 13, 12, 11, 10, 9, 8},  {14, 0, 1, 3, 6, 10, 10, 9},
         {13, 1, 2, 4, 7, 11, 11, 10},    {12, 3, 4, 5, 8, 12, 12, 11},
         {11, 6, 7, 8, 9, 13, 13, 12},    {10, 10, 11, 12, 13, 14, 14, 13},
@@ -96,7 +96,7 @@ class LASPointFormat0Encoder {
     m_dx_streamed_median[m].insert(dx);
 
     uint8_t dx_k = m_dx_encoder[las_point.bit_byte.number_of_returns == 1].prev_k();
-    uint8_t dy_instance = (dx_k < 20) ? (dx_k ^ 1) : 20;
+    uint8_t dy_instance = (dx_k < 20) ? (dx_k & (~1u)) : 20;
     if (las_point.bit_byte.number_of_returns == 1) {
       dy_instance++;
     }
@@ -106,7 +106,7 @@ class LASPointFormat0Encoder {
     m_dy_streamed_median[m].insert(dy);
 
     uint8_t kxy = (dx_k + m_dy_encoder[dy_instance].prev_k()) / 2;
-    uint8_t dz_instance = (kxy < 18) ? (kxy ^ 1) : 18;
+    uint8_t dz_instance = (kxy < 18) ? (kxy & (~1u)) : 18;
     if (las_point.bit_byte.number_of_returns == 1) {
       dz_instance++;
     }

@@ -116,11 +116,11 @@ class LASReader {
           m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index));
       m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
       // size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
-      size_t n_points = 6;
+      size_t n_points = 100;
       return m_laz_data->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
     }
     Assert(chunk_index == 0);
-    size_t n_points = 6;
+    size_t n_points = 100;
     m_ifs.seekg(header().offset_to_point_data());
     for (size_t i = 0; i < n_points; i++) {
       LASPointFormat1 las_point;

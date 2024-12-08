@@ -185,6 +185,8 @@ struct __attribute__((packed)) LASPointFormat0 {
 struct __attribute__((packed)) GPSTime {
   double gps_time;
 
+  uint64_t& as_uint64() { return reinterpret_cast<uint64_t&>(gps_time); }
+
   friend std::ostream& operator<<(std::ostream& os, const GPSTime& gpst) {
     return os << "GPS Time: " << std::setprecision(20) << gpst.gps_time << " ( "
               << *reinterpret_cast<const int64_t*>(&gpst.gps_time) << " )" << std::endl;

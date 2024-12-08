@@ -94,6 +94,9 @@ class IntegerEncoder {
     m_symbol_encoders->m_prev_k = k;
     if (k < 32) {
       int32_t val = m_symbol_encoders->decode(stream, k);
+      if (k == 0) {
+        return val;
+      }
       if (k > 8) {
         int32_t lower_bits = raw_decode(stream, k - 8);
         val = (val << (k - 8)) | lower_bits;
