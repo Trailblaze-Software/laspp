@@ -7,6 +7,7 @@
 
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"
+#include "utilities/assert.hpp"
 #include "utilities/printing.hpp"
 
 namespace laspp {
@@ -27,11 +28,12 @@ struct __attribute__((packed)) LAZChunkTableHeader {
 class LAZChunkTable : LAZChunkTableHeader {
   std::vector<uint32_t> m_compressed_chunk_size;
   std::optional<uint32_t> m_constant_chunk_size;
-  std::vector<size_t> m_number_of_points;
+  std::vector<size_t> m_n_points_per_chunk;
   std::vector<size_t> m_compressed_chunk_offsets;
 
  public:
-  explicit LAZChunkTable(std::istream& istream, std::optional<uint32_t> constant_chunk_size)
+  explicit LAZChunkTable(std::istream& istream, size_t total_n_points,
+                         std::optional<uint32_t> constant_chunk_size)
       : m_constant_chunk_size(constant_chunk_size) {
     istream.read(reinterpret_cast<char*>(this), sizeof(LAZChunkTableHeader));
 
@@ -43,6 +45,13 @@ class LAZChunkTable : LAZChunkTableHeader {
       m_compressed_chunk_size.push_back(decoded_int + previous_int);
       m_compressed_chunk_offsets.push_back(
           i == 0 ? 8 : m_compressed_chunk_offsets[i - 1] + m_compressed_chunk_size[i - 1]);
+      if (m_constant_chunk_size) {
+        m_n_points_per_chunk.push_back(i == number_of_chunks - 1
+                                           ? total_n_points - i * constant_chunk_size.value()
+                                           : constant_chunk_size.value());
+      } else {
+        Unimplemented(...);
+      }
     }
   }
 
@@ -50,18 +59,13 @@ class LAZChunkTable : LAZChunkTableHeader {
   size_t chunk_offset(size_t i) const { return m_compressed_chunk_offsets.at(i); }
   size_t compressed_chunk_size(size_t i) const { return m_compressed_chunk_size.at(i); }
 
-  std::vector<size_t> points_per_chunk() const {
-    if (m_constant_chunk_size) {
-      return {m_constant_chunk_size.value()};
-    }
-    return m_number_of_points;
-  }
+  const std::vector<size_t>& points_per_chunk() const { return m_n_points_per_chunk; }
 
   friend std::ostream& operator<<(std::ostream& os, const LAZChunkTable& chunk_table) {
     os << static_cast<const LAZChunkTableHeader>(chunk_table) << std::endl;
     os << "Compressed chunk sizes: " << chunk_table.m_compressed_chunk_size << std::endl;
     if (!chunk_table.m_constant_chunk_size) {
-      os << "# points by chunk: " << chunk_table.m_number_of_points << std::endl;
+      os << "# points by chunk: " << chunk_table.m_n_points_per_chunk << std::endl;
     }
     return os;
   }

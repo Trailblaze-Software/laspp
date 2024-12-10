@@ -134,10 +134,14 @@ int main(int argc, char* argv[]) {
 
   std::vector<LASPoint> points(reader.num_points());
 
-  auto read_points = reader.read_chunk<LASPoint>(points, 0);
+  // for (size_t chunk_idx = 0; chunk_idx < reader.num_chunks(); chunk_idx++) {
+  for (size_t chunk_idx = 0; chunk_idx < 200; chunk_idx++) {
+    auto read_points = reader.read_chunk<LASPoint>(points, chunk_idx);
 
-  for (const auto& point : read_points) {
-    std::cout << point << std::endl;
+    // for (const auto& point : read_points) {
+    // std::cout << point << std::endl;
+    //}
+    std::cout << read_points[read_points.size() - 1] << std::endl;
   }
 
   return 0;

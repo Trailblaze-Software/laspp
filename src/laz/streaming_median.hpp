@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+
 namespace laspp {
 
 template <typename T>
@@ -25,14 +26,14 @@ class StreamingMedian {
     if (m_remove_largest) {
       m_vals[4] = val;
       uint8_t idx = 4;
-      while (idx > 0 && m_vals[idx] > m_vals[idx - 1]) {
+      while (idx > 0 && m_vals[idx] < m_vals[idx - 1]) {
         std::swap(m_vals[idx - 1], m_vals[idx]);
         idx--;
       }
     } else {
       m_vals[0] = val;
       uint8_t idx = 0;
-      while (idx < 5 && m_vals[idx] > m_vals[idx - 1]) {
+      while (idx < 4 && m_vals[idx] > m_vals[idx + 1]) {
         std::swap(m_vals[idx + 1], m_vals[idx]);
         idx++;
       }

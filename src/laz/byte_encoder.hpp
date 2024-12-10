@@ -26,17 +26,17 @@ class BytesEncoder {
 
  public:
   BytesEncoder(std::vector<std::byte> initial_bytes) {
-    for (auto& byte : initial_bytes) {
-      m_byte_encoders.push_back(ByteEncoder(byte));
+    m_byte_encoders.reserve(initial_bytes.size());
+    for (const auto& byte : initial_bytes) {
+      m_byte_encoders.emplace_back(byte);
     }
   }
 
-  std::vector<std::byte> decode(InStream& in_stream) {
-    std::vector<std::byte> bytes;
-    for (auto& byte_encoder : m_byte_encoders) {
-      bytes.push_back(byte_encoder.decode(in_stream));
+  void decode(InStream& in_stream, std::vector<std::byte>& out_bytes) {
+    out_bytes.resize(std::max(out_bytes.size(), m_byte_encoders.size()));
+    for (size_t i = 0; i < m_byte_encoders.size(); i++) {
+      out_bytes[i] = m_byte_encoders[i].decode(in_stream);
     }
-    return bytes;
   }
 };
 

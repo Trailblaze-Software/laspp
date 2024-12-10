@@ -182,13 +182,20 @@ struct __attribute__((packed)) LASPointFormat0 {
   }
 };
 
-struct __attribute__((packed)) GPSTime {
-  double gps_time;
+typedef union {
+  double f64;
+  uint64_t uint64;
+} DoubleUInt64;
 
-  uint64_t& as_uint64() { return reinterpret_cast<uint64_t&>(gps_time); }
+struct __attribute__((packed)) GPSTime {
+  DoubleUInt64 gps_time;
+
+  uint64_t& as_uint64() { return gps_time.uint64; }
+
+  GPSTime(double time = 0) { gps_time.f64 = time; }
 
   friend std::ostream& operator<<(std::ostream& os, const GPSTime& gpst) {
-    return os << "GPS Time: " << std::setprecision(20) << gpst.gps_time << " ( "
+    return os << "GPS Time: " << std::setprecision(20) << gpst.gps_time.f64 << " ( "
               << *reinterpret_cast<const int64_t*>(&gpst.gps_time) << " )" << std::endl;
   }
 };

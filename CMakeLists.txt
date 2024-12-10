@@ -17,6 +17,13 @@ if(LASPP_DEBUG_ASSERTS)
   add_compile_definitions(LASPP_DEBUG_ASSERTS)
 endif()
 
+set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(WIN32)

@@ -9,8 +9,9 @@ inline uint64_t raw_decode(InStream& in_stream, uint8_t n_bits) {
     return raw_decode(in_stream, 16) + (raw_decode(in_stream, n_bits - 16) * 1ul << 16);
   }
 
+  uint32_t value = in_stream.get_value();
   uint32_t resolution = in_stream.length() / (1u << n_bits);
-  uint32_t raw = in_stream.get_value() / resolution;
+  uint32_t raw = value / resolution;
 
   in_stream.update_range(resolution * raw, resolution * raw + resolution);
 

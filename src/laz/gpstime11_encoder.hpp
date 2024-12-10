@@ -36,13 +36,10 @@ class GPSTime11Encoder {
 
   GPSTime decode(InStream& in_stream) {
     uint16_t case_delta;
-    std::cout << "Current frame: " << m_reference_frames[m_current_frame] << std::endl;
     if (m_reference_frames[m_current_frame].delta == 0) {
       case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
-      std::cout << case_delta << std::endl;
       if (case_delta >= 3) {
         m_current_frame = (m_current_frame + case_delta - 2) % 4;
-        std::cout << "Current frame: " << m_reference_frames[m_current_frame] << std::endl;
         if (m_reference_frames[m_current_frame].delta == 0) {
           case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
           AssertLE(case_delta, 2);
@@ -69,9 +66,7 @@ class GPSTime11Encoder {
         }
       }
     }
-    std::cout << "Case delta: " << case_delta << std::endl;
-
-    if (case_delta < 510) {
+    if (case_delta <= 510) {
       // int32_t dgps_time_low;
       if (case_delta == 0) {
         int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(7, in_stream);
@@ -108,6 +103,20 @@ class GPSTime11Encoder {
           m_reference_frames[m_current_frame].counter = 0;
         }
         return m_reference_frames[m_current_frame].prev_gps_time;
+      } else if (case_delta <= 510) {
+        int32_t dgps_time_low =
+            m_dgps_time_low_encoder.decode_int(case_delta == 510 ? 6 : 5, in_stream);
+        m_reference_frames[m_current_frame].prev_gps_time.as_uint64() +=
+            -(case_delta - 500) * m_reference_frames[m_current_frame].delta + dgps_time_low;
+        if (case_delta == 510) {
+          m_reference_frames[m_current_frame].counter++;
+          if (m_reference_frames[m_current_frame].counter > 3) {
+            m_reference_frames[m_current_frame].delta =
+                -(case_delta - 500) * m_reference_frames[m_current_frame].delta + dgps_time_low;
+            m_reference_frames[m_current_frame].counter = 0;
+          }
+        }
+        return m_reference_frames[m_current_frame].prev_gps_time;
       }
     } else if (case_delta == 511) {
       return m_reference_frames[m_current_frame].prev_gps_time;
@@ -127,9 +136,7 @@ class GPSTime11Encoder {
       return m_reference_frames[m_current_frame].prev_gps_time;
     }
 
-    std::cout << "Delta: " << case_delta << std::endl;
-
-    Unimplemented();
+    Fail("Unkown case delta: ", case_delta);
   }
 };
 

@@ -20,8 +20,22 @@ using source_location = std::experimental::source_location;
 
 #include <sstream>
 #include <string>
+#endif
 
-#define OptionalString(...) std::optional<std::string>(__VA_ARGS__)
+namespace laspp {
+
+#ifdef LASPP_DEBUG_ASSERTS
+template <typename... Args>
+std::optional<std::string> OptionalString(Args &&...args) {
+  if constexpr (sizeof...(args) == 0) {
+    return std::nullopt;
+  } else {
+    std::stringstream ss;
+    (ss << ... << args);
+    return ss.str();
+  }
+}
+
 #define Assert(condition, ...) \
   if (!(condition)) _Assert(condition, #condition, OptionalString(__VA_ARGS__));
 
@@ -78,3 +92,4 @@ inline void _AssertBinOp(const A &a, const B &b, const std::string &a_str, const
   __builtin_unreachable();
 #endif
 }
+}  // namespace laspp
