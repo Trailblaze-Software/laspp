@@ -96,6 +96,8 @@ class __attribute__((packed)) LASHeader {
                                                  : m_legacy_number_of_point_records;
   }
 
+  size_t size() const { return m_header_size; }
+
   unsigned int point_data_record_length() const { return m_point_data_record_length; }
 
   unsigned int offset_to_point_data() const { return m_offset_to_point_data; }

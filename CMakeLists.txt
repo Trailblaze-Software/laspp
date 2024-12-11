@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
 option(LASPP_BUILD_TESTS "Build tests" ON)
+option(LASPP_BUILD_APPS "Build apps" ON)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(
   LAS++
@@ -28,16 +29,33 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(WIN32)
   if(${CMAKE_CXX_COMPILER} MATCHES ".*mingw.*")
-    set(CMAKE_CXX_FLAGS
-        "${CMAKE_CXX_FLAGS} -fstrict-enums -Wall -Wextra -Wpedantic -Werror")
+    add_compile_options("-fstrict-enums" "-Wall" "-Wextra" "-Wpedantic"
+                        "-Werror")
   else()
-    set(CMAKE_CXX_FLAGS
-        "${CMAKE_CXX_FLAGS} /openmp:llvm /Wall /MP /wd5045 /wd4866 /wd4514 /wd4820 /wd4800 /wd4242 /wd4244 /wd4365 /wd5027 /wd4626 /wd5219 /wd4623 /wd4267 /wd4710 /wd4711 /wd4625 /wd5026"
-    )
+    add_compile_options(
+      "/openmp:llvm"
+      "/Wall"
+      "/MP"
+      "/wd5045"
+      "/wd4866"
+      "/wd4514"
+      "/wd4820"
+      "/wd4800"
+      "/wd4242"
+      "/wd4244"
+      "/wd4365"
+      "/wd5027"
+      "/wd4626"
+      "/wd5219"
+      "/wd4623"
+      "/wd4267"
+      "/wd4710"
+      "/wd4711"
+      "/wd4625"
+      "/wd5026")
   endif()
 elseif(UNIX)
-  set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -fstrict-enums -Wall -Wextra -Wpedantic -Werror")
+  add_compile_options("-fstrict-enums" "-Wall" "-Wextra" "-Wpedantic" "-Werror")
 else()
   message(FATAL_ERROR "Unsupported platform")
 endif()
@@ -47,15 +65,18 @@ set(EXE_NAME las++-cli)
 
 include_directories(src)
 
-add_library(${LIBRARY_NAME})
+add_library(${LIBRARY_NAME} INTERFACE)
 add_executable(${EXE_NAME})
 
 find_package(OpenMP REQUIRED)
 
-target_link_libraries(${LIBRARY_NAME} PRIVATE OpenMP::OpenMP_CXX)
+target_link_libraries(${LIBRARY_NAME} INTERFACE OpenMP::OpenMP_CXX)
 target_link_libraries(${EXE_NAME} PRIVATE ${LIBRARY_NAME})
 
 add_subdirectory(src)
+if(LASPP_BUILD_APPS)
+  add_subdirectory(apps)
+endif()
 
 # if(LASPP_BUILD_TESTS) enable_testing()
 #

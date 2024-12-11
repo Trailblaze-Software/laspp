@@ -5,7 +5,7 @@
 #include <limits>
 #include <span>
 
-#include "laspoint.hpp"
+#include "las_point.hpp"
 #include "laz/byte_encoder.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
@@ -71,7 +71,7 @@ class LAZReader {
       LASPointFormat0 next_las_point = las_point_decompressor.decode(compressed_in_stream);
       // std::cout << next_las_point << std::endl;
       GPSTime next_gps_time = gps_time_encoder.decode(compressed_in_stream);
-      // std::cout << next_gps_time << std::endl;
+      // std::cout <<  i << " " << next_gps_time << std::endl;
       (void)next_gps_time;
 
       bytes_encoder.decode(compressed_in_stream, next_bytes);

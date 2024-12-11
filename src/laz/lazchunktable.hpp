@@ -30,6 +30,7 @@ class LAZChunkTable : LAZChunkTableHeader {
   std::optional<uint32_t> m_constant_chunk_size;
   std::vector<size_t> m_n_points_per_chunk;
   std::vector<size_t> m_compressed_chunk_offsets;
+  std::vector<size_t> m_decompressed_chunk_offsets;
 
  public:
   explicit LAZChunkTable(std::istream& istream, size_t total_n_points,
@@ -49,6 +50,8 @@ class LAZChunkTable : LAZChunkTableHeader {
         m_n_points_per_chunk.push_back(i == number_of_chunks - 1
                                            ? total_n_points - i * constant_chunk_size.value()
                                            : constant_chunk_size.value());
+        m_decompressed_chunk_offsets.push_back(
+            i == 0 ? 0 : m_decompressed_chunk_offsets[i - 1] + m_n_points_per_chunk[i - 1]);
       } else {
         Unimplemented(...);
       }
@@ -60,6 +63,9 @@ class LAZChunkTable : LAZChunkTableHeader {
   size_t compressed_chunk_size(size_t i) const { return m_compressed_chunk_size.at(i); }
 
   const std::vector<size_t>& points_per_chunk() const { return m_n_points_per_chunk; }
+  const std::vector<size_t>& decompressed_chunk_offsets() const {
+    return m_decompressed_chunk_offsets;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LAZChunkTable& chunk_table) {
     os << static_cast<const LAZChunkTableHeader>(chunk_table) << std::endl;

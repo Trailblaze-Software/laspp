@@ -4,12 +4,12 @@
 #include <span>
 #include <vector>
 
-#include "lasheader.hpp"
-#include "laspoint.hpp"
-#include "lasvlr.hpp"
+#include "las_header.hpp"
+#include "las_point.hpp"
 #include "laz/laz.hpp"
 #include "laz/lazchunktable.hpp"
 #include "utilities/assert.hpp"
+#include "vlr.hpp"
 
 namespace laspp {
 
@@ -116,8 +116,9 @@ class LASReader {
       std::vector<std::byte> compressed_data(
           m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index));
       m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
+      std::cout << (int)compressed_data[0] << " " << (int)compressed_data[1] << " "
+                << (int)compressed_data[2] << " " << (int)compressed_data[3] << std::endl;
       size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
-      // n_points = 50;
       std::cout << "Reading " << n_points << " points from chunk " << chunk_index << std::endl;
       return m_laz_data->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
     }
@@ -136,9 +137,48 @@ class LASReader {
     return output_location.subspan(0, n_points);
   }
 
-  LASPointFormat0 get_first_point() {
-    std::vector<std::byte> point_data = read_point_data(m_header);
-    return *reinterpret_cast<LASPointFormat0*>(point_data.data());
+  template <typename T>
+  std::span<T> read_chunks(std::span<T> output_location, std::pair<size_t, size_t> chunk_indexes) {
+    if (header().is_laz_compressed()) {
+      size_t compressed_start_offset = m_laz_data->m_chunk_table->chunk_offset(chunk_indexes.first);
+      size_t total_compressed_size =
+          m_laz_data->m_chunk_table->compressed_chunk_size(chunk_indexes.second - 1) +
+          m_laz_data->m_chunk_table->chunk_offset(chunk_indexes.second - 1) -
+          compressed_start_offset;
+      size_t total_n_points =
+          (chunk_indexes.second == m_laz_data->m_chunk_table->num_chunks()
+               ? header().num_points()
+               : m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.second]) -
+          m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
+      AssertGE(output_location.size(), total_n_points);
+      std::vector<std::byte> compressed_data(total_compressed_size);
+      m_ifs.seekg(header().offset_to_point_data() + compressed_start_offset);
+      std::cout << "Reading " << total_compressed_size << " bytes from " << compressed_start_offset
+                << " to " << compressed_start_offset + total_compressed_size << std::endl;
+      m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
+
+#pragma omp parallel for schedule(dynamic)
+      for (size_t chunk_index = chunk_indexes.first + 1; chunk_index < chunk_indexes.second;
+           chunk_index++) {
+        size_t start_offset =
+            m_laz_data->m_chunk_table->chunk_offset(chunk_index) - compressed_start_offset;
+        size_t compressed_chunk_size =
+            m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index);
+        std::span<std::byte> compressed_chunk =
+            ((std::span<std::byte>)compressed_data).subspan(start_offset, compressed_chunk_size);
+
+        size_t point_offset =
+            m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_index] -
+            m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
+        size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
+        auto tmp = m_laz_data->decompress_chunk(compressed_chunk,
+                                                output_location.subspan(point_offset, n_points));
+      }
+      return output_location.subspan(0, total_n_points);
+    }
+    Assert(chunk_indexes.first == 0);
+    Assert(chunk_indexes.second == 1);
+    return read_chunk(output_location, 0);
   }
 };
 

@@ -3,7 +3,7 @@
 #include <array>
 #include <cstdint>
 
-#include "laspoint.hpp"
+#include "las_point.hpp"
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"
 #include "utilities/assert.hpp"

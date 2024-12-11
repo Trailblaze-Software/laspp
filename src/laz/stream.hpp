@@ -144,10 +144,9 @@ class InStream : StreamVariables {
   uint32_t read_bytes() {
     static_assert(NumBytes > 0 && NumBytes < 4);
     update_chunk();
-    uint32_t new_bytes = current_big_chunk;
+    uint32_t new_bytes = current_big_chunk & ((1u << (NumBytes * 8)) - 1);
     current_big_chunk >>= NumBytes * 8;
     num_bytes_valid -= NumBytes;
-    new_bytes &= (1 << (NumBytes * 8)) - 1;
     if constexpr (NumBytes == 2) {
       std::array<uint8_t, 4>& new_bytes_32 = reinterpret_cast<std::array<uint8_t, 4>&>(new_bytes);
       std::swap(new_bytes_32[0], new_bytes_32[1]);

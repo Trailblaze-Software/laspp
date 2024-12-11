@@ -3,8 +3,8 @@
 #include <iostream>
 #include <sstream>
 
-#include "laspoint.hpp"
-#include "lasreader.hpp"
+#include "las_point.hpp"
+#include "las_reader.hpp"
 #include "laz/bit_symbol_encoder.hpp"
 #include "laz/integer_encoder.hpp"
 #include "laz/raw_encoder.hpp"
@@ -15,7 +15,7 @@ class LASPoint {
   std::array<int32_t, 3> position;
 
  public:
-  LASPoint(laspp::LASPointFormat0 point) : position({point.x, point.y, point.z}) {}
+  LASPoint(const laspp::LASPointFormat0& point) : position({point.x, point.y, point.z}) {}
 
   LASPoint() = default;
 
@@ -134,15 +134,8 @@ int main(int argc, char* argv[]) {
 
   std::vector<LASPoint> points(reader.num_points());
 
-  // for (size_t chunk_idx = 0; chunk_idx < reader.num_chunks(); chunk_idx++) {
-  for (size_t chunk_idx = 0; chunk_idx < 200; chunk_idx++) {
-    auto read_points = reader.read_chunk<LASPoint>(points, chunk_idx);
-
-    // for (const auto& point : read_points) {
-    // std::cout << point << std::endl;
-    //}
-    std::cout << read_points[read_points.size() - 1] << std::endl;
-  }
+  reader.read_chunks<LASPoint>(points, {0, reader.num_chunks()});
+  std::cout << points[points.size() - 1] << std::endl;
 
   return 0;
 }

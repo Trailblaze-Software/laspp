@@ -1,5 +1,3 @@
-target_sources(${LIBRARY_NAME} PRIVATE las++.cpp)
-
-target_sources(${LIBRARY_NAME} PUBLIC las++.hpp)
+target_sources(${LIBRARY_NAME} INTERFACE las_reader.hpp)
 
 target_sources(${EXE_NAME} PRIVATE main.cpp)
