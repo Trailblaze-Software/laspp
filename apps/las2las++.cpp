@@ -42,7 +42,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   {
-    laspp::LASWriter writer(ofs);
+    laspp::LASWriter writer(ofs, reader.header().point_format(), reader.header().num_extra_bytes());
+
+    writer.header().transform() = reader.header().transform();
   }
 
   return 0;

@@ -6,6 +6,8 @@
 #include <iostream>
 #include <ostream>
 
+#include "utilities/assert.hpp"
+
 namespace laspp {
 
 #pragma pack(push, 1)
@@ -259,6 +261,35 @@ struct __attribute__((packed)) LASPointFormat9 : LASPointFormat6, WavePacketData
 struct __attribute__((packed)) LASPointFormat10 : LASPointFormat9, ColorData {
   uint16_t NIR;
 };
+
+#define SWITCH_OVER_POINT_TYPE(format, f) \
+  switch (format) {                       \
+    case 0:                               \
+      return f(LASPointFormat0);          \
+    case 1:                               \
+      return f(LASPointFormat1);          \
+    case 2:                               \
+      return f(LASPointFormat2);          \
+    case 3:                               \
+      return f(LASPointFormat3);          \
+    case 4:                               \
+      return f(LASPointFormat4);          \
+    case 5:                               \
+      return f(LASPointFormat5);          \
+    case 6:                               \
+      return f(LASPointFormat6);          \
+    case 7:                               \
+      return f(LASPointFormat7);          \
+    case 8:                               \
+      return f(LASPointFormat8);          \
+    case 9:                               \
+      return f(LASPointFormat9);          \
+    case 10:                              \
+      return f(LASPointFormat10);         \
+  }                                       \
+  unreachable();
+
+uint16_t size_of_point_format(uint8_t format) { SWITCH_OVER_POINT_TYPE(format, sizeof); }
 
 constexpr size_t LASPointFormatSize[] = {
     sizeof(LASPointFormat0), sizeof(LASPointFormat1), sizeof(LASPointFormat2),
