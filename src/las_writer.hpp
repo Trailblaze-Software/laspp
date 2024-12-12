@@ -84,23 +84,44 @@ class LASWriter {
     int32_t max_pos[3] = {std::numeric_limits<int32_t>::lowest(),
                           std::numeric_limits<int32_t>::lowest(),
                           std::numeric_limits<int32_t>::lowest()};
-#pragma omp parallel for reduction(+ : points_by_return[ : 15]) reduction(min : min_pos[ : 3]) \
-    reduction(max : max_pos[ : 3])
-    for (size_t i = 0; i < points.size(); i++) {
-      if constexpr (std::is_base_of_v<LASPointFormat0, PointType> &&
-                    is_copy_assignable<LASPointFormat0, T>()) {
-        (LASPointFormat0&)points_to_write[i] = static_cast<LASPointFormat0>(points[i]);
-        if (points_to_write[i].bit_byte.return_number < 15)
-          points_by_return[points_to_write[i].bit_byte.return_number]++;
-        min_pos[0] = std::min(min_pos[0], points_to_write[i].x);
-        min_pos[1] = std::min(min_pos[1], points_to_write[i].y);
-        min_pos[2] = std::min(min_pos[2], points_to_write[i].z);
-        max_pos[0] = std::max(max_pos[0], points_to_write[i].x);
-        max_pos[1] = std::max(max_pos[1], points_to_write[i].y);
-        max_pos[2] = std::max(max_pos[2], points_to_write[i].z);
+#pragma omp parallel
+    {
+      size_t local_points_by_return[15] = {0};
+      int32_t local_min_pos[3] = {std::numeric_limits<int32_t>::max(),
+                                  std::numeric_limits<int32_t>::max(),
+                                  std::numeric_limits<int32_t>::max()};
+      int32_t local_max_pos[3] = {std::numeric_limits<int32_t>::lowest(),
+                                  std::numeric_limits<int32_t>::lowest(),
+                                  std::numeric_limits<int32_t>::lowest()};
+#pragma omp for
+      for (size_t i = 0; i < points.size(); i++) {
+        if constexpr (std::is_base_of_v<LASPointFormat0, PointType> &&
+                      is_copy_assignable<LASPointFormat0, T>()) {
+          (LASPointFormat0&)points_to_write[i] = static_cast<LASPointFormat0>(points[i]);
+          if (points_to_write[i].bit_byte.return_number < 15)
+            local_points_by_return[points_to_write[i].bit_byte.return_number]++;
+          local_min_pos[0] = std::min(local_min_pos[0], points_to_write[i].x);
+          local_min_pos[1] = std::min(local_min_pos[1], points_to_write[i].y);
+          local_min_pos[2] = std::min(local_min_pos[2], points_to_write[i].z);
+          local_max_pos[0] = std::max(local_max_pos[0], points_to_write[i].x);
+          local_max_pos[1] = std::max(local_max_pos[1], points_to_write[i].y);
+          local_max_pos[2] = std::max(local_max_pos[2], points_to_write[i].z);
+        }
+        if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<GPSTime, T>()) {
+          (GPSTime&)points_to_write[i] = static_cast<GPSTime>(points[i]);
+        }
       }
-      if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<GPSTime, T>()) {
-        (GPSTime&)points_to_write[i] = static_cast<GPSTime>(points[i]);
+#pragma omp critical
+      {
+        for (int i = 0; i < 15; i++) {
+          points_by_return[i] += local_points_by_return[i];
+        }
+        min_pos[0] = std::min(min_pos[0], local_min_pos[0]);
+        min_pos[1] = std::min(min_pos[1], local_min_pos[1]);
+        min_pos[2] = std::min(min_pos[2], local_min_pos[2]);
+        max_pos[0] = std::max(max_pos[0], local_max_pos[0]);
+        max_pos[1] = std::max(max_pos[1], local_max_pos[1]);
+        max_pos[2] = std::max(max_pos[2], local_max_pos[2]);
       }
     }
 
