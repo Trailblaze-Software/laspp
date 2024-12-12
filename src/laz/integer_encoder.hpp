@@ -48,7 +48,7 @@ class IntegerEncoder {
           case 7:
             return encoder_7.decode_symbol(stream);
         }
-        __builtin_unreachable();
+        unreachable();
       } else {
         return encoders_8_32.at(k - 8).decode_symbol(stream);
       }
@@ -74,7 +74,7 @@ class IntegerEncoder {
           case 7:
             return encoder_7.encode_symbol(stream, val);
         }
-        __builtin_unreachable();
+        unreachable();
       } else {
         return encoders_8_32.at(k - 8).encode_symbol(stream, val);
       }

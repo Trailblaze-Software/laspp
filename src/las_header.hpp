@@ -207,7 +207,7 @@ class LASPP_PACKED LASHeader {
     os << "Offset to point data: " << header.m_offset_to_point_data << std::endl;
     os << "Number of variable length records: " << header.m_number_of_variable_length_records
        << std::endl;
-    os << "Point data record format: " << (uint)header.m_point_data_record_format << std::endl;
+    os << "Point data record format: " << (uint32_t)header.m_point_data_record_format << std::endl;
     os << "Point data record length: " << header.m_point_data_record_length << std::endl;
     os << "Legacy number of point records: " << header.m_legacy_number_of_point_records
        << std::endl;

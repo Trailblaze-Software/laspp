@@ -30,6 +30,10 @@ jobs:
             c_compiler: clang
           - os: ubuntu-latest
             c_compiler: cl
+          - os: windows-latest
+            build_type: Profile
+          - os: windows-latest
+            build_type: Debug
     steps:
       - uses: actions/checkout@v4
       - name: Set reusable strings
@@ -39,7 +43,7 @@ jobs:
           echo "build-output-dir=${{ github.workspace }}/build" >> \
           "$GITHUB_OUTPUT"
       - name: Install OpenMP
-        run: sudo apt -y install libomp-12-dev
+        run: sudo apt -y install libomp-14-dev
         if: matrix.c_compiler == 'clang'
       - name: Configure CMake
         run: >

@@ -6,6 +6,7 @@
 #include <limits>
 #include <vector>
 
+#include "utilities/assert.hpp"
 #include "utilities/macros.hpp"
 
 namespace laspp {
@@ -119,7 +120,7 @@ inline bool check_size_from_type(LAZItemType type, uint16_t size) {
     case LAZItemType::Byte14:
       return true;
   }
-  __builtin_unreachable();
+  unreachable();
 }
 
 inline std::ostream& operator<<(std::ostream& os, const LAZItemType& type) {

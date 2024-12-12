@@ -237,7 +237,7 @@ class OutStream : StreamVariables {
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
-    if ((size_t)m_base + (size_t)lower >= 1ul << 32) {
+    if (((size_t)m_base + (size_t)lower) >= (1ul << 32)) {
       propogate_carry();
     }
     m_base += lower;
