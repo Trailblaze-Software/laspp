@@ -35,6 +35,9 @@ class LASPointFormat0Encoder {
       {9, 10, 11, 12, 13, 14, 15, 14}, {8, 9, 10, 11, 12, 13, 14, 15}};
 
  public:
+  using EncodedType = LASPointFormat0;
+  const LASPointFormat0& last_value() const { return m_last_las_point; }
+
   explicit LASPointFormat0Encoder(const LASPointFormat0& initial_las_point)
       : m_last_las_point(initial_las_point), m_prev_dz({0, 0, 0, 0, 0, 0, 0, 0}) {
     m_m = return_map_m[m_last_las_point.bit_byte.number_of_returns]

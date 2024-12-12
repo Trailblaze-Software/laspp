@@ -230,6 +230,9 @@ class OutStream : StreamVariables {
 
   void propogate_carry() {
     std::cout << "NEED TO IMPLEMENT SOMEHOW" << std::endl;
+    size_t current_p = m_stream.tellp();
+    m_stream.seekp(current_p - 1);
+
     Unimplemented();
   }
 

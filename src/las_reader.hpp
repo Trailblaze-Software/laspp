@@ -108,6 +108,27 @@ class LASReader {
     return {m_header.num_points()};
   }
 
+ private:
+  template <typename PointType, typename T>
+  void read_points(std::span<T> points) {
+    for (size_t i = 0; i < points.size(); i++) {
+      PointType las_point;
+      m_ifs.read(reinterpret_cast<char*>(&las_point), sizeof(PointType));
+      if constexpr (is_copy_assignable<T, LASPointFormat0>() &&
+                    std::is_base_of_v<LASPointFormat0, PointType>) {
+        points[i] = (LASPointFormat0&)las_point;
+      } else if constexpr (std::is_base_of_v<LASPointFormat0, T> &&
+                           std::is_base_of_v<LASPointFormat0, PointType>) {
+        (LASPointFormat0&)points[i] = (LASPointFormat0&)las_point;
+      }
+      if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<T, GPSTime>()) {
+        points[i] = (GPSTime&)las_point;
+      }
+      m_ifs.read(nullptr, header().point_data_record_length() - sizeof(PointType));
+    }
+  }
+
+ public:
   template <typename T>
   std::span<T> read_chunk(std::span<T> output_location, size_t chunk_index) {
     if (header().is_laz_compressed()) {
@@ -116,23 +137,16 @@ class LASReader {
       std::vector<std::byte> compressed_data(
           m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index));
       m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
-      std::cout << (int)compressed_data[0] << " " << (int)compressed_data[1] << " "
-                << (int)compressed_data[2] << " " << (int)compressed_data[3] << std::endl;
       size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
-      std::cout << "Reading " << n_points << " points from chunk " << chunk_index << std::endl;
       return m_laz_data->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
     }
     Assert(chunk_index == 0);
     size_t n_points = num_points();
     m_ifs.seekg(header().offset_to_point_data());
-    for (size_t i = 0; i < n_points; i++) {
-      LASPointFormat1 las_point;
-      std::array<std::byte, 5> bytes;
-      m_ifs.read(reinterpret_cast<char*>(&las_point), sizeof(las_point));
-      m_ifs.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
-      // std::cout << las_point << std::endl;
-      // std::cout << "Bytes: " << bytes << std::endl;
-      output_location[i] = las_point;
+    if constexpr (std::is_base_of_v<LASPointFormat0, T> || std::is_base_of_v<LASPointFormat6, T>) {
+      read_points<T>(output_location);
+    } else {
+      SWITCH_OVER_POINT_TYPE(header().point_format(), read_points, output_location);
     }
     return output_location.subspan(0, n_points);
   }
@@ -158,7 +172,7 @@ class LASReader {
       m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
 
 #pragma omp parallel for schedule(dynamic)
-      for (size_t chunk_index = chunk_indexes.first + 1; chunk_index < chunk_indexes.second;
+      for (size_t chunk_index = chunk_indexes.first; chunk_index < chunk_indexes.second;
            chunk_index++) {
         size_t start_offset =
             m_laz_data->m_chunk_table->chunk_offset(chunk_index) - compressed_start_offset;
@@ -171,6 +185,9 @@ class LASReader {
             m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_index] -
             m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
         size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
+        if (chunk_index == 0) {
+          AssertEQ(point_offset, 0);
+        }
         auto tmp = m_laz_data->decompress_chunk(compressed_chunk,
                                                 output_location.subspan(point_offset, n_points));
       }
@@ -179,6 +196,13 @@ class LASReader {
     Assert(chunk_indexes.first == 0);
     Assert(chunk_indexes.second == 1);
     return read_chunk(output_location, 0);
+  }
+
+  std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
+    std::vector<std::byte> data(vlr.record_length_after_header);
+    m_ifs.seekg(vlr.global_offset());
+    m_ifs.read(reinterpret_cast<char*>(data.data()), data.size());
+    return data;
   }
 };
 

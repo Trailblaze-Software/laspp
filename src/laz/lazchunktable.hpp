@@ -8,13 +8,14 @@
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/macros.hpp"
 #include "utilities/printing.hpp"
 
 namespace laspp {
 
 #pragma pack(push, 1)
 
-struct __attribute__((packed)) LAZChunkTableHeader {
+struct LASPP_PACKED LAZChunkTableHeader {
   uint32_t version;  // 0
   uint32_t number_of_chunks;
 

@@ -6,6 +6,8 @@
 #include <limits>
 #include <vector>
 
+#include "utilities/macros.hpp"
+
 namespace laspp {
 
 #pragma pack(push, 1)
@@ -35,7 +37,7 @@ std::ostream& operator<<(std::ostream& os, const LAZCompressor& compressor) {
   return os;
 }
 
-struct __attribute__((packed)) LAZSpecialVLRPt1 {
+struct LASPP_PACKED LAZSpecialVLRPt1 {
   LAZCompressor compressor;
   uint16_t coder;  // 0 for arithmetic coder
   uint8_t version_major;
@@ -202,7 +204,7 @@ inline std::ostream& operator<<(std::ostream& os, const LAZItemVersion& version)
   return os;
 }
 
-struct __attribute__((packed)) LAZItemRecord {
+struct LASPP_PACKED LAZItemRecord {
   LAZItemType item_type;
   uint16_t item_size;
   LAZItemVersion item_version;

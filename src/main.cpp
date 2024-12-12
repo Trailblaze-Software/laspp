@@ -1,54 +1,16 @@
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <sstream>
 
-#include "las_point.hpp"
-#include "las_reader.hpp"
 #include "laz/bit_symbol_encoder.hpp"
 #include "laz/integer_encoder.hpp"
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
 
-class LASPoint {
-  std::array<int32_t, 3> position;
-
- public:
-  LASPoint(const laspp::LASPointFormat0& point) : position({point.x, point.y, point.z}) {}
-
-  LASPoint() = default;
-
-  friend std::ostream& operator<<(std::ostream& os, const LASPoint& point) {
-    os << "Position: (" << point.position[0] << ", " << point.position[1] << ", "
-       << point.position[2] << ")";
-    return os;
-  }
-};
-
 int main(int argc, char* argv[]) {
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " <filename>" << std::endl;
-    return 1;
-  }
-
-  std::string filename(argv[1]);
-
-  std::cout << "Loading " << filename << std::endl;
-
-  std::ifstream ifs(filename, std::ios::binary);
-
-  if (!ifs) {
-    std::cerr << "Failed to open " << filename << std::endl;
-    return 1;
-  }
-  laspp::LASReader reader(ifs);
-  std::cout << reader.header() << std::endl;
-
-  auto vlrs = reader.vlr_headers();
-  for (const auto& vlr : vlrs) {
-    std::cout << vlr << std::endl;
-  }
+  (void)argc;
+  (void)argv;
 
   {
     std::stringstream encoded_stream;
@@ -126,16 +88,6 @@ int main(int argc, char* argv[]) {
       }
     }
   }
-
-  auto evlrs = reader.evlr_headers();
-  for (const auto& evlr : evlrs) {
-    std::cout << evlr << std::endl;
-  }
-
-  std::vector<LASPoint> points(reader.num_points());
-
-  reader.read_chunks<LASPoint>(points, {0, reader.num_chunks()});
-  std::cout << points[points.size() - 1] << std::endl;
 
   return 0;
 }

@@ -8,11 +8,14 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <span>
 #include <sstream>
 
 #include "las_point.hpp"
 
 namespace laspp {
+
+class LASWriter;
 
 #pragma pack(push, 1)
 enum GlobalEncoding : uint16_t {
@@ -33,7 +36,7 @@ inline std::string global_encoding_string(const uint16_t& encoding) {
   return ss.str();
 }
 
-class __attribute__((packed)) Vector3D {
+class LASPP_PACKED Vector3D {
   std::array<double, 3> m_data;
 
  public:
@@ -47,7 +50,7 @@ class __attribute__((packed)) Vector3D {
   }
 };
 
-struct __attribute__((packed)) Transform {
+struct LASPP_PACKED Transform {
   Vector3D m_scale_factors;
   Vector3D m_offsets;
 
@@ -70,7 +73,7 @@ std::string arr_to_string(const T (&arr)[N]) {
   return ss.str();
 }
 
-class __attribute__((packed)) LASHeader {
+class LASPP_PACKED LASHeader {
   char m_file_signature[4] = {'L', 'A', 'S', 'F'};
   uint16_t m_file_source_id = 0;
   uint16_t m_global_encoding = 0;
@@ -134,6 +137,24 @@ class __attribute__((packed)) LASHeader {
                                                  : m_legacy_number_of_point_records;
   }
 
+  std::array<double, 3> transform(std::array<int32_t, 3> pos) {
+    return {
+        m_transform.m_scale_factors.x() * pos[0] + m_transform.m_offsets.x(),
+        m_transform.m_scale_factors.y() * pos[1] + m_transform.m_offsets.y(),
+        m_transform.m_scale_factors.z() * pos[2] + m_transform.m_offsets.z(),
+    };
+  }
+
+  void update_bounds(std::array<int32_t, 3> pos) {
+    std::array<double, 3> transformed = transform(pos);
+    m_max_x = std::max(m_max_x, transformed[0]);
+    m_min_x = std::min(m_min_x, transformed[0]);
+    m_max_y = std::max(m_max_y, transformed[1]);
+    m_min_y = std::min(m_min_y, transformed[1]);
+    m_max_z = std::max(m_max_z, transformed[2]);
+    m_min_z = std::min(m_min_z, transformed[2]);
+  }
+
   void set_point_format(uint8_t point_format, uint16_t num_extra_bytes) {
     m_point_data_record_format = point_format;
     m_point_data_record_length = size_of_point_format(point_format) + num_extra_bytes;
@@ -192,7 +213,7 @@ class __attribute__((packed)) LASHeader {
        << std::endl;
     os << "Legacy number of points by return: "
        << arr_to_string(header.m_legacy_number_of_points_by_return) << std::endl;
-    os << "X scale factor: " << header.m_transform;
+    os << header.m_transform;
     os << "Max X: " << header.m_max_x << std::endl;
     os << "Max Y: " << header.m_max_y << std::endl;
     os << "Max Z: " << header.m_max_z << std::endl;
@@ -210,6 +231,8 @@ class __attribute__((packed)) LASHeader {
        << std::endl;
     return os;
   }
+
+  friend LASWriter;
 };
 
 #pragma pack(pop)

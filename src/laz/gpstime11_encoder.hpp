@@ -30,6 +30,11 @@ class GPSTime11Encoder {
   SymbolEncoder<6> m_case_0delta_encoder;
 
  public:
+  using EncodedType = GPSTime;
+  const EncodedType& last_value() const {
+    return m_reference_frames[m_current_frame].prev_gps_time;
+  }
+
   explicit GPSTime11Encoder(GPSTime last_gps_time) : m_current_frame(0) {
     m_reference_frames[0].prev_gps_time = last_gps_time;
   }

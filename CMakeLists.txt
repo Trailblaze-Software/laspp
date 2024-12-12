@@ -78,10 +78,12 @@ if(LASPP_BUILD_APPS)
   add_subdirectory(apps)
 endif()
 
-# if(LASPP_BUILD_TESTS) enable_testing()
-#
-# add_executable(las++-tests) target_link_libraries(las++-tests PRIVATE
-# ${LIBRARY_NAME}) endif()
+if(LASPP_BUILD_TESTS)
+  include(CTest)
+  enable_testing()
+  # add_executable(las++-tests) target_link_libraries(las++-tests PRIVATE
+  # ${LIBRARY_NAME})
+endif()
 
 include(GNUInstallDirs)
 

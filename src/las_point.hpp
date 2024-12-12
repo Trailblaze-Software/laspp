@@ -6,7 +6,7 @@
 #include <iostream>
 #include <ostream>
 
-#include "utilities/assert.hpp"
+#include "utilities/macros.hpp"
 
 namespace laspp {
 
@@ -113,7 +113,7 @@ inline std::ostream& operator<<(std::ostream& os, const LASClassification& class
   return os;
 }
 
-struct __attribute__((packed)) BitByte {
+struct LASPP_PACKED BitByte {
   uint8_t return_number : 3;
   uint8_t number_of_returns : 3;
   uint8_t scan_direction_flag : 1;
@@ -135,7 +135,7 @@ struct __attribute__((packed)) BitByte {
   }
 };
 
-struct __attribute__((packed)) ClassificationByte {
+struct LASPP_PACKED ClassificationByte {
   LASClassification classification : 5;
   uint8_t synthetic : 1;
   uint8_t key_point : 1;
@@ -157,7 +157,7 @@ struct __attribute__((packed)) ClassificationByte {
   }
 };
 
-struct __attribute__((packed)) LASPointFormat0 {
+struct LASPP_PACKED LASPointFormat0 {
   int32_t x;
   int32_t y;
   int32_t z;
@@ -189,12 +189,14 @@ typedef union {
   uint64_t uint64;
 } DoubleUInt64;
 
-struct __attribute__((packed)) GPSTime {
+struct LASPP_PACKED GPSTime {
   DoubleUInt64 gps_time;
 
   uint64_t& as_uint64() { return gps_time.uint64; }
 
   GPSTime(double time = 0) { gps_time.f64 = time; }
+
+  operator double() const { return gps_time.f64; }
 
   friend std::ostream& operator<<(std::ostream& os, const GPSTime& gpst) {
     return os << "GPS Time: " << std::setprecision(20) << gpst.gps_time.f64 << " ( "
@@ -202,23 +204,23 @@ struct __attribute__((packed)) GPSTime {
   }
 };
 
-struct __attribute__((packed)) LASPointFormat1 : LASPointFormat0, GPSTime {
+struct LASPP_PACKED LASPointFormat1 : LASPointFormat0, GPSTime {
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat1& lpf1) {
     return os << (LASPointFormat0)(lpf1) << (GPSTime)(lpf1) << std::endl;
   }
 };
 
-struct __attribute__((packed)) ColorData {
+struct LASPP_PACKED ColorData {
   uint16_t red;
   uint16_t green;
   uint16_t blue;
 };
 
-struct __attribute__((packed)) LASPointFormat2 : LASPointFormat0, ColorData {};
+struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {};
 
-struct __attribute__((packed)) LASPointFormat3 : LASPointFormat1, ColorData {};
+struct LASPP_PACKED LASPointFormat3 : LASPointFormat1, ColorData {};
 
-struct __attribute__((packed)) WavePacketData {
+struct LASPP_PACKED WavePacketData {
   uint8_t wave_packet_descriptor_index;
   uint64_t byte_offset_to_waveform_data;
   uint32_t wave_packet_size;
@@ -228,11 +230,11 @@ struct __attribute__((packed)) WavePacketData {
   float z_t;
 };
 
-struct __attribute__((packed)) LASPointFormat4 : LASPointFormat1, WavePacketData {};
+struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {};
 
-struct __attribute__((packed)) LASPointFormat5 : LASPointFormat3, WavePacketData {};
+struct LASPP_PACKED LASPointFormat5 : LASPointFormat3, WavePacketData {};
 
-struct __attribute__((packed)) LASPointFormat6 {
+struct LASPP_PACKED LASPointFormat6 {
   int32_t x;
   int32_t y;
   int32_t z;
@@ -248,54 +250,121 @@ struct __attribute__((packed)) LASPointFormat6 {
   uint16_t scan_angle;
   uint16_t point_source_id;
   double gps_time;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat6& point) {
+    os << "X: " << point.x << std::endl;
+    os << "Y: " << point.y << std::endl;
+    os << "Z: " << point.z << std::endl;
+    os << "Intensity: " << point.intensity << std::endl;
+    os << "Return number: " << (uint)point.return_number << std::endl;
+    os << "Number of returns: " << (uint)point.number_of_returns << std::endl;
+    os << "Classification flags: " << (uint)point.classification_flags << std::endl;
+    os << "Scanner channel: " << (uint)point.scanner_channel << std::endl;
+    os << "Scan direction flag: " << (uint)point.scan_direction_flag << std::endl;
+    os << "Edge of flight line: " << (uint)point.edge_of_flight_line << std::endl;
+    os << "Classification: " << point.classification << std::endl;
+    os << "User data: " << (uint)point.user_data << std::endl;
+    os << "Scan angle: " << point.scan_angle << std::endl;
+    os << "Point source ID: " << point.point_source_id << std::endl;
+    return os;
+  }
 };
 
-struct __attribute__((packed)) LASPointFormat7 : LASPointFormat6, ColorData {};
+struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {};
 
-struct __attribute__((packed)) LASPointFormat8 : LASPointFormat7 {
+struct LASPP_PACKED LASPointFormat8 : LASPointFormat7 {
   uint16_t NIR;
 };
 
-struct __attribute__((packed)) LASPointFormat9 : LASPointFormat6, WavePacketData {};
+struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {};
 
-struct __attribute__((packed)) LASPointFormat10 : LASPointFormat9, ColorData {
+struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData {
   uint16_t NIR;
 };
 
-#define SWITCH_OVER_POINT_TYPE(format, f) \
-  switch (format) {                       \
-    case 0:                               \
-      return f(LASPointFormat0);          \
-    case 1:                               \
-      return f(LASPointFormat1);          \
-    case 2:                               \
-      return f(LASPointFormat2);          \
-    case 3:                               \
-      return f(LASPointFormat3);          \
-    case 4:                               \
-      return f(LASPointFormat4);          \
-    case 5:                               \
-      return f(LASPointFormat5);          \
-    case 6:                               \
-      return f(LASPointFormat6);          \
-    case 7:                               \
-      return f(LASPointFormat7);          \
-    case 8:                               \
-      return f(LASPointFormat8);          \
-    case 9:                               \
-      return f(LASPointFormat9);          \
-    case 10:                              \
-      return f(LASPointFormat10);         \
-  }                                       \
+#define SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \
+  switch (format & (~(1 << 7))) {                     \
+    case 0:                                           \
+      return f<laspp::LASPointFormat0>(__VA_ARGS__);  \
+    case 1:                                           \
+      return f<laspp::LASPointFormat1>(__VA_ARGS__);  \
+    case 2:                                           \
+      return f<laspp::LASPointFormat2>(__VA_ARGS__);  \
+    case 3:                                           \
+      return f<laspp::LASPointFormat3>(__VA_ARGS__);  \
+    case 4:                                           \
+      return f<laspp::LASPointFormat4>(__VA_ARGS__);  \
+    case 5:                                           \
+      return f<laspp::LASPointFormat5>(__VA_ARGS__);  \
+    case 6:                                           \
+      return f<laspp::LASPointFormat6>(__VA_ARGS__);  \
+    case 7:                                           \
+      return f<laspp::LASPointFormat7>(__VA_ARGS__);  \
+    case 8:                                           \
+      return f<laspp::LASPointFormat8>(__VA_ARGS__);  \
+    case 9:                                           \
+      return f<laspp::LASPointFormat9>(__VA_ARGS__);  \
+    case 10:                                          \
+      return f<laspp::LASPointFormat10>(__VA_ARGS__); \
+  }                                                   \
   unreachable();
 
-uint16_t size_of_point_format(uint8_t format) { SWITCH_OVER_POINT_TYPE(format, sizeof); }
+#define SWITCH_OVER_POINT_TYPE(format, f, ...) \
+  switch (format & (~(1 << 7))) {              \
+    case 0:                                    \
+      f<laspp::LASPointFormat0>(__VA_ARGS__);  \
+      break;                                   \
+    case 1:                                    \
+      f<laspp::LASPointFormat1>(__VA_ARGS__);  \
+      break;                                   \
+    case 2:                                    \
+      f<laspp::LASPointFormat2>(__VA_ARGS__);  \
+      break;                                   \
+    case 3:                                    \
+      f<laspp::LASPointFormat3>(__VA_ARGS__);  \
+      break;                                   \
+    case 4:                                    \
+      f<laspp::LASPointFormat4>(__VA_ARGS__);  \
+      break;                                   \
+    case 5:                                    \
+      f<laspp::LASPointFormat5>(__VA_ARGS__);  \
+      break;                                   \
+    case 6:                                    \
+      f<laspp::LASPointFormat6>(__VA_ARGS__);  \
+      break;                                   \
+    case 7:                                    \
+      f<laspp::LASPointFormat7>(__VA_ARGS__);  \
+      break;                                   \
+    case 8:                                    \
+      f<laspp::LASPointFormat8>(__VA_ARGS__);  \
+      break;                                   \
+    case 9:                                    \
+      f<laspp::LASPointFormat9>(__VA_ARGS__);  \
+      break;                                   \
+    case 10:                                   \
+      f<laspp::LASPointFormat10>(__VA_ARGS__); \
+      break;                                   \
+  }
 
-constexpr size_t LASPointFormatSize[] = {
+constexpr std::array<uint16_t, 11> LASPointFormatSize = {
     sizeof(LASPointFormat0), sizeof(LASPointFormat1), sizeof(LASPointFormat2),
     sizeof(LASPointFormat3), sizeof(LASPointFormat4), sizeof(LASPointFormat5),
     sizeof(LASPointFormat6), sizeof(LASPointFormat7), sizeof(LASPointFormat8),
     sizeof(LASPointFormat9), sizeof(LASPointFormat10)};
+
+constexpr uint16_t size_of_point_format(uint8_t format) {
+  return LASPointFormatSize[format & (~(1 << 7))];
+}
+
+template <typename T1, typename T2, typename = void>
+struct CopyAssignable : std::false_type {};
+
+template <typename T1, typename T2>
+struct CopyAssignable<T1, T2, decltype(void(std::declval<T1>() = std::declval<T2>()))>
+    : std::true_type {};
+
+template <typename T1, typename T2>
+using is_copy_assignable = CopyAssignable<T1, T2>;
 
 #pragma pack(pop)
 

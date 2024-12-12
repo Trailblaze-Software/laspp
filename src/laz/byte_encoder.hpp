@@ -23,19 +23,23 @@ class ByteEncoder {
 
 class BytesEncoder {
   std::vector<ByteEncoder> m_byte_encoders;
+  std::vector<std::byte> m_last_bytes;
 
  public:
-  BytesEncoder(std::vector<std::byte> initial_bytes) {
+  using EncodedType = std::vector<std::byte>;
+  const EncodedType& last_value() const { return m_last_bytes; }
+
+  BytesEncoder(const std::vector<std::byte>& initial_bytes) {
     m_byte_encoders.reserve(initial_bytes.size());
     for (const auto& byte : initial_bytes) {
       m_byte_encoders.emplace_back(byte);
     }
+    m_last_bytes = initial_bytes;
   }
 
-  void decode(InStream& in_stream, std::vector<std::byte>& out_bytes) {
-    out_bytes.resize(std::max(out_bytes.size(), m_byte_encoders.size()));
+  void decode(InStream& in_stream) {
     for (size_t i = 0; i < m_byte_encoders.size(); i++) {
-      out_bytes[i] = m_byte_encoders[i].decode(in_stream);
+      (uint8_t&)m_last_bytes[i] += (uint8_t)m_byte_encoders[i].decode(in_stream);
     }
   }
 };

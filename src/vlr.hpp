@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <iostream>
 
+#include "utilities/macros.hpp"
+
 namespace laspp {
 
 #pragma pack(push, 1)
@@ -28,7 +30,7 @@ enum class ExtraBytesDataType : uint8_t {
   Double = 10,
 };
 
-struct __attribute__((packed)) sGeoKeys {
+struct LASPP_PACKED sGeoKeys {
   unsigned short wKeyDirectoryVersion;
   unsigned short wKeyRevision;
   unsigned short wMinorRevision;
@@ -41,7 +43,7 @@ struct __attribute__((packed)) sGeoKeys {
   } pKey[1];
 };
 
-struct __attribute__((packed)) ExtraBytesInfo {
+struct LASPP_PACKED ExtraBytesInfo {
   uint8_t reserved[2];
   uint8_t data_type;
   uint8_t no_data_bit : 1;
@@ -64,7 +66,7 @@ struct __attribute__((packed)) ExtraBytesInfo {
   char description[32];
 };
 
-struct __attribute__((packed)) WaveformPacketDescriptor {
+struct LASPP_PACKED WaveformPacketDescriptor {
   uint8_t bits_per_sample;   // (2-32)
   uint8_t compression_type;  // 0 (compression unsupported)
   uint32_t number_of_samples;
@@ -77,7 +79,7 @@ struct __attribute__((packed)) WaveformPacketDescriptor {
   }
 };
 
-struct __attribute__((packed)) LASVariableLengthRecord {
+struct LASPP_PACKED LASVariableLengthRecord {
   uint16_t reserved;
   char user_id[16];
   uint16_t record_id;
@@ -148,7 +150,7 @@ class LASVLRWithGlobalOffset : public LASVariableLengthRecord {
   using record_type = LASVariableLengthRecord;
 };
 
-struct __attribute__((packed)) LASExtendedVariableLengthRecord {
+struct LASPP_PACKED LASExtendedVariableLengthRecord {
   uint16_t reserved;
   char user_id[16];
   uint16_t record_id;

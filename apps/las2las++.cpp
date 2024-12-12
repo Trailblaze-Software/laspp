@@ -1,9 +1,58 @@
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
+#include "las_point.hpp"
 #include "las_reader.hpp"
 #include "las_writer.hpp"
+
+class LASPoint {
+  std::array<int32_t, 3> position;
+  double gps_time;
+
+ public:
+  LASPoint() = default;
+
+  void operator=(const laspp::LASPointFormat0& point) {
+    position[0] = point.x;
+    position[1] = point.y;
+    position[2] = point.z;
+  }
+
+  void operator=(const laspp::GPSTime& point) { gps_time = point; }
+
+  operator laspp::LASPointFormat0() const {
+    laspp::LASPointFormat0 point;
+    point.x = position[0];
+    point.y = position[1];
+    point.z = position[2];
+    point.intensity = 0;
+    point.bit_byte = 0;
+    point.classification_byte = 0;
+    point.scan_angle_rank = 0;
+    point.user_data = 0;
+    return point;
+  }
+
+  operator laspp::GPSTime() const { return gps_time; }
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPoint& point) {
+    os << "Position: (" << point.position[0] << ", " << point.position[1] << ", "
+       << point.position[2] << ")";
+    os << " GPS Time: " << point.gps_time;
+    return os;
+  }
+};
+
+template <typename PointType>
+void read_and_write_points(laspp::LASReader& reader, laspp::LASWriter& writer) {
+  std::vector<PointType> points(reader.num_points());
+  reader.read_chunks<PointType>(points, {0, reader.num_chunks()});
+  std::cout << points[0] << std::endl;
+  std::cout << points[points.size() - 1] << std::endl;
+  writer.write_points<PointType>(points);
+}
 
 int main(int argc, char* argv[]) {
   if (argc != 3) {
@@ -11,7 +60,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::string in_file(argv[1]);
+  std::filesystem::path in_file(argv[1]);
   std::ifstream ifs(in_file, std::ios::binary);
   if (!ifs) {
     std::cerr << "Failed to open " << in_file << std::endl;
@@ -30,21 +79,54 @@ int main(int argc, char* argv[]) {
     std::cout << evlr << std::endl;
   }
 
-  // std::vector<LASPoint> points(reader.num_points());
-  //
-  // reader.read_chunks<LASPoint>(points, {0, reader.num_chunks()});
-  // std::cout << points[points.size() - 1] << std::endl;
-  //
-  std::string out_file(argv[2]);
+  std::filesystem::path out_file(argv[2]);
   std::ofstream ofs(out_file, std::ios::binary);
   if (!ofs) {
     std::cerr << "Failed to open " << out_file << std::endl;
     return 1;
   }
+
+  std::string out_extension = out_file.extension().string();
+  bool laz_compress;
+  if (out_extension == ".laz") {
+    laz_compress = true;
+  } else if (out_extension == ".las") {
+    laz_compress = false;
+  } else {
+    throw std::runtime_error("LAS++ Error: Output file must have .las or .laz extension");
+  }
+
   {
-    laspp::LASWriter writer(ofs, reader.header().point_format(), reader.header().num_extra_bytes());
+    uint8_t point_format = reader.header().point_format();
+    if (laz_compress) {
+      point_format |= 1 << 7;
+    } else {
+      point_format &= ~(1 << 7);
+    }
+    laspp::LASWriter writer(ofs, point_format);
+
+    for (const auto& vlr : reader.vlr_headers()) {
+      if (vlr.is_laz_vlr()) {
+        continue;
+      }
+      writer.write_vlr(vlr, reader.read_vlr_data(vlr));
+    }
 
     writer.header().transform() = reader.header().transform();
+
+    {
+      std::vector<LASPoint> points(reader.num_points());
+
+      reader.read_chunks<LASPoint>(points, {0, reader.num_chunks()});
+      std::cout << points[0] << std::endl;
+      std::cout << points[1] << std::endl;
+      std::cout << points[1000] << std::endl;
+      std::cout << points[points.size() - 1] << std::endl;
+
+      writer.write_points<LASPoint>(points);
+      // SWITCH_OVER_POINT_TYPE(reader.header().point_format(), read_and_write_points, reader,
+      // writer);
+    }
   }
 
   return 0;
