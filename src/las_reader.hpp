@@ -188,8 +188,8 @@ class LASReader {
         if (chunk_index == 0) {
           AssertEQ(point_offset, 0);
         }
-        auto tmp = m_laz_data->decompress_chunk(compressed_chunk,
-                                                output_location.subspan(point_offset, n_points));
+        m_laz_data->decompress_chunk(compressed_chunk,
+                                     output_location.subspan(point_offset, n_points));
       }
       return output_location.subspan(0, total_n_points);
     }

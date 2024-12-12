@@ -1,7 +1,7 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
-#include <ios>
 #include <limits>
 #include <span>
 #include <variant>
