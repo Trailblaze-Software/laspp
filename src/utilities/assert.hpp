@@ -37,32 +37,27 @@ std::optional<std::string> OptionalString(Args &&...args) {
 }
 
 #define Assert(condition, ...) \
-  if (!(condition)) _Assert(condition, #condition, OptionalString(__VA_ARGS__));
+  if (!(condition)) laspp::_FailAssert(#condition, laspp::OptionalString(__VA_ARGS__));
 
-inline void _Assert(bool condition, const std::string &condition_str,
-                    const std::optional<std::string> &message,
-                    const std::source_location &loc = std::source_location::current()) {
-  if (!condition) {
-    std::stringstream ss;
-    ss << "Blaze assertion failed: " << condition_str << (message ? " " + *message : "") << "\n in "
-       << loc.function_name() << " at " << loc.file_name() << ":" << loc.line() << std::endl;
-    std::cerr << ss.str();
-    throw std::runtime_error(ss.str());
-  }
+inline void _FailAssert(const std::string &condition_str, const std::optional<std::string> &message,
+                        const std::source_location &loc = std::source_location::current()) {
+  std::stringstream ss;
+  ss << "Blaze assertion failed: " << condition_str << (message ? " " + *message : "") << "\n in "
+     << loc.function_name() << " at " << loc.file_name() << ":" << loc.line() << std::endl;
+  std::cerr << ss.str();
+  throw std::runtime_error(ss.str());
 }
 
 #define AssertBinOp(a, b, op, nop) \
-  if (!((a)op(b))) _AssertBinOp(a, b, #a, #b, a op b, #nop)
+  if (!(bool)((a)op(b))) laspp::_FailBinOp((a), (b), (#a), (#b), (#nop))
 
 template <typename A, typename B>
-inline void _AssertBinOp(const A &a, const B &b, const std::string &a_str, const std::string &b_str,
-                         bool result, const std::string &nop,
-                         const std::source_location &loc = std::source_location::current()) {
-  if (!result) {
-    std::stringstream ss;
-    ss << a << " " << nop << " " << b;
-    _Assert(result, a_str + " " + nop + " " + b_str, ss.str(), loc);
-  }
+inline void _FailBinOp(const A &a, const B &b, const std::string &a_str, const std::string &b_str,
+                       const std::string &nop,
+                       const std::source_location &loc = std::source_location::current()) {
+  std::stringstream ss;
+  ss << a << " " << nop << " " << b;
+  laspp::_FailAssert(a_str + " " + nop + " " + b_str, ss.str(), loc);
 }
 
 #else

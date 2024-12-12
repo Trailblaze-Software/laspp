@@ -61,17 +61,14 @@ else()
 endif()
 
 set(LIBRARY_NAME las++)
-set(EXE_NAME las++-cli)
 
 include_directories(src)
 
 add_library(${LIBRARY_NAME} INTERFACE)
-add_executable(${EXE_NAME})
 
 find_package(OpenMP REQUIRED)
 
 target_link_libraries(${LIBRARY_NAME} INTERFACE OpenMP::OpenMP_CXX)
-target_link_libraries(${EXE_NAME} PRIVATE ${LIBRARY_NAME})
 
 add_subdirectory(src)
 if(LASPP_BUILD_APPS)
@@ -81,13 +78,21 @@ endif()
 if(LASPP_BUILD_TESTS)
   include(CTest)
   enable_testing()
-  # add_executable(las++-tests) target_link_libraries(las++-tests PRIVATE
-  # ${LIBRARY_NAME})
+
+  file(GLOB_RECURSE TEST_SOURCES "test*.cpp")
+  message(STATUS "Test sources: ${TEST_SOURCES}")
+
+  foreach(TEST_SOURCE ${TEST_SOURCES})
+    get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
+    add_executable(${TEST_NAME} ${TEST_SOURCE})
+    target_link_libraries(${TEST_NAME} PRIVATE ${LIBRARY_NAME})
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    target_compile_definitions(${TEST_NAME} PRIVATE LASPP_DEBUG_ASSERTS)
+  endforeach()
 endif()
 
 include(GNUInstallDirs)
 
-install(TARGETS ${EXE_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(
   TARGETS ${LIBRARY_NAME}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

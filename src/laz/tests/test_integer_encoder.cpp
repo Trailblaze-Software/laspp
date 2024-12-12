@@ -1,5 +1,4 @@
 #include <cstring>
-#include <iostream>
 #include <sstream>
 
 #include "laz/bit_symbol_encoder.hpp"
@@ -7,6 +6,8 @@
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
+
+using namespace laspp;
 
 int main(int argc, char* argv[]) {
   (void)argc;
@@ -25,20 +26,15 @@ int main(int argc, char* argv[]) {
       symbol_encoder.encode_symbol(ostream, 2);
     }
 
-    std::cout << "Encoded stream:";
-    for (char c : encoded_stream.str()) {
-      std::cout << " " << (int32_t)c;
-    }
-    std::cout << std::endl;
-
     {
       laspp::InStream instream(encoded_stream);
       laspp::SymbolEncoder<33> symbol_encoder;
-      for (size_t i = 0; i < 6; i++) {
-        uint32_t symbol = symbol_encoder.decode_symbol(instream);
-        std::cout << "Symbol: " << symbol << std::endl;
-        ;
-      }
+      AssertEQ(symbol_encoder.decode_symbol(instream), 14);
+      AssertEQ(symbol_encoder.decode_symbol(instream), 1);
+      AssertEQ(symbol_encoder.decode_symbol(instream), 2);
+      AssertEQ(symbol_encoder.decode_symbol(instream), 1);
+      AssertEQ(symbol_encoder.decode_symbol(instream), 0);
+      AssertEQ(symbol_encoder.decode_symbol(instream), 2);
     }
   }
 
@@ -60,31 +56,37 @@ int main(int argc, char* argv[]) {
       symbol_encoder.encode_bit(ostream, 1);
     }
 
-    std::cout << "Encoded stream:";
-    for (char c : encoded_stream.str()) {
-      std::cout << " " << (int32_t)c;
-    }
-    std::cout << std::endl;
-
     {
       laspp::InStream instream(encoded_stream);
       laspp::BitSymbolEncoder symbol_encoder;
-      uint32_t bit = symbol_encoder.decode_bit(instream);
-      std::cout << "Symbol: " << bit << std::endl;
+      AssertEQ(symbol_encoder.decode_bit(instream), 0);
       {
         laspp::IntegerEncoder<32> int_encoder;
-        std::cout << "Decoded int " << int_encoder.decode_int(instream) << std::endl;
+        AssertEQ(int_encoder.decode_int(instream), 12442);
       }
-      for (size_t i = 0; i < 2; i++) {
-        uint32_t bit = symbol_encoder.decode_bit(instream);
-        std::cout << "Symbol: " << bit << std::endl;
-        ;
+      AssertEQ(symbol_encoder.decode_bit(instream), 1);
+      AssertEQ(symbol_encoder.decode_bit(instream), 1);
+      AssertEQ(laspp::raw_decode(instream, 36), 2445);
+      AssertEQ(symbol_encoder.decode_bit(instream), 1);
+      AssertEQ(symbol_encoder.decode_bit(instream), 0);
+      AssertEQ(symbol_encoder.decode_bit(instream), 1);
+    }
+  }
+
+  {
+    std::stringstream encoded_stream;
+    {
+      laspp::IntegerEncoder<32> int_encoder;
+      for (int32_t i = -1000; i < 1000; i++) {
+        laspp::OutStream ostream(encoded_stream);
+        int_encoder.encode_int(ostream, i);
       }
-      std::cout << "Raw: " << laspp::raw_decode(instream, 36) << std::endl;
-      for (size_t i = 0; i < 3; i++) {
-        uint32_t bit = symbol_encoder.decode_bit(instream);
-        std::cout << "Symbol: " << bit << std::endl;
-        ;
+    }
+    {
+      laspp::IntegerEncoder<32> int_encoder;
+      for (int32_t i = -1000; i < 1000; i++) {
+        laspp::InStream instream(encoded_stream);
+        AssertEQ(int_encoder.decode_int(instream), i);
       }
     }
   }

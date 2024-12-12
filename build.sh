@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 DIR="linux-build"
 
 if [ ! -d $DIR ]; then
@@ -7,7 +9,7 @@ if [ ! -d $DIR ]; then
     cmake -B $DIR $@
 fi
 
-pushd $DIR || exit
-    make -j 8
-    cp compile_commands.json ..
-popd || exit
+cmake --build $DIR -j 8
+cp $DIR/compile_commands.json .
+
+ctest --test-dir $DIR --output-on-failure
