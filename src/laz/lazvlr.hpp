@@ -219,7 +219,7 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
     for (auto& item : items_records) {
       is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord));
       if (is.fail()) {
-        throw std::runtime_error("Failed to read LAZ item record");
+        throw std::runtime_error("LASPP_FAILed to read LAZ item record");
       }
       assert(check_size_from_type(item.item_type, item.item_size));
     }

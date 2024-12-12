@@ -54,7 +54,7 @@ class LAZChunkTable : LAZChunkTableHeader {
         m_decompressed_chunk_offsets.push_back(
             i == 0 ? 0 : m_decompressed_chunk_offsets[i - 1] + m_n_points_per_chunk[i - 1]);
       } else {
-        Unimplemented(...);
+        LASPP_UNIMPLEMENTED(...);
       }
     }
   }

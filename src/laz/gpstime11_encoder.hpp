@@ -47,10 +47,10 @@ class GPSTime11Encoder {
         m_current_frame = (m_current_frame + case_delta - 2) % 4;
         if (m_reference_frames[m_current_frame].delta == 0) {
           case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
-          AssertLE(case_delta, 2);
+          LASPP_ASSERT_LE(case_delta, 2);
         } else {
           case_delta = m_case_encoder.decode_symbol(in_stream);
-          AssertLE(case_delta, 512);
+          LASPP_ASSERT_LE(case_delta, 512);
         }
       }
       if (case_delta == 0) {
@@ -64,10 +64,10 @@ class GPSTime11Encoder {
         m_current_frame = (m_current_frame + case_delta - 512) % 4;
         if (m_reference_frames[m_current_frame].delta == 0) {
           case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
-          AssertLE(case_delta, 2);
+          LASPP_ASSERT_LE(case_delta, 2);
         } else {
           case_delta = m_case_encoder.decode_symbol(in_stream);
-          AssertLE(case_delta, 512);
+          LASPP_ASSERT_LE(case_delta, 512);
         }
       }
     }
@@ -141,7 +141,7 @@ class GPSTime11Encoder {
       return m_reference_frames[m_current_frame].prev_gps_time;
     }
 
-    Fail("Unkown case delta: ", case_delta);
+    LASPP_FAIL("Unkown case delta: ", case_delta);
   }
 };
 

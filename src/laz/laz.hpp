@@ -45,7 +45,7 @@ class LAZReader {
   template <typename T>
   std::span<T> decompress_chunk(std::span<std::byte> compressed_data,
                                 std::span<T> decompressed_data) {
-    Assert(m_chunk_table.has_value());
+    LASPP_ASSERT(m_chunk_table.has_value());
 
     std::vector<LAZEncoder> encoders;
     for (LAZItemRecord record : m_special_vlr.items_records) {
@@ -69,7 +69,7 @@ class LAZReader {
           break;
         }
         default:
-          Fail("Currently unsupported LAZ item type: ", (LAZItemType)record.item_type);
+          LASPP_FAIL("Currently unsupported LAZ item type: ", (LAZItemType)record.item_type);
       }
     }
 

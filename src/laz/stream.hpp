@@ -233,7 +233,7 @@ class OutStream : StreamVariables {
     size_t current_p = m_stream.tellp();
     m_stream.seekp(current_p - 1);
 
-    Unimplemented();
+    LASPP_UNIMPLEMENTED();
   }
 
   void update_range(uint32_t lower, uint32_t upper) {

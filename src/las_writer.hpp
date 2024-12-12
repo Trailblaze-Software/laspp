@@ -53,15 +53,15 @@ class LASWriter {
     header().set_point_format(point_format, num_extra_bytes);
     header().m_offset_to_point_data = header().size();
     m_ofs.seekp(header().size());
-    AssertEQ(num_extra_bytes, 0);
+    LASPP_ASSERT_EQ(num_extra_bytes, 0);
   }
 
   const LASHeader& header() const { return m_header; }
   LASHeader& header() { return m_header; }
 
   void write_vlr(const LASVLR& vlr, std::span<const std::byte> data) {
-    AssertEQ(m_stage, WritingStage::VLRS);
-    AssertEQ(vlr.record_length_after_header, data.size());
+    LASPP_ASSERT_EQ(m_stage, WritingStage::VLRS);
+    LASPP_ASSERT_EQ(vlr.record_length_after_header, data.size());
     m_ofs.write(reinterpret_cast<const char*>(&vlr), sizeof(LASVLR));
     m_ofs.write(reinterpret_cast<const char*>(data.data()), vlr.record_length_after_header);
     header().m_number_of_variable_length_records++;
@@ -71,9 +71,9 @@ class LASWriter {
  private:
   template <typename PointType, typename T>
   void t_write_points(const std::span<T>& points) {
-    AssertLE(m_stage, WritingStage::POINTS);
+    LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
     m_stage = WritingStage::POINTS;
-    AssertEQ(m_header.offset_to_point_data(), m_ofs.tellp());
+    LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_ofs.tellp());
     m_ofs.seekp(m_header.offset_to_point_data());
 
     std::vector<PointType> points_to_write(points.size());
@@ -144,7 +144,7 @@ class LASWriter {
               << sizeof(PointType) * points_to_write.size() << " B)" << std::endl;
     m_ofs.write(reinterpret_cast<const char*>(points_to_write.data()),
                 points_to_write.size() * sizeof(PointType));
-    AssertEQ(sizeof(PointType), m_header.point_data_record_length());
+    LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
   }
 
  public:
@@ -153,13 +153,13 @@ class LASWriter {
     if constexpr (std::is_base_of_v<LASPointFormat0, T> || std::is_base_of_v<LASPointFormat6, T>) {
       t_write_points<T>(points);
     } else {
-      SWITCH_OVER_POINT_TYPE(header().point_format(), t_write_points, points)
+      LASPP_SWITCH_OVER_POINT_TYPE(header().point_format(), t_write_points, points)
     }
   }
 
   void write_chunktable() {
     if (header().is_laz_compressed() && !m_written_chunktable) {
-      AssertLE(m_stage, WritingStage::CHUNKTABLE);
+      LASPP_ASSERT_LE(m_stage, WritingStage::CHUNKTABLE);
       m_stage = WritingStage::CHUNKTABLE;
 
       m_written_chunktable = true;
@@ -168,9 +168,9 @@ class LASWriter {
 
   void write_evlr(const LASEVLR& evlr, const std::vector<std::byte>& data) {
     write_chunktable();
-    AssertLE(m_stage, WritingStage::EVLRS);
+    LASPP_ASSERT_LE(m_stage, WritingStage::EVLRS);
     m_stage = WritingStage::EVLRS;
-    AssertEQ(evlr.record_length_after_header, data.size());
+    LASPP_ASSERT_EQ(evlr.record_length_after_header, data.size());
     m_ofs.write(reinterpret_cast<const char*>(&evlr), sizeof(LASEVLR));
     m_ofs.write(reinterpret_cast<const char*>(data.data()), evlr.record_length_after_header);
     header().m_number_of_extended_variable_length_records++;

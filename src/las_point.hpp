@@ -283,68 +283,68 @@ struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData {
   uint16_t NIR;
 };
 
-#define SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \
-  switch (format & (~(1 << 7))) {                     \
-    case 0:                                           \
-      return f<laspp::LASPointFormat0>(__VA_ARGS__);  \
-    case 1:                                           \
-      return f<laspp::LASPointFormat1>(__VA_ARGS__);  \
-    case 2:                                           \
-      return f<laspp::LASPointFormat2>(__VA_ARGS__);  \
-    case 3:                                           \
-      return f<laspp::LASPointFormat3>(__VA_ARGS__);  \
-    case 4:                                           \
-      return f<laspp::LASPointFormat4>(__VA_ARGS__);  \
-    case 5:                                           \
-      return f<laspp::LASPointFormat5>(__VA_ARGS__);  \
-    case 6:                                           \
-      return f<laspp::LASPointFormat6>(__VA_ARGS__);  \
-    case 7:                                           \
-      return f<laspp::LASPointFormat7>(__VA_ARGS__);  \
-    case 8:                                           \
-      return f<laspp::LASPointFormat8>(__VA_ARGS__);  \
-    case 9:                                           \
-      return f<laspp::LASPointFormat9>(__VA_ARGS__);  \
-    case 10:                                          \
-      return f<laspp::LASPointFormat10>(__VA_ARGS__); \
-  }                                                   \
+#define LASPP_SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \
+  switch (format & (~(1 << 7))) {                           \
+    case 0:                                                 \
+      return f<laspp::LASPointFormat0>(__VA_ARGS__);        \
+    case 1:                                                 \
+      return f<laspp::LASPointFormat1>(__VA_ARGS__);        \
+    case 2:                                                 \
+      return f<laspp::LASPointFormat2>(__VA_ARGS__);        \
+    case 3:                                                 \
+      return f<laspp::LASPointFormat3>(__VA_ARGS__);        \
+    case 4:                                                 \
+      return f<laspp::LASPointFormat4>(__VA_ARGS__);        \
+    case 5:                                                 \
+      return f<laspp::LASPointFormat5>(__VA_ARGS__);        \
+    case 6:                                                 \
+      return f<laspp::LASPointFormat6>(__VA_ARGS__);        \
+    case 7:                                                 \
+      return f<laspp::LASPointFormat7>(__VA_ARGS__);        \
+    case 8:                                                 \
+      return f<laspp::LASPointFormat8>(__VA_ARGS__);        \
+    case 9:                                                 \
+      return f<laspp::LASPointFormat9>(__VA_ARGS__);        \
+    case 10:                                                \
+      return f<laspp::LASPointFormat10>(__VA_ARGS__);       \
+  }                                                         \
   unreachable();
 
-#define SWITCH_OVER_POINT_TYPE(format, f, ...) \
-  switch (format & (~(1 << 7))) {              \
-    case 0:                                    \
-      f<laspp::LASPointFormat0>(__VA_ARGS__);  \
-      break;                                   \
-    case 1:                                    \
-      f<laspp::LASPointFormat1>(__VA_ARGS__);  \
-      break;                                   \
-    case 2:                                    \
-      f<laspp::LASPointFormat2>(__VA_ARGS__);  \
-      break;                                   \
-    case 3:                                    \
-      f<laspp::LASPointFormat3>(__VA_ARGS__);  \
-      break;                                   \
-    case 4:                                    \
-      f<laspp::LASPointFormat4>(__VA_ARGS__);  \
-      break;                                   \
-    case 5:                                    \
-      f<laspp::LASPointFormat5>(__VA_ARGS__);  \
-      break;                                   \
-    case 6:                                    \
-      f<laspp::LASPointFormat6>(__VA_ARGS__);  \
-      break;                                   \
-    case 7:                                    \
-      f<laspp::LASPointFormat7>(__VA_ARGS__);  \
-      break;                                   \
-    case 8:                                    \
-      f<laspp::LASPointFormat8>(__VA_ARGS__);  \
-      break;                                   \
-    case 9:                                    \
-      f<laspp::LASPointFormat9>(__VA_ARGS__);  \
-      break;                                   \
-    case 10:                                   \
-      f<laspp::LASPointFormat10>(__VA_ARGS__); \
-      break;                                   \
+#define LASPP_SWITCH_OVER_POINT_TYPE(format, f, ...) \
+  switch (format & (~(1 << 7))) {                    \
+    case 0:                                          \
+      f<laspp::LASPointFormat0>(__VA_ARGS__);        \
+      break;                                         \
+    case 1:                                          \
+      f<laspp::LASPointFormat1>(__VA_ARGS__);        \
+      break;                                         \
+    case 2:                                          \
+      f<laspp::LASPointFormat2>(__VA_ARGS__);        \
+      break;                                         \
+    case 3:                                          \
+      f<laspp::LASPointFormat3>(__VA_ARGS__);        \
+      break;                                         \
+    case 4:                                          \
+      f<laspp::LASPointFormat4>(__VA_ARGS__);        \
+      break;                                         \
+    case 5:                                          \
+      f<laspp::LASPointFormat5>(__VA_ARGS__);        \
+      break;                                         \
+    case 6:                                          \
+      f<laspp::LASPointFormat6>(__VA_ARGS__);        \
+      break;                                         \
+    case 7:                                          \
+      f<laspp::LASPointFormat7>(__VA_ARGS__);        \
+      break;                                         \
+    case 8:                                          \
+      f<laspp::LASPointFormat8>(__VA_ARGS__);        \
+      break;                                         \
+    case 9:                                          \
+      f<laspp::LASPointFormat9>(__VA_ARGS__);        \
+      break;                                         \
+    case 10:                                         \
+      f<laspp::LASPointFormat10>(__VA_ARGS__);       \
+      break;                                         \
   }
 
 constexpr std::array<uint16_t, 11> LASPointFormatSize = {

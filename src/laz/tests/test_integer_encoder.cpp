@@ -29,12 +29,12 @@ int main(int argc, char* argv[]) {
     {
       laspp::InStream instream(encoded_stream);
       laspp::SymbolEncoder<33> symbol_encoder;
-      AssertEQ(symbol_encoder.decode_symbol(instream), 14);
-      AssertEQ(symbol_encoder.decode_symbol(instream), 1);
-      AssertEQ(symbol_encoder.decode_symbol(instream), 2);
-      AssertEQ(symbol_encoder.decode_symbol(instream), 1);
-      AssertEQ(symbol_encoder.decode_symbol(instream), 0);
-      AssertEQ(symbol_encoder.decode_symbol(instream), 2);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 14);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 1);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 2);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 1);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 0);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 2);
     }
   }
 
@@ -59,17 +59,17 @@ int main(int argc, char* argv[]) {
     {
       laspp::InStream instream(encoded_stream);
       laspp::BitSymbolEncoder symbol_encoder;
-      AssertEQ(symbol_encoder.decode_bit(instream), 0);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 0);
       {
         laspp::IntegerEncoder<32> int_encoder;
-        AssertEQ(int_encoder.decode_int(instream), 12442);
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 12442);
       }
-      AssertEQ(symbol_encoder.decode_bit(instream), 1);
-      AssertEQ(symbol_encoder.decode_bit(instream), 1);
-      AssertEQ(laspp::raw_decode(instream, 36), 2445);
-      AssertEQ(symbol_encoder.decode_bit(instream), 1);
-      AssertEQ(symbol_encoder.decode_bit(instream), 0);
-      AssertEQ(symbol_encoder.decode_bit(instream), 1);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
+      LASPP_ASSERT_EQ(laspp::raw_decode(instream, 36), 2445);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 0);
+      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
     }
   }
 
@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
       laspp::IntegerEncoder<32> int_encoder;
       for (int32_t i = -1000; i < 1000; i++) {
         laspp::InStream instream(encoded_stream);
-        AssertEQ(int_encoder.decode_int(instream), i);
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), i);
       }
     }
   }

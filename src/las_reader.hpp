@@ -65,7 +65,7 @@ class LASReader {
         m_vlr_headers(read_vlr_headers()),
         m_evlr_headers(read_evlr_headers()) {
     if (m_header.is_laz_compressed()) {
-      Assert(m_laz_data.has_value());
+      LASPP_ASSERT(m_laz_data.has_value());
 
       m_ifs.seekg(header().offset_to_point_data());
       int64_t chunk_table_offset;
@@ -95,14 +95,14 @@ class LASReader {
   size_t num_points() const { return m_header.num_points(); }
   size_t num_chunks() const {
     if (m_laz_data.has_value()) {
-      Assert(m_laz_data->m_chunk_table.has_value());
+      LASPP_ASSERT(m_laz_data->m_chunk_table.has_value());
       return m_laz_data->m_chunk_table->num_chunks();
     }
     return 1;
   }
   std::vector<size_t> points_per_chunk() const {
     if (m_laz_data.has_value()) {
-      Assert(m_laz_data->m_chunk_table.has_value());
+      LASPP_ASSERT(m_laz_data->m_chunk_table.has_value());
       return m_laz_data->m_chunk_table->points_per_chunk();
     }
     return {m_header.num_points()};
@@ -140,13 +140,13 @@ class LASReader {
       size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
       return m_laz_data->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
     }
-    Assert(chunk_index == 0);
+    LASPP_ASSERT(chunk_index == 0);
     size_t n_points = num_points();
     m_ifs.seekg(header().offset_to_point_data());
     if constexpr (std::is_base_of_v<LASPointFormat0, T> || std::is_base_of_v<LASPointFormat6, T>) {
       read_points<T>(output_location);
     } else {
-      SWITCH_OVER_POINT_TYPE(header().point_format(), read_points, output_location);
+      LASPP_SWITCH_OVER_POINT_TYPE(header().point_format(), read_points, output_location);
     }
     return output_location.subspan(0, n_points);
   }
@@ -164,7 +164,7 @@ class LASReader {
                ? header().num_points()
                : m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.second]) -
           m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
-      AssertGE(output_location.size(), total_n_points);
+      LASPP_ASSERT_GE(output_location.size(), total_n_points);
       std::vector<std::byte> compressed_data(total_compressed_size);
       m_ifs.seekg(header().offset_to_point_data() + compressed_start_offset);
       std::cout << "Reading " << total_compressed_size << " bytes from " << compressed_start_offset
@@ -186,15 +186,15 @@ class LASReader {
             m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
         size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
         if (chunk_index == 0) {
-          AssertEQ(point_offset, 0);
+          LASPP_ASSERT_EQ(point_offset, 0);
         }
         m_laz_data->decompress_chunk(compressed_chunk,
                                      output_location.subspan(point_offset, n_points));
       }
       return output_location.subspan(0, total_n_points);
     }
-    Assert(chunk_indexes.first == 0);
-    Assert(chunk_indexes.second == 1);
+    LASPP_ASSERT(chunk_indexes.first == 0);
+    LASPP_ASSERT(chunk_indexes.second == 1);
     return read_chunk(output_location, 0);
   }
 

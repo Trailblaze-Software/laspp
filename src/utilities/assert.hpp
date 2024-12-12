@@ -1,15 +1,15 @@
 #pragma once
 
 #ifndef _MSC_VER
-#define HAS_BUILTIN(x) __has_builtin(x)
+#define LASPP_HAS_BUILTIN(x) __has_builtin(x)
 #else
-#define HAS_BUILTIN(x) 0
+#define LASPP_HAS_BUILTIN(x) 0
 #endif
 
 #ifdef LASPP_DEBUG_ASSERTS
 #include <iostream>
 #include <optional>
-#if defined(_MSC_VER) || HAS_BUILTIN(__builtin_source_location)
+#if defined(_MSC_VER) || LASPP_HAS_BUILTIN(__builtin_source_location)
 #include <source_location>
 #else
 #include <experimental/source_location>
@@ -36,11 +36,12 @@ std::optional<std::string> OptionalString(Args &&...args) {
   }
 }
 
-#define Assert(condition, ...) \
-  if (!(condition)) laspp::_FailAssert(#condition, laspp::OptionalString(__VA_ARGS__));
+#define LASPP_ASSERT(condition, ...) \
+  if (!(condition)) laspp::_LASPP_FAILLASPP_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__));
 
-inline void _FailAssert(const std::string &condition_str, const std::optional<std::string> &message,
-                        const std::source_location &loc = std::source_location::current()) {
+inline void _LASPP_FAILLASPP_ASSERT(
+    const std::string &condition_str, const std::optional<std::string> &message,
+    const std::source_location &loc = std::source_location::current()) {
   std::stringstream ss;
   ss << "Blaze assertion failed: " << condition_str << (message ? " " + *message : "") << "\n in "
      << loc.function_name() << " at " << loc.file_name() << ":" << loc.line() << std::endl;
@@ -48,34 +49,34 @@ inline void _FailAssert(const std::string &condition_str, const std::optional<st
   throw std::runtime_error(ss.str());
 }
 
-#define AssertBinOp(a, b, op, nop) \
-  if (!(bool)((a)op(b))) laspp::_FailBinOp((a), (b), (#a), (#b), (#nop))
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop) \
+  if (!(bool)((a)op(b))) laspp::_LASPP_FAILBinOp((a), (b), (#a), (#b), (#nop))
 
 template <typename A, typename B>
-inline void _FailBinOp(const A &a, const B &b, const std::string &a_str, const std::string &b_str,
-                       const std::string &nop,
-                       const std::source_location &loc = std::source_location::current()) {
+inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
+                             const std::string &b_str, const std::string &nop,
+                             const std::source_location &loc = std::source_location::current()) {
   std::stringstream ss;
   ss << a << " " << nop << " " << b;
-  laspp::_FailAssert(a_str + " " + nop + " " + b_str, ss.str(), loc);
+  laspp::_LASPP_FAILLASPP_ASSERT(a_str + " " + nop + " " + b_str, ss.str(), loc);
 }
 
 #else
-#define Assert(condition, ...)
-#define AssertBinOp(a, b, op, nop)
+#define LASPP_ASSERT(condition, ...)
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop)
 #endif
 
-#define Fail(...)             \
-  Assert(false, __VA_ARGS__); \
+#define LASPP_FAIL(...)             \
+  LASPP_ASSERT(false, __VA_ARGS__); \
   unreachable()
 
-#define Unimplemented(...) Fail("Unimplemented")
+#define LASPP_UNIMPLEMENTED(...) LASPP_FAIL("LASPP_UNIMPLEMENTED")
 
-#define AssertGE(expr, val) AssertBinOp(expr, val, >=, <)
-#define AssertLE(expr, val) AssertBinOp(expr, val, <=, >)
-#define AssertGT(expr, val) AssertBinOp(expr, val, >, <=)
-#define AssertEQ(expr, val) AssertBinOp(expr, val, ==, !=)
-#define AssertNE(expr, val) AssertBinOp(expr, val, !=, ==)
+#define LASPP_ASSERT_GE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, >=, <)
+#define LASPP_ASSERT_LE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, <=, >)
+#define LASPP_ASSERT_GT(expr, val) LASPP_ASSERT_BIN_OP(expr, val, >, <=)
+#define LASPP_ASSERT_EQ(expr, val) LASPP_ASSERT_BIN_OP(expr, val, ==, !=)
+#define LASPP_ASSERT_NE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, !=, ==)
 
 [[noreturn]] inline void unreachable() {
   // Uses compiler specific extensions if possible.
