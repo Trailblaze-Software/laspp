@@ -81,6 +81,13 @@ struct LASPP_PACKED Transform {
   }
 };
 
+template <size_t N>
+void string_to_arr(const std::string& str, char (&arr)[N]) {
+  for (size_t i = 0; i < N; ++i) {
+    arr[i] = i < str.size() ? str[i] : '\0';
+  }
+}
+
 template <typename T, size_t N>
 std::string arr_to_string(const T (&arr)[N]) {
   std::stringstream ss;
@@ -136,7 +143,7 @@ class LASPP_PACKED LASHeader {
   }
 
   LASHeader() {
-    strcpy(m_generating_software, "LAS++ by Trailblaze Software");
+    string_to_arr("LAS++ by Trailblaze Software", m_generating_software);
 
     auto now = std::chrono::system_clock::now();
     auto today = std::chrono::floor<std::chrono::days>(now);

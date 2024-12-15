@@ -231,6 +231,8 @@ struct LASPP_PACKED LAZItemRecord {
   LAZItemVersion item_version;
 };
 
+#pragma pack(pop)
+
 struct LAZSpecialVLR : LAZSpecialVLRPt1 {
   std::vector<LAZItemRecord> items_records;
 
@@ -256,7 +258,5 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
     return os;
   }
 };
-
-#pragma pack(pop)
 
 }  // namespace laspp

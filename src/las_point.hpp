@@ -371,10 +371,10 @@ struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData {
   }
 
 constexpr std::array<uint16_t, 11> LASPointFormatSize = {
-    sizeof(LASPointFormat0), sizeof(LASPointFormat1), sizeof(LASPointFormat2),
-    sizeof(LASPointFormat3), sizeof(LASPointFormat4), sizeof(LASPointFormat5),
-    sizeof(LASPointFormat6), sizeof(LASPointFormat7), sizeof(LASPointFormat8),
-    sizeof(LASPointFormat9), sizeof(LASPointFormat10)};
+    {sizeof(LASPointFormat0), sizeof(LASPointFormat1), sizeof(LASPointFormat2),
+     sizeof(LASPointFormat3), sizeof(LASPointFormat4), sizeof(LASPointFormat5),
+     sizeof(LASPointFormat6), sizeof(LASPointFormat7), sizeof(LASPointFormat8),
+     sizeof(LASPointFormat9), sizeof(LASPointFormat10)}};
 
 inline uint16_t size_of_point_format(uint8_t format) {
   return LASPointFormatSize[format & (~(1 << 7))];

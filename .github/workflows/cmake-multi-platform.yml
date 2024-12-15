@@ -28,10 +28,6 @@ jobs:
             cpp_compiler: clang++
           - os: ubuntu-latest
             cpp_compiler: cl
-          - os: windows-latest
-            build_type: Profile
-          - os: windows-latest
-            build_type: Debug
     steps:
       - uses: actions/checkout@v4
       - name: Set reusable strings

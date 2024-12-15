@@ -54,7 +54,8 @@ if(WIN32)
       "/wd4710"
       "/wd4711"
       "/wd4625"
-      "/wd5026")
+      "/wd5026"
+      "/wd5246")
   endif()
 elseif(UNIX)
   add_compile_options("-fstrict-enums" "-Wall" "-Wextra" "-Wpedantic" "-Werror")

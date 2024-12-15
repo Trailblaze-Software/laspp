@@ -26,7 +26,9 @@ namespace laspp {
 
 inline uint64_t raw_decode(InStream& in_stream, uint8_t n_bits) {
   if (n_bits > 19) {
-    return raw_decode(in_stream, 16) + (raw_decode(in_stream, n_bits - 16) * 1ul << 16);
+    uint64_t raw = raw_decode(in_stream, 16);
+    uint64_t raw2 = raw_decode(in_stream, n_bits - 16);
+    return raw + (raw2 << 16);
   }
 
   uint32_t value = in_stream.get_value();
