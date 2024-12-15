@@ -221,6 +221,7 @@ class OutStream : StreamVariables {
   std::iostream& m_stream;
 
   void finalize_stream() {
+    get_base();
     bool write_two_bytes;
     if (length() > (1u << 25)) {
       update_range(1u << 24, 0b11u << 23);
@@ -259,6 +260,7 @@ class OutStream : StreamVariables {
     uint8_t carry = m_stream.get();
     while (carry == 0xff) {
       m_stream.put(0);
+      LASPP_ASSERT_GT(updated_p, 0);
       updated_p--;
       m_stream.seekg(updated_p);
       m_stream.seekp(updated_p);
@@ -269,7 +271,7 @@ class OutStream : StreamVariables {
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
-    if (((size_t)m_base + (size_t)lower) >= (1ul << 32)) {
+    if (((uint64_t)m_base + (uint64_t)lower) >= ((uint64_t)1 << 32)) {
       propogate_carry();
     }
     m_base += lower;

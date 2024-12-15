@@ -72,6 +72,7 @@ class BitSymbolEncoder {
   }
 
   void encode_bit(OutStream& stream, bool bit) {
+    stream.get_base();
     uint32_t mid = bit_0_prob * (stream.length() / (1u << 13));
     stream.update_range(bit ? mid : 0, bit ? stream.length() : mid);
 
@@ -80,7 +81,6 @@ class BitSymbolEncoder {
     if (bits_until_update == 0) {
       update_distribution();
     }
-    stream.get_base();
   }
 };
 

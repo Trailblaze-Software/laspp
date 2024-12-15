@@ -167,7 +167,7 @@ class GPSTime11Encoder {
     } else if (case_delta == 511) {
       return m_reference_frames[m_current_frame].prev_gps_time;
     } else if (case_delta == 512) {
-      int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(8, in_stream);
+      uint32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(8, in_stream);
       uint32_t dgps_time = raw_decode(in_stream, 32);
       uint64_t tmp =
           ((uint64_t)((int32_t)(m_reference_frames[m_current_frame].prev_gps_time.as_uint64() >>

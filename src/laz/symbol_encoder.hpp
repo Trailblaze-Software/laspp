@@ -159,6 +159,7 @@ class SymbolEncoder {
   }
 
   void encode_symbol(OutStream& stream, uint16_t symbol) {
+    stream.get_base();
     uint32_t l_tmp = (stream.length() >> 15);
 
     stream.update_range(distribution[symbol] * l_tmp, symbol < NSymbols - 1
@@ -170,7 +171,6 @@ class SymbolEncoder {
     if (symbols_until_update == 0) {
       update_distribution();
     }
-    stream.get_base();
   }
 
   friend std::ostream& operator<<(std::ostream& os, const SymbolEncoder& encoder) {
