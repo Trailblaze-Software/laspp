@@ -69,10 +69,8 @@ class IntegerEncoder {
           case 7:
             return encoder_7.decode_symbol(stream);
         }
-        UNREACHABLE();
-      } else {
-        return encoders_8_32.at(k - 8).decode_symbol(stream);
       }
+      return encoders_8_32.at(k - 8).decode_symbol(stream);
     }
 
     void encode(OutStream& stream, uint8_t k, uint8_t val) {
@@ -95,10 +93,8 @@ class IntegerEncoder {
           case 7:
             return encoder_7.encode_symbol(stream, val);
         }
-        UNREACHABLE();
-      } else {
-        return encoders_8_32.at(k - 8).encode_symbol(stream, val);
       }
+      return encoders_8_32.at(k - 8).encode_symbol(stream, val);
     }
   };
 

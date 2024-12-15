@@ -140,7 +140,7 @@ inline bool check_size_from_type(LAZItemType type, uint16_t size) {
     case LAZItemType::Byte14:
       return true;
   }
-  UNREACHABLE();
+  LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
 }
 
 inline std::ostream& operator<<(std::ostream& os, const LAZItemType& type) {

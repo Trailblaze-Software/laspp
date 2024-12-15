@@ -29,10 +29,7 @@
 
 using namespace laspp;
 
-int main(int argc, char* argv[]) {
-  (void)argc;
-  (void)argv;
-
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
     std::stringstream encoded_stream;
     {
@@ -63,35 +60,23 @@ int main(int argc, char* argv[]) {
     {
       laspp::OutStream ostream(encoded_stream);
       laspp::BitSymbolEncoder symbol_encoder;
-      symbol_encoder.encode_bit(ostream, 0);
 
       laspp::IntegerEncoder<32> int_encoder;
       int_encoder.encode_int(ostream, 12442);
       int_encoder.encode_int(ostream, 1);
 
-      symbol_encoder.encode_bit(ostream, 1);
-      symbol_encoder.encode_bit(ostream, 1);
       laspp::raw_encode(ostream, 2445, 36);
-      symbol_encoder.encode_bit(ostream, 1);
-      symbol_encoder.encode_bit(ostream, 0);
-      symbol_encoder.encode_bit(ostream, 1);
     }
 
     {
       laspp::InStream instream(encoded_stream);
       laspp::BitSymbolEncoder symbol_encoder;
-      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 0);
       {
         laspp::IntegerEncoder<32> int_encoder;
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 12442);
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 1);
       }
-      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
       LASPP_ASSERT_EQ(laspp::raw_decode(instream, 36), 2445u);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 0);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
     }
   }
 

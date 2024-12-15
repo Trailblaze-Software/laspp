@@ -331,7 +331,7 @@ struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData {
     case 10:                                                \
       return f<laspp::LASPointFormat10>(__VA_ARGS__);       \
   }                                                         \
-  UNREACHABLE();
+  LASPP_FAIL("Invalid point format", format);
 
 #define LASPP_SWITCH_OVER_POINT_TYPE(format, f, ...) \
   switch (format & (~(1 << 7))) {                    \

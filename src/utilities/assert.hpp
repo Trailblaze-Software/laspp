@@ -58,11 +58,11 @@ std::optional<std::string> OptionalString(Args &&...args) {
 }
 
 #define LASPP_ASSERT(condition, ...) \
-  if (!(condition)) laspp::_LASPP_FAILLASPP_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__));
+  if (!(condition)) laspp::_LASPP_FAIL_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__));
 
-inline void _LASPP_FAILLASPP_ASSERT(
-    const std::string &condition_str, const std::optional<std::string> &message,
-    const std::source_location &loc = std::source_location::current()) {
+inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
+                               const std::optional<std::string> &message,
+                               const std::source_location &loc = std::source_location::current()) {
   std::stringstream ss;
   ss << "Blaze assertion failed: " << condition_str << (message ? " " + *message : "") << "\n in "
      << loc.function_name() << " at " << loc.file_name() << ":" << loc.line() << std::endl;
@@ -83,7 +83,7 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
                              const std::source_location &loc = std::source_location::current()) {
   std::stringstream ss;
   ss << a << " " << nop << " " << b;
-  laspp::_LASPP_FAILLASPP_ASSERT(a_str + " " + nop + " " + b_str, ss.str(), loc);
+  laspp::_LASPP_FAIL_ASSERT(a_str + " " + nop + " " + b_str, ss.str(), loc);
 }
 
 #else
@@ -93,7 +93,7 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 
 #define LASPP_FAIL(...)             \
   LASPP_ASSERT(false, __VA_ARGS__); \
-  UNREACHABLE()
+  UNREACHABLE()  // LCOV_EXCL_LINE
 
 #define LASPP_UNIMPLEMENTED(...) LASPP_FAIL("LASPP_UNIMPLEMENTED")
 
@@ -154,5 +154,16 @@ class RawString {
 
 #define LASPP_ASSERT_RAW_STR_EQ(expr, val) \
   LASPP_ASSERT_EQ(laspp::RawString(DEBRACKET(expr)), laspp::RawString(DEBRACKET(val)))
+
+#define LASPP_ASSERT_THROWS(expr, exception)               \
+  {                                                        \
+    bool caught = false;                                   \
+    try {                                                  \
+      DEBRACKET(expr);                                     \
+    } catch (const exception &) {                          \
+      caught = true;                                       \
+    }                                                      \
+    LASPP_ASSERT(caught, "Expected exception " #exception) \
+  }
 
 }  // namespace laspp
