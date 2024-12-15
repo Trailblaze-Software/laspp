@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: (c) 2024 Trailblaze Software, all rights reserved
-# SPDX-License-Identifier: LGPL-2.1
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # This library is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -63,4 +63,4 @@ repos:
           - "--license-filepath=license_header.txt"
           - "--use-current-year"
         files: \.md$|\.txt$|\.cmake$|\.yml$|\.yaml$|\.sh$|\.gitignore$|.clang-format$
-        exclude: license_header.txt
+        exclude: license_header.txt|LICENSES/*
