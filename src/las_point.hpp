@@ -188,12 +188,15 @@ struct LASPP_PACKED LASPointFormat0 {
 typedef union {
   double f64;
   uint64_t uint64;
+  int64_t int64;
 } DoubleUInt64;
 
 struct LASPP_PACKED GPSTime {
   DoubleUInt64 gps_time;
 
   uint64_t& as_uint64() { return gps_time.uint64; }
+
+  int64_t& as_int64() { return gps_time.int64; }
 
   GPSTime(double time = 0) { gps_time.f64 = time; }
 

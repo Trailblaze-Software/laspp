@@ -160,6 +160,10 @@ class MultiInstanceIntegerEncoder {
     return m_integer_encoders[instance].decode_int(stream);
   }
 
+  void encode_int(uint8_t instance, OutStream& stream, int32_t integer) {
+    return m_integer_encoders[instance].encode_int(stream, integer);
+  }
+
   IntegerEncoder<n_bits>& operator[](uint8_t instance) { return m_integer_encoders[instance]; }
 };
 

@@ -20,6 +20,8 @@ endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
 
+set(CMAKE_CXX_FLAGS_COVERAGE "-O0 -g -coverage")
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
 endif()

@@ -11,8 +11,8 @@ namespace laspp {
 
 class GPSTime11Encoder {
   struct ReferenceFrame {
-    int64_t delta;
-    uint64_t counter;
+    int32_t delta;
+    int32_t counter;
     GPSTime prev_gps_time;
 
     ReferenceFrame() : delta(0), counter(0), prev_gps_time(0) {}
@@ -37,6 +37,27 @@ class GPSTime11Encoder {
 
   explicit GPSTime11Encoder(GPSTime last_gps_time) : m_current_frame(0) {
     m_reference_frames[0].prev_gps_time = last_gps_time;
+  }
+
+  int32_t case_delta_to_instance(int32_t case_delta) {
+    if (case_delta == 0) {
+      return 7;
+    } else if (case_delta == 1) {
+      return 1;
+    } else if (case_delta < 10) {
+      return 2;
+    } else if (case_delta < 500) {
+      return 3;
+    } else if (case_delta == 500) {
+      return 4;
+    } else if (case_delta < 510) {
+      return 5;
+    } else if (case_delta == 510) {
+      return 6;
+    } else if (case_delta == 512) {
+      return 8;
+    }
+    LASPP_FAIL("Unknown case delta: ", case_delta);
   }
 
   GPSTime decode(InStream& in_stream) {
@@ -75,7 +96,7 @@ class GPSTime11Encoder {
       // int32_t dgps_time_low;
       if (case_delta == 0) {
         int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(7, in_stream);
-        m_reference_frames[m_current_frame].prev_gps_time.as_uint64() += dgps_time_low;
+        m_reference_frames[m_current_frame].prev_gps_time.as_int64() += dgps_time_low;
         m_reference_frames[m_current_frame].counter++;
         if (m_reference_frames[m_current_frame].counter > 3) {
           m_reference_frames[m_current_frame].delta = dgps_time_low;
@@ -85,7 +106,7 @@ class GPSTime11Encoder {
       } else if (case_delta == 1) {
         int instance = m_reference_frames[m_current_frame].delta == 0 ? 0 : 1;
         int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(instance, in_stream);
-        m_reference_frames[m_current_frame].prev_gps_time.as_uint64() +=
+        m_reference_frames[m_current_frame].prev_gps_time.as_int64() +=
             m_reference_frames[m_current_frame].delta + dgps_time_low;
         m_reference_frames[m_current_frame].counter = 0;
         if (m_reference_frames[m_current_frame].delta == 0) {
@@ -95,12 +116,12 @@ class GPSTime11Encoder {
       } else if (case_delta < 500) {
         int32_t dgps_time_low =
             m_dgps_time_low_encoder.decode_int(case_delta < 10 ? 2 : 3, in_stream);
-        m_reference_frames[m_current_frame].prev_gps_time.as_uint64() +=
+        m_reference_frames[m_current_frame].prev_gps_time.as_int64() +=
             case_delta * m_reference_frames[m_current_frame].delta + dgps_time_low;
         return m_reference_frames[m_current_frame].prev_gps_time;
       } else if (case_delta == 500) {
         int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(4, in_stream);
-        m_reference_frames[m_current_frame].prev_gps_time.as_uint64() +=
+        m_reference_frames[m_current_frame].prev_gps_time.as_int64() +=
             case_delta * m_reference_frames[m_current_frame].delta + dgps_time_low;
         m_reference_frames[m_current_frame].counter++;
         if (m_reference_frames[m_current_frame].counter > 3) {
@@ -111,7 +132,7 @@ class GPSTime11Encoder {
       } else if (case_delta <= 510) {
         int32_t dgps_time_low =
             m_dgps_time_low_encoder.decode_int(case_delta == 510 ? 6 : 5, in_stream);
-        m_reference_frames[m_current_frame].prev_gps_time.as_uint64() +=
+        m_reference_frames[m_current_frame].prev_gps_time.as_int64() +=
             -(case_delta - 500) * m_reference_frames[m_current_frame].delta + dgps_time_low;
         if (case_delta == 510) {
           m_reference_frames[m_current_frame].counter++;
@@ -135,13 +156,107 @@ class GPSTime11Encoder {
            << 32) +
           dgps_time;
       m_current_frame = (m_current_frame + 1) % 4;
-      m_reference_frames[m_current_frame].prev_gps_time.as_uint64() = tmp;
+      m_reference_frames[m_current_frame].prev_gps_time.as_int64() = tmp;
       m_reference_frames[m_current_frame].delta = 0;
       m_reference_frames[m_current_frame].counter = 0;
       return m_reference_frames[m_current_frame].prev_gps_time;
     }
 
     LASPP_FAIL("Unkown case delta: ", case_delta);
+  }
+
+  void encode(OutStream& out_stream, GPSTime gps_time) {
+    ReferenceFrame& rf = m_reference_frames[m_current_frame];
+    if (rf.delta == 0) {
+      if (rf.prev_gps_time == gps_time) {
+        m_case_0delta_encoder.encode_symbol(out_stream, 0);
+        return;
+      }
+      int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
+      int32_t diff_32 = diff;
+      if (diff == diff_32) {
+        m_case_0delta_encoder.encode_symbol(out_stream, 1);
+        m_dgps_time_low_encoder.encode_int(0, out_stream, diff_32);
+        rf.delta = diff_32;
+        rf.counter = 0;
+      } else {
+        // TODO: USE MULTIPLE REFERENCE FRAMES
+
+        m_case_0delta_encoder.encode_symbol(out_stream, 2);
+        m_dgps_time_low_encoder.encode_int(
+            8, out_stream,
+            (int32_t)(gps_time.as_uint64() >> 32) - (int32_t)(rf.prev_gps_time.as_uint64() >> 32));
+        raw_encode(out_stream, (uint32_t)(gps_time.as_uint64()), 32);
+        m_current_frame = (m_current_frame + 1) % 4;
+        m_reference_frames[m_current_frame].delta = 0;
+        m_reference_frames[m_current_frame].counter = 0;
+      }
+      m_reference_frames[m_current_frame].prev_gps_time = gps_time;
+    } else {
+      if (rf.prev_gps_time == gps_time) {
+        m_case_encoder.encode_symbol(out_stream, 511);
+        return;
+      }
+      int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
+      int32_t diff_32 = diff;
+      if (diff == diff_32) {
+        int32_t multiplier = (diff_32 + rf.delta / 2) / rf.delta;
+        if (multiplier == 1) {
+          m_case_encoder.encode_symbol(out_stream, multiplier);
+          m_dgps_time_low_encoder.encode_int(1, out_stream, diff_32 - rf.delta);
+          rf.counter = 0;
+        } else if (multiplier == 0) {
+          m_case_encoder.encode_symbol(out_stream, multiplier);
+          m_dgps_time_low_encoder.encode_int(7, out_stream, diff_32);
+          rf.counter++;
+          if (rf.counter > 3) {
+            rf.delta = diff_32;
+            rf.counter = 0;
+          }
+        } else if (multiplier > 0) {
+          if (multiplier < 500) {
+            m_case_encoder.encode_symbol(out_stream, multiplier);
+            m_dgps_time_low_encoder.encode_int(multiplier < 10 ? 2 : 3, out_stream,
+                                               diff_32 - rf.delta * multiplier);
+          } else {
+            multiplier = 500;
+            m_case_encoder.encode_symbol(out_stream, multiplier);
+            m_dgps_time_low_encoder.encode_int(4, out_stream, diff_32 - rf.delta * multiplier);
+            rf.counter++;
+            if (rf.counter > 3) {
+              rf.delta = diff_32;
+              rf.counter = 0;
+            }
+          }
+        } else {
+          if (multiplier < -10) {
+            multiplier = -10;
+          }
+          m_case_encoder.encode_symbol(out_stream, 500 - multiplier);
+          m_dgps_time_low_encoder.encode_int(multiplier == -10 ? 6 : 5, out_stream,
+                                             diff_32 - rf.delta * multiplier);
+          if (multiplier == -10) {
+            rf.counter++;
+            if (rf.counter > 3) {
+              rf.delta = diff_32;
+              rf.counter = 0;
+            }
+          }
+        }
+        rf.prev_gps_time = gps_time;
+      } else {
+        // TODO: USE MULTIPLE REFERENCE FRAMES
+
+        m_case_encoder.encode_symbol(out_stream, 512);
+        m_dgps_time_low_encoder.encode_int(
+            8, out_stream,
+            (int32_t)(gps_time.as_uint64() >> 32) - (int32_t)(rf.prev_gps_time.as_uint64() >> 32));
+        raw_encode(out_stream, (uint32_t)(gps_time.as_uint64()), 32);
+        m_current_frame = (m_current_frame + 1) % 4;
+        m_reference_frames[m_current_frame].delta = 0;
+        m_reference_frames[m_current_frame].counter = 0;
+      }
+    }
   }
 };
 
