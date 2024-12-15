@@ -47,6 +47,7 @@ int main(int argc, char* argv[]) {
 
       laspp::IntegerEncoder<32> int_encoder;
       int_encoder.encode_int(ostream, 12442);
+      int_encoder.encode_int(ostream, 1);
 
       symbol_encoder.encode_bit(ostream, 1);
       symbol_encoder.encode_bit(ostream, 1);
@@ -63,10 +64,11 @@ int main(int argc, char* argv[]) {
       {
         laspp::IntegerEncoder<32> int_encoder;
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 12442);
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 1);
       }
       LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
       LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
-      LASPP_ASSERT_EQ(laspp::raw_decode(instream, 36), 2445);
+      LASPP_ASSERT_EQ(laspp::raw_decode(instream, 36), 2445u);
       LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
       LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 0);
       LASPP_ASSERT_EQ(symbol_encoder.decode_bit(instream), 1);
@@ -76,16 +78,16 @@ int main(int argc, char* argv[]) {
   {
     std::stringstream encoded_stream;
     {
+      laspp::OutStream ostream(encoded_stream);
       laspp::IntegerEncoder<32> int_encoder;
       for (int32_t i = -1000; i < 1000; i++) {
-        laspp::OutStream ostream(encoded_stream);
         int_encoder.encode_int(ostream, i);
       }
     }
     {
+      laspp::InStream instream(encoded_stream);
       laspp::IntegerEncoder<32> int_encoder;
       for (int32_t i = -1000; i < 1000; i++) {
-        laspp::InStream instream(encoded_stream);
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), i);
       }
     }

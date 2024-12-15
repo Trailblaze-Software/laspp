@@ -198,7 +198,7 @@ class InStream : StreamVariables {
 #endif
 
 class OutStream : StreamVariables {
-  std::ostream& m_stream;
+  std::iostream& m_stream;
 
   void finalize_stream() {
     bool write_two_bytes;
@@ -219,21 +219,33 @@ class OutStream : StreamVariables {
   }
 
  public:
-  OutStream(std::ostream& stream) : m_stream(stream) {
+  OutStream(std::iostream& stream) : m_stream(stream) {
     m_base = 0;
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  ~OutStream() { finalize_stream(); }
+  ~OutStream() {
+    finalize_stream();
+    m_stream.seekg(0);
+  }
 
   uint32_t length() const { return m_length; }
 
   void propogate_carry() {
-    std::cout << "NEED TO IMPLEMENT SOMEHOW" << std::endl;
-    size_t current_p = m_stream.tellp();
-    m_stream.seekp(current_p - 1);
-
-    LASPP_UNIMPLEMENTED();
+    const size_t current_p = m_stream.tellp();
+    size_t updated_p = current_p - 1;
+    m_stream.seekg(updated_p);
+    m_stream.seekp(updated_p);
+    uint8_t carry = m_stream.get();
+    while (carry == 0xff) {
+      m_stream.put(0);
+      updated_p--;
+      m_stream.seekg(updated_p);
+      m_stream.seekp(updated_p);
+      carry = m_stream.get();
+    }
+    m_stream.put(carry + 1);
+    m_stream.seekp(current_p);
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
@@ -251,7 +263,7 @@ class OutStream : StreamVariables {
       m_base <<= 8;
       m_length <<= 8;
     }
-    return m_value;
+    return m_base;
   }
 };
 }  // namespace laspp

@@ -186,7 +186,7 @@ class LASReader {
             m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
         size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
         if (chunk_index == 0) {
-          LASPP_ASSERT_EQ(point_offset, 0);
+          LASPP_ASSERT_EQ(point_offset, 0u);
         }
         m_laz_data->decompress_chunk(compressed_chunk,
                                      output_location.subspan(point_offset, n_points));

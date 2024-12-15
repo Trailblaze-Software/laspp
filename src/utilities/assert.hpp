@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #ifndef _MSC_VER
 #define LASPP_HAS_BUILTIN(x) __has_builtin(x)
 #else
@@ -49,8 +50,12 @@ inline void _LASPP_FAILLASPP_ASSERT(
   throw std::runtime_error(ss.str());
 }
 
-#define LASPP_ASSERT_BIN_OP(a, b, op, nop) \
-  if (!(bool)((a)op(b))) laspp::_LASPP_FAILBinOp((a), (b), (#a), (#b), (#nop))
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop)                                  \
+  {                                                                         \
+    const auto A = a;                                                       \
+    const auto B = b;                                                       \
+    if (!((A)op(B))) laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop)); \
+  }
 
 template <typename A, typename B>
 inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
@@ -88,4 +93,51 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
   __builtin_unreachable();
 #endif
 }
+
+class RawString {
+  std::vector<char> m_str;
+
+ public:
+  RawString(std::string str) : m_str(str.size()) {
+    for (size_t i = 0; i < str.size(); i++) {
+      m_str[i] = str[i];
+    }
+  }
+
+  RawString(std::stringstream &ss) {
+    for (char c : ss.str()) {
+      m_str.push_back(c);
+    }
+  }
+
+  RawString(std::initializer_list<uint8_t> vec) : m_str(vec.size()) {
+    size_t i = 0;
+    for (auto c : vec) {
+      m_str[i++] = c;
+    }
+  }
+
+  bool operator==(const RawString &other) const { return m_str == other.m_str; }
+
+  friend std::ostream &operator<<(std::ostream &os, const RawString &rs) {
+    os << "\"";
+    for (size_t i = 0; i < rs.m_str.size(); i++) {
+      os << (uint32_t)(uint8_t)rs.m_str[i];
+      if (i < rs.m_str.size() - 1) {
+        os << ", ";
+      }
+    }
+    return os << "\"";
+  }
+};
+
+#define DEBRACKET(X) DEBRACKET_(DEBRACKET_2 X)
+#define DEBRACKET_2(...) DEBRACKET_2 __VA_ARGS__
+#define DEBRACKET_(...) DEBRACKET_3(__VA_ARGS__)
+#define DEBRACKET_3(...) VAN##__VA_ARGS__
+#define VANDEBRACKET_2
+
+#define LASPP_ASSERT_RAW_STR_EQ(expr, val) \
+  LASPP_ASSERT_EQ(laspp::RawString(DEBRACKET(expr)), laspp::RawString(DEBRACKET(val)))
+
 }  // namespace laspp

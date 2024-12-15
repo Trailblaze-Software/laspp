@@ -121,6 +121,10 @@ class IntegerEncoder {
     m_symbol_encoders->m_prev_k = k;
 
     if (k < 32) {
+      if (k == 0) {
+        m_symbol_encoders->encode(stream, k, integer);
+        return;
+      }
       if (integer < 0) {
         integer += (1ul << k) - 1;
       } else {

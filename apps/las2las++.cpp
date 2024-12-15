@@ -32,6 +32,7 @@ class LASPoint {
     point.classification_byte = 0;
     point.scan_angle_rank = 0;
     point.user_data = 0;
+    point.point_source_id = 0;
     return point;
   }
 
