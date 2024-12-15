@@ -51,11 +51,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::vector<std::vector<double>> values;
 
     values.emplace_back();
-    for (int i = 0; i < 10000; i++) {
+    values[0].reserve(2000);
+    for (int i = 0; i < 2000; i++) {
       values[0].push_back(i);
     }
 
     values.emplace_back();
+    values[1].reserve(1000);
     for (int i = 0; i < 1000; i++) {
       if (i % 50 < 5) {
         values[1].push_back(7888823421312 * i);
@@ -65,6 +67,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     values.emplace_back();
+    values[2].reserve(1000);
     for (int i = 0; i < 1000; i++) {
       if (i % 50 < 5) {
         values[2].push_back(0.2131233 + 0.5123 * i);

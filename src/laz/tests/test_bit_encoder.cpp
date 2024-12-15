@@ -76,5 +76,28 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
   }
 
+  {
+    std::vector<bool> bits((1 << 14));
+    for (int i = 0; i < (1 << 14); i++) {
+      bits[i] = 0;
+    }
+    std::stringstream encoded_stream;
+    {
+      laspp::OutStream ostream(encoded_stream);
+      laspp::BitSymbolEncoder bit_encoder;
+      for (bool bit : bits) {
+        bit_encoder.encode_bit(ostream, bit);
+      }
+    }
+
+    {
+      laspp::InStream instream(encoded_stream);
+      laspp::BitSymbolEncoder bit_encoder;
+      for (bool bit : bits) {
+        LASPP_ASSERT_EQ(bit_encoder.decode_bit(instream), bit);
+      }
+    }
+  }
+
   return 0;
 }

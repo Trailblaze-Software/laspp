@@ -63,6 +63,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       laspp::IntegerEncoder<32> int_encoder;
       int_encoder.encode_int(ostream, 12442);
       int_encoder.encode_int(ostream, 1);
+      int_encoder.encode_int(ostream, std::numeric_limits<int32_t>::max());
+      int_encoder.encode_int(ostream, std::numeric_limits<int32_t>::min());
+      int_encoder.encode_int(ostream, 0);
+      int_encoder.encode_int(ostream, -1);
 
       laspp::raw_encode(ostream, 2445, 36);
     }
@@ -73,6 +77,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         laspp::IntegerEncoder<32> int_encoder;
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 12442);
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 1);
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), std::numeric_limits<int32_t>::max());
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), std::numeric_limits<int32_t>::min());
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 0);
+        LASPP_ASSERT_EQ(int_encoder.decode_int(instream), -1);
       }
       LASPP_ASSERT_EQ(laspp::raw_decode(instream, 36), 2445u);
     }
