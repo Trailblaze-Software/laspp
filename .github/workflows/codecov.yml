@@ -1,4 +1,4 @@
-name: CI
+name: Codecov
 on:
   push:
     branches: ["*"]
@@ -6,7 +6,7 @@ on:
     branches: ["*"]
   workflow_dispatch:
 jobs:
-  pre-commit:
+  codecov:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -26,6 +26,8 @@ jobs:
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config Coverage -T Coverage
+      - name: Install lcov
+        run: sudo apt-get install lcov
       - name: lcov
         run: |
           lcov --capture --directory . --output-file coverage.info
