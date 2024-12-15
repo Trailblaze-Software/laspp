@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2024 Trailblaze Software
+ * SPDX-FileCopyrightText: (c) 2024 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: LGPL-2.1
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License as published by the Free
@@ -11,10 +12,10 @@
  * details.
  *
  * You should have received a copy of the GNU Lesser General Public License along
- * with this library; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
+ * with this library; if not, write to the Free Software Foundation, Inc., 51
+ * Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
  *
- * For closed source licensing or development requests, contact
+ * For LGPL2 incompatible licensing or development requests, please contact
  * trailblaze.software@gmail.com
  */
 

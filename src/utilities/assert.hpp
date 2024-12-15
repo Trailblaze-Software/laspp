@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2024 Trailblaze Software
+ * SPDX-FileCopyrightText: (c) 2024 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: LGPL-2.1
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License as published by the Free
@@ -11,15 +12,16 @@
  * details.
  *
  * You should have received a copy of the GNU Lesser General Public License along
- * with this library; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
+ * with this library; if not, write to the Free Software Foundation, Inc., 51
+ * Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
  *
- * For closed source licensing or development requests, contact
+ * For LGPL2 incompatible licensing or development requests, please contact
  * trailblaze.software@gmail.com
  */
 
 #pragma once
 
+#include <array>
 #include <vector>
 #ifndef _MSC_VER
 #define LASPP_HAS_BUILTIN(x) __has_builtin(x)
@@ -146,11 +148,15 @@ class RawString {
   }
 };
 
-#define DEBRACKET(X) DEBRACKET_(DEBRACKET_2 X)
-#define DEBRACKET_2(...) DEBRACKET_2 __VA_ARGS__
-#define DEBRACKET_(...) DEBRACKET_3(__VA_ARGS__)
-#define DEBRACKET_3(...) VAN##__VA_ARGS__
-#define VANDEBRACKET_2
+#define DEBRACKET(X) DEBRACKET_1(BRACKET X)
+#define BRACKET(...) BRACKET __VA_ARGS__
+#define DEBRACKET_1(...) DEBRACKET_0(__VA_ARGS__)
+#define DEBRACKET_0(...) NO##__VA_ARGS__
+#define NOBRACKET
+
+constexpr int32_t f_arr([[maybe_unused]] std::array<int, 2> arr) { return 1; }
+static_assert(f_arr({4, 4}));
+static_assert(f_arr(DEBRACKET(({4, 4}))));
 
 #define LASPP_ASSERT_RAW_STR_EQ(expr, val) \
   LASPP_ASSERT_EQ(laspp::RawString(DEBRACKET(expr)), laspp::RawString(DEBRACKET(val)))

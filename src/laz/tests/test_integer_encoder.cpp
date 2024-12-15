@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2024 Trailblaze Software
+ * SPDX-FileCopyrightText: (c) 2024 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: LGPL-2.1
  *
  * This library is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Lesser General Public License as published by the Free
@@ -11,17 +12,16 @@
  * details.
  *
  * You should have received a copy of the GNU Lesser General Public License along
- * with this library; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
+ * with this library; if not, write to the Free Software Foundation, Inc., 51
+ * Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
  *
- * For closed source licensing or development requests, contact
+ * For LGPL2 incompatible licensing or development requests, please contact
  * trailblaze.software@gmail.com
  */
 
 #include <cstring>
 #include <sstream>
 
-#include "laz/bit_symbol_encoder.hpp"
 #include "laz/integer_encoder.hpp"
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
@@ -59,7 +59,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::stringstream encoded_stream;
     {
       laspp::OutStream ostream(encoded_stream);
-      laspp::BitSymbolEncoder symbol_encoder;
 
       laspp::IntegerEncoder<32> int_encoder;
       int_encoder.encode_int(ostream, 12442);
@@ -70,7 +69,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     {
       laspp::InStream instream(encoded_stream);
-      laspp::BitSymbolEncoder symbol_encoder;
       {
         laspp::IntegerEncoder<32> int_encoder;
         LASPP_ASSERT_EQ(int_encoder.decode_int(instream), 12442);
