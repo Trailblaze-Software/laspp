@@ -73,7 +73,7 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 
 #define LASPP_FAIL(...)             \
   LASPP_ASSERT(false, __VA_ARGS__); \
-  unreachable()
+  UNREACHABLE()
 
 #define LASPP_UNIMPLEMENTED(...) LASPP_FAIL("LASPP_UNIMPLEMENTED")
 
@@ -83,16 +83,11 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 #define LASPP_ASSERT_EQ(expr, val) LASPP_ASSERT_BIN_OP(expr, val, ==, !=)
 #define LASPP_ASSERT_NE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, !=, ==)
 
-[[noreturn]] inline void unreachable() {
-  // Uses compiler specific extensions if possible.
-  // Even if no extension is used, undefined behavior is still raised by
-  // an empty function body and the noreturn attribute.
 #if defined(_MSC_VER) && !defined(__clang__)  // MSVC
-  __assume(false);
+#define UNREACHABLE() __assume(false)
 #else  // GCC, Clang
-  __builtin_unreachable();
+#define UNREACHABLE() __builtin_unreachable()
 #endif
-}
 
 class RawString {
   std::vector<char> m_str;

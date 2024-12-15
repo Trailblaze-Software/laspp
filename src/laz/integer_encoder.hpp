@@ -7,6 +7,7 @@
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
+#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -48,7 +49,7 @@ class IntegerEncoder {
           case 7:
             return encoder_7.decode_symbol(stream);
         }
-        unreachable();
+        UNREACHABLE();
       } else {
         return encoders_8_32.at(k - 8).decode_symbol(stream);
       }
@@ -74,7 +75,7 @@ class IntegerEncoder {
           case 7:
             return encoder_7.encode_symbol(stream, val);
         }
-        unreachable();
+        UNREACHABLE();
       } else {
         return encoders_8_32.at(k - 8).encode_symbol(stream, val);
       }
