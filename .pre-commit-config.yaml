@@ -62,5 +62,16 @@ repos:
           - "--detect-license-in-X-top-lines=12"
           - "--license-filepath=license_header.txt"
           - "--use-current-year"
-        files: \.md$|\.txt$|\.cmake$|\.yml$|\.yaml$|\.sh$|\.gitignore$|.clang-format$
-        exclude: license_header.txt|LICENSES/*
+        files: \.txt$|\.cmake$|\.yml$|\.yaml$|\.sh$|\.gitignore$|.clang-format$
+        exclude: license_header.txt|LICENSES/.*
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: insert-license
+        name: "Insert license header in source files"
+        args:
+          - "--detect-license-in-X-top-lines=12"
+          - "--license-filepath=license_header.txt"
+          - "--use-current-year"
+          - "--comment-style=<!--| | -->"
+        files: \.md$
