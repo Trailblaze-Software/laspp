@@ -89,7 +89,7 @@ class SymbolEncoder {
   uint32_t symbols_until_update;
 
   void update_distribution() {
-    uint32_t symbol_sum = std::accumulate(symbol_count.begin(), symbol_count.end(), 0);
+    uint32_t symbol_sum = std::accumulate(symbol_count.begin(), symbol_count.end(), 0u);
     if (symbol_sum > (1 << 15)) {
       symbol_sum = 0;
       for (size_t s = 0; s < NSymbols; s++) {
@@ -125,13 +125,16 @@ class SymbolEncoder {
   }
 
  public:
-  SymbolEncoder() {
+  SymbolEncoder()
+      : symbol_count(),
+        distribution(),
+        lookup_table(),
+        update_cycle((NSymbols + 6) / 2),
+        symbols_until_update(update_cycle) {
     for (size_t s = 0; s < NSymbols; s++) {
       symbol_count[s] = 1;
     }
     update_distribution();
-    update_cycle = (NSymbols + 6) / 2;
-    symbols_until_update = update_cycle;
   }
 
   uint_fast16_t decode_symbol(InStream& stream) {

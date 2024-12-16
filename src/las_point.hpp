@@ -219,7 +219,7 @@ struct LASPP_PACKED GPSTime {
 
   int64_t& as_int64() { return gps_time.int64; }
 
-  GPSTime(double time = 0) { gps_time.f64 = time; }
+  explicit GPSTime(double time = 0) { gps_time.f64 = time; }
 
   operator double() const { return gps_time.f64; }
 

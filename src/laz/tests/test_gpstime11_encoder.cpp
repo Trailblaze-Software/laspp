@@ -26,18 +26,18 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::stringstream encoded_stream;
     {
       laspp::OutStream ostream(encoded_stream);
-      laspp::GPSTime11Encoder encoder(0);
-      encoder.encode(ostream, 0.0);
-      encoder.encode(ostream, 1.0);
-      encoder.encode(ostream, 2.0);
-      encoder.encode(ostream, 1.0);
-      encoder.encode(ostream, 0.0);
-      encoder.encode(ostream, 2.0);
+      laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
+      encoder.encode(ostream, laspp::GPSTime(0.0));
+      encoder.encode(ostream, laspp::GPSTime(1.0));
+      encoder.encode(ostream, laspp::GPSTime(2.0));
+      encoder.encode(ostream, laspp::GPSTime(1.0));
+      encoder.encode(ostream, laspp::GPSTime(0.0));
+      encoder.encode(ostream, laspp::GPSTime(2.0));
     }
 
     {
       laspp::InStream instream(encoded_stream);
-      laspp::GPSTime11Encoder encoder(0);
+      laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
       LASPP_ASSERT_EQ(encoder.decode(instream), 0.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 1.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 2.0);
@@ -80,15 +80,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       std::stringstream encoded_stream;
       {
         laspp::OutStream ostream(encoded_stream);
-        laspp::GPSTime11Encoder encoder(0);
+        laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
         for (auto value : vec) {
-          encoder.encode(ostream, value);
+          encoder.encode(ostream, laspp::GPSTime(value));
         }
       }
 
       {
         laspp::InStream instream(encoded_stream);
-        laspp::GPSTime11Encoder encoder(0);
+        laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
         for (auto value : vec) {
           LASPP_ASSERT_EQ(encoder.decode(instream), value);
         }

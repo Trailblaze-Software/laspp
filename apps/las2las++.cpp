@@ -55,7 +55,7 @@ class LASPoint {
     return point;
   }
 
-  operator laspp::GPSTime() const { return gps_time; }
+  operator laspp::GPSTime() const { return laspp::GPSTime(gps_time); }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPoint& point) {
     os << "Position: (" << point.position[0] << ", " << point.position[1] << ", "

@@ -80,25 +80,23 @@ elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     add_compile_options("-Werror")
   endif()
-  # to add: -Weffc++
   add_compile_options(
     "-fstrict-enums"
     "-Wall"
     "-Wextra"
     "-Wpedantic"
-    "-Wcast-align=strict"
     "-Wdouble-promotion"
     "-Wshadow"
     "-Wpointer-arith"
     "-Wstrict-aliasing"
-    "-Wduplicated-cond"
     "-Wnull-dereference"
     "-Wdouble-promotion"
     "-Wold-style-cast"
     "-Wconversion")
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_compile_options("-Wduplicated-branches" "-Wlogical-op" "-Wrestrict"
-                        "-Wuseless-cast")
+    add_compile_options(
+      "-Wduplicated-branches" "-Wlogical-op" "-Wrestrict" "-Wcast-align=strict"
+      "-Wduplicated-cond" "-Wuseless-cast")
   endif()
 else()
   message(FATAL_ERROR "Unsupported platform")
