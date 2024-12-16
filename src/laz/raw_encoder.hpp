@@ -51,6 +51,7 @@ inline void raw_encode(OutStream& out_stream, uint64_t bits, uint8_t n_bits) {
   out_stream.get_base();
   uint32_t resolution = out_stream.length() / (1u << n_bits);
 
-  out_stream.update_range(bits * resolution, bits * resolution + resolution);
+  uint32_t bits_32 = static_cast<uint32_t>(bits);
+  out_stream.update_range(bits_32 * resolution, bits_32 * resolution + resolution);
 }
 }  // namespace laspp

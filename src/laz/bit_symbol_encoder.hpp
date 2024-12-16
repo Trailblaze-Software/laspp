@@ -28,11 +28,11 @@
 namespace laspp {
 
 class BitSymbolEncoder {
-  uint16_t bit_0_count;
-  uint16_t bit_count;
-  uint16_t bit_0_prob;
-  uint16_t update_cycle;
-  uint16_t bits_until_update;
+  int32_t bit_0_count;
+  int32_t bit_count;
+  int32_t bit_0_prob;
+  int32_t update_cycle;
+  int32_t bits_until_update;
 
   void update_distribution() {
     bit_count += update_cycle;

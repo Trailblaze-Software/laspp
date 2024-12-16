@@ -59,7 +59,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       std::vector<uint16_t> symbols;
 
       for (int i = 0; i < (1 << 16); i++) {
-        symbols.push_back(i % 33);
+        symbols.push_back(static_cast<uint16_t>(i % 33));
       }
 
       {
@@ -86,7 +86,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       std::vector<uint16_t> symbols;
 
       for (int i = 0; i < 10000; i++) {
-        symbols.push_back(i % 1023);
+        symbols.push_back(static_cast<uint16_t>(i % 1023));
       }
 
       {

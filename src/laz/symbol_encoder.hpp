@@ -85,15 +85,15 @@ class SymbolEncoder {
 
   LookupTable<lookup_table_type, NSymbols> lookup_table;
 
-  uint16_t update_cycle;
-  uint16_t symbols_until_update;
+  uint32_t update_cycle;
+  uint32_t symbols_until_update;
 
   void update_distribution() {
     uint32_t symbol_sum = std::accumulate(symbol_count.begin(), symbol_count.end(), 0);
     if (symbol_sum > (1 << 15)) {
       symbol_sum = 0;
       for (size_t s = 0; s < NSymbols; s++) {
-        symbol_count[s] = (symbol_count[s] + 1) / 2;
+        symbol_count[s] = static_cast<uint16_t>((symbol_count[s] + 1) / 2);
         symbol_sum += symbol_count[s];
       }
     }
@@ -104,14 +104,14 @@ class SymbolEncoder {
     if constexpr (lookup_table_type != LookupTableType::NONE) {
       lookup_table[lookup_idx++] = 0;
     }
-    for (uint32_t s = 0; s < NSymbols; s++) {
-      distribution[s] = (scale_factor * cumulitive_sum) / (1 << 16);
+    for (uint_fast16_t s = 0; s < NSymbols; s++) {
+      distribution[s] = static_cast<uint16_t>((scale_factor * cumulitive_sum) / (1u << 16));
       cumulitive_sum += symbol_count[s];
 
       if constexpr (lookup_table_type != LookupTableType::NONE) {
         uint32_t shifted_dist = distribution[s] >> lookup_table.SHIFT;
         while (lookup_idx < shifted_dist + 1) {
-          lookup_table[lookup_idx++] = s - 1;
+          lookup_table[lookup_idx++] = static_cast<uint16_t>(s - 1);
         }
       }
     }
@@ -120,7 +120,7 @@ class SymbolEncoder {
         lookup_table[lookup_idx++] = NSymbols - 1;
       }
     }
-    update_cycle = std::min((5 * update_cycle) / 4, 8 * (NSymbols + 6));
+    update_cycle = std::min((5 * update_cycle) / 4, 8u * (NSymbols + 6));
     symbols_until_update = update_cycle;
   }
 
@@ -134,10 +134,10 @@ class SymbolEncoder {
     symbols_until_update = update_cycle;
   }
 
-  uint16_t decode_symbol(InStream& stream) {
+  uint_fast16_t decode_symbol(InStream& stream) {
     uint32_t value = stream.get_value();
     uint32_t l_tmp = (stream.length() >> 15);
-    uint16_t symbol = 0;
+    uint_fast16_t symbol = 0;
 
     if constexpr (lookup_table_type == LookupTableType::NONE) {
       for (; symbol + 1 < NSymbols && distribution[symbol + 1] * l_tmp <= value; symbol++) {
@@ -163,7 +163,7 @@ class SymbolEncoder {
     return symbol;
   }
 
-  void encode_symbol(OutStream& stream, uint16_t symbol) {
+  void encode_symbol(OutStream& stream, uint_fast16_t symbol) {
     stream.get_base();
     uint32_t l_tmp = (stream.length() >> 15);
 

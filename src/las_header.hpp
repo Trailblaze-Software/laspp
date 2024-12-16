@@ -150,10 +150,11 @@ class LASPP_PACKED LASHeader {
     auto now = std::chrono::system_clock::now();
     auto today = std::chrono::floor<std::chrono::days>(now);
     auto year_month_day = std::chrono::year_month_day{today};
-    m_file_creation_year = int(year_month_day.year());
+    m_file_creation_year = static_cast<uint16_t>(static_cast<int>(year_month_day.year()));
     auto start_of_year =
         std::chrono::year_month_day{year_month_day.year() / std::chrono::January / 1};
-    m_file_creation_day = (today - std::chrono::sys_days{start_of_year}).count() + 1;
+    m_file_creation_day =
+        static_cast<uint16_t>((today - std::chrono::sys_days{start_of_year}).count() + 1);
   }
 
   bool is_laz_compressed() const {
@@ -213,7 +214,7 @@ class LASPP_PACKED LASHeader {
   const Transform& transform() const { return m_transform; }
 
   uint8_t point_format() const { return m_point_data_record_format; }
-  uint8_t num_extra_bytes() const {
+  int num_extra_bytes() const {
     return m_point_data_record_length - size_of_point_format(m_point_data_record_format);
   }
 

@@ -36,7 +36,7 @@ class ByteEncoder {
   explicit ByteEncoder(std::byte initial_byte) : m_previous_byte(initial_byte) {}
 
   std::byte decode(InStream& in_stream) {
-    uint8_t diff = m_symbol_encoder.decode_symbol(in_stream);
+    uint8_t diff = static_cast<uint8_t>(m_symbol_encoder.decode_symbol(in_stream));
     m_previous_byte = static_cast<std::byte>(static_cast<uint8_t>(m_previous_byte) + diff);
     return m_previous_byte;
   }

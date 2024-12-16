@@ -43,7 +43,7 @@ class LASPointFormat0Encoder {
   SymbolEncoder<64> m_changed_values_encoder;
   std::array<SymbolEncoder<256>, 256> m_bit_byte_encoder;
   MultiInstanceIntegerEncoder<16, 4> m_intensity_encoder;
-  std::array<int16_t, 16> m_prev_intensities;
+  std::array<uint16_t, 16> m_prev_intensities;
   std::array<SymbolEncoder<256>, 256> m_classification_encoder;
   std::array<SymbolEncoder<256>, 2> m_scan_angle_rank_encoder;
   std::array<SymbolEncoder<256>, 256> m_user_data_encoder;
@@ -69,18 +69,18 @@ class LASPointFormat0Encoder {
 
   explicit LASPointFormat0Encoder(const LASPointFormat0& initial_las_point)
       : m_last_las_point(initial_las_point),
-        m_prev_intensities(create_array<16, int16_t>(0)),
+        m_prev_intensities(create_array<16, uint16_t>(0)),
         m_prev_dz(create_array<8>(0)) {
     m_m = return_map_m[m_last_las_point.bit_byte.number_of_returns]
                       [m_last_las_point.bit_byte.return_number];
   }
 
   LASPointFormat0 decode(InStream& stream) {
-    uint8_t changed_values = m_changed_values_encoder.decode_symbol(stream);
+    uint_fast16_t changed_values = m_changed_values_encoder.decode_symbol(stream);
     if (changed_values) {
       if (changed_values & (1 << 5)) {
-        m_last_las_point.bit_byte =
-            m_bit_byte_encoder[m_last_las_point.bit_byte].decode_symbol(stream);
+        m_last_las_point.bit_byte = static_cast<uint8_t>(
+            m_bit_byte_encoder[m_last_las_point.bit_byte].decode_symbol(stream));
 
         m_m = return_map_m[m_last_las_point.bit_byte.number_of_returns]
                           [m_last_las_point.bit_byte.return_number];
@@ -89,10 +89,12 @@ class LASPointFormat0Encoder {
       if (changed_values & (1 << 4)) {
         if (m_m <= 2) {
           m_last_las_point.intensity =
-              m_prev_intensities[m_m] + m_intensity_encoder.decode_int(m_m, stream);
+              m_prev_intensities[m_m] +
+              static_cast<uint16_t>(m_intensity_encoder.decode_int(m_m, stream));
         } else {
           m_last_las_point.intensity =
-              m_prev_intensities[m_m] + m_intensity_encoder.decode_int(3, stream);
+              m_prev_intensities[m_m] +
+              static_cast<uint16_t>(m_intensity_encoder.decode_int(3, stream));
         }
         m_prev_intensities[m_m] = m_last_las_point.intensity;
       } else {
@@ -100,20 +102,21 @@ class LASPointFormat0Encoder {
       }
 
       if (changed_values & (1 << 3)) {
-        m_last_las_point.classification_byte =
-            m_classification_encoder[m_last_las_point.classification_byte].decode_symbol(stream);
+        m_last_las_point.classification_byte = static_cast<uint8_t>(
+            m_classification_encoder[m_last_las_point.classification_byte].decode_symbol(stream));
       }
       if (changed_values & (1 << 2)) {
-        m_last_las_point.scan_angle_rank +=
+        m_last_las_point.scan_angle_rank += static_cast<uint8_t>(
             m_scan_angle_rank_encoder[m_last_las_point.bit_byte.scan_direction_flag].decode_symbol(
-                stream);
+                stream));
       }
       if (changed_values & (1 << 1)) {
-        m_last_las_point.user_data =
-            m_user_data_encoder[m_last_las_point.user_data].decode_symbol(stream);
+        m_last_las_point.user_data = static_cast<uint8_t>(
+            m_user_data_encoder[m_last_las_point.user_data].decode_symbol(stream));
       }
       if (changed_values & 1) {
-        m_last_las_point.point_source_id += m_point_source_id_encoder.decode_int(stream);
+        m_last_las_point.point_source_id +=
+            static_cast<uint16_t>(m_point_source_id_encoder.decode_int(stream));
       }
     }
 
@@ -123,10 +126,10 @@ class LASPointFormat0Encoder {
     m_dx_streamed_median[m_m].insert(dx);
     m_last_las_point.x = m_last_las_point.x + dx;
 
-    uint8_t dx_k = m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].prev_k();
+    uint_fast16_t dx_k = m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].prev_k();
 
     // Y
-    uint8_t dy_instance = (dx_k < 20) ? (dx_k & (~1u)) : 20;
+    uint32_t dy_instance = (dx_k < 20) ? (dx_k & (~1u)) : 20;
     if (m_last_las_point.bit_byte.number_of_returns == 1) {
       dy_instance++;
     }
@@ -136,15 +139,15 @@ class LASPointFormat0Encoder {
     m_dy_streamed_median[m_m].insert(dy);
 
     // Z
-    uint8_t kxy = (dx_k + m_dy_encoder[dy_instance].prev_k()) / 2;
-    uint8_t dz_instance = (kxy < 18) ? (kxy & (~1u)) : 18;
+    uint32_t kxy = static_cast<uint32_t>((dx_k + m_dy_encoder[dy_instance].prev_k()) / 2);
+    uint32_t dz_instance = (kxy < 18) ? (kxy & (~1u)) : 18;
     if (m_last_las_point.bit_byte.number_of_returns == 1) {
       dz_instance++;
     }
 
-    double dz = m_dz_encoder[dz_instance].decode_int(stream);
-    uint8_t l = std::abs(m_last_las_point.bit_byte.number_of_returns -
-                         m_last_las_point.bit_byte.return_number);
+    int32_t dz = m_dz_encoder[dz_instance].decode_int(stream);
+    int l = std::abs(m_last_las_point.bit_byte.number_of_returns -
+                     m_last_las_point.bit_byte.return_number);
     m_last_las_point.z = m_prev_dz[l] + dz;
     m_prev_dz[l] = m_last_las_point.z;
 

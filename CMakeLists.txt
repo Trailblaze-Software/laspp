@@ -80,7 +80,7 @@ elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     add_compile_options("-Werror")
   endif()
-  # to add: -Wconversion -Weffc++
+  # to add: -Weffc++
   add_compile_options(
     "-fstrict-enums"
     "-Wall"
@@ -94,7 +94,8 @@ elseif(UNIX)
     "-Wduplicated-cond"
     "-Wnull-dereference"
     "-Wdouble-promotion"
-    "-Wold-style-cast")
+    "-Wold-style-cast"
+    "-Wconversion")
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options("-Wduplicated-branches" "-Wlogical-op" "-Wrestrict"
                         "-Wuseless-cast")

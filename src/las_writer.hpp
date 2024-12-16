@@ -72,7 +72,7 @@ class LASWriter {
   explicit LASWriter(std::ofstream& ofs, uint8_t point_format, uint16_t num_extra_bytes = 0)
       : m_ofs(ofs) {
     header().set_point_format(point_format, num_extra_bytes);
-    header().m_offset_to_point_data = header().size();
+    header().m_offset_to_point_data = static_cast<uint32_t>(header().size());
     m_ofs.seekp(header().size());
     LASPP_ASSERT_EQ(num_extra_bytes, 0);
   }
@@ -86,7 +86,8 @@ class LASWriter {
     m_ofs.write(reinterpret_cast<const char*>(&vlr), sizeof(LASVLR));
     m_ofs.write(reinterpret_cast<const char*>(data.data()), vlr.record_length_after_header);
     header().m_number_of_variable_length_records++;
-    header().m_offset_to_point_data += sizeof(LASVLR) + vlr.record_length_after_header;
+    header().m_offset_to_point_data +=
+        static_cast<uint32_t>(sizeof(LASVLR) + vlr.record_length_after_header);
   }
 
  private:
@@ -147,21 +148,28 @@ class LASWriter {
       }
     }
 
+    header().m_number_of_point_records += points.size();
     for (int i = 0; i < 15; i++) {
       header().m_number_of_points_by_return[i] += points_by_return[i];
-      if (points_by_return[i] > std::numeric_limits<uint32_t>::max()) {
-      } else if (i < 5) {
-        header().m_legacy_number_of_points_by_return[i] = header().m_number_of_points_by_return[i];
+    }
+    if (header().m_number_of_point_records < std::numeric_limits<uint32_t>::max() &&
+        header().point_format() < 6) {
+      header().m_legacy_number_of_point_records =
+          static_cast<uint32_t>(header().m_number_of_point_records);
+      for (int i = 0; i < 5; i++) {
+        header().m_legacy_number_of_points_by_return[i] =
+            static_cast<uint32_t>(header().m_number_of_points_by_return[i]);
+      }
+    } else {
+      header().m_legacy_number_of_point_records = 0;
+      for (int i = 0; i < 5; i++) {
+        header().m_legacy_number_of_points_by_return[i] = 0;
       }
     }
 
     header().update_bounds({min_pos[0], min_pos[1], min_pos[2]});
     header().update_bounds({max_pos[0], max_pos[1], max_pos[2]});
 
-    header().m_number_of_point_records += points.size();
-    if (header().m_number_of_point_records < std::numeric_limits<uint32_t>::max()) {
-      header().m_legacy_number_of_point_records = header().m_number_of_point_records;
-    }
     std::cout << "Writing " << points_to_write.size() << " points ("
               << sizeof(PointType) * points_to_write.size() << " B)" << std::endl;
     m_ofs.write(reinterpret_cast<const char*>(points_to_write.data()),

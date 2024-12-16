@@ -154,13 +154,13 @@ class InStream : StreamVariables {
 
   std::byte read_byte() {
     update_chunk();
-    uint8_t byte = current_big_chunk;
+    uint8_t byte = static_cast<uint8_t>(current_big_chunk);
     current_big_chunk >>= 8;
     num_bytes_valid--;
     return static_cast<std::byte>(byte);
   }
 
-  template <size_t NumBytes>
+  template <uint32_t NumBytes>
   uint32_t read_bytes() {
     static_assert(NumBytes > 0 && NumBytes < 4);
     update_chunk();
@@ -257,16 +257,16 @@ class OutStream : StreamVariables {
     size_t updated_p = current_p - 1;
     m_stream.seekg(updated_p);
     m_stream.seekp(updated_p);
-    uint8_t carry = m_stream.get();
+    uint8_t carry = static_cast<uint8_t>(m_stream.get());
     while (carry == 0xff) {
       m_stream.put(0);
       LASPP_ASSERT_GT(updated_p, 0);
       updated_p--;
       m_stream.seekg(updated_p);
       m_stream.seekp(updated_p);
-      carry = m_stream.get();
+      carry = static_cast<uint8_t>(m_stream.get());
     }
-    m_stream.put(carry + 1);
+    m_stream.put(static_cast<uint8_t>(carry + 1));
     m_stream.seekp(current_p);
   }
 
@@ -281,8 +281,7 @@ class OutStream : StreamVariables {
 
   uint32_t get_base() {
     while (length() < (1 << 24)) {
-      uint8_t to_write = m_base >> 24;
-      m_stream.put(to_write);
+      m_stream.put(static_cast<uint8_t>(m_base >> 24));
       m_base <<= 8;
       m_length <<= 8;
     }

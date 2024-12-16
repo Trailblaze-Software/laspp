@@ -47,9 +47,9 @@ class IntegerEncoder {
     SymbolEncoder<128> encoder_7;
     std::array<SymbolEncoder<256>, n_bits - 7> encoders_8_32;
 
-    uint8_t m_prev_k;
+    uint_fast16_t m_prev_k;
 
-    uint8_t decode(InStream& stream, uint8_t k) {
+    uint_fast16_t decode(InStream& stream, uint8_t k) {
       if (k < 8) {
         switch (k) {
           case 0:
@@ -73,11 +73,11 @@ class IntegerEncoder {
       return encoders_8_32.at(k - 8).decode_symbol(stream);
     }
 
-    void encode(OutStream& stream, uint8_t k, uint8_t val) {
+    void encode(OutStream& stream, uint_fast16_t k, uint_fast16_t val) {
       if (k < 8) {
         switch (k) {
           case 0:
-            return encoder_0.encode_bit(stream, val);
+            return encoder_0.encode_bit(stream, static_cast<bool>(val));
           case 1:
             return encoder_1.encode_symbol(stream, val);
           case 2:
@@ -107,15 +107,16 @@ class IntegerEncoder {
                                                       : std::make_shared<SymbolEncoders>()) {}
 
   int32_t decode_int(InStream& stream) {
-    uint8_t k = m_k_encoder.decode_symbol(stream);
+    uint_fast16_t k = m_k_encoder.decode_symbol(stream);
     m_symbol_encoders->m_prev_k = k;
     if (k < 32) {
-      int32_t val = m_symbol_encoders->decode(stream, k);
+      int32_t val =
+          static_cast<int32_t>(m_symbol_encoders->decode(stream, static_cast<uint8_t>(k)));
       if (k == 0) {
         return val;
       }
       if (k > 8) {
-        int32_t lower_bits = raw_decode(stream, k - 8);
+        int32_t lower_bits = static_cast<int32_t>(raw_decode(stream, static_cast<uint8_t>(k - 8)));
         val = (val << (k - 8)) | lower_bits;
       }
       if (val >= (1 << (k - 1))) {
@@ -129,7 +130,7 @@ class IntegerEncoder {
   }
 
   void encode_int(OutStream& stream, int32_t integer) {
-    uint8_t k = 0;
+    uint_fast16_t k = 0;
     while (integer > (static_cast<int64_t>(1) << k) ||
            integer < -((static_cast<int64_t>(1) << k) - 1)) {
       k++;
@@ -144,7 +145,7 @@ class IntegerEncoder {
         return;
       }
       if (integer < 0) {
-        integer += (1ull << k) - 1;
+        integer += (1 << k) - 1;
       } else {
         integer -= 1;
       }
@@ -153,12 +154,12 @@ class IntegerEncoder {
       } else {
         m_symbol_encoders->encode(stream, k, integer >> (k - 8));
         integer = integer & ((1 << (k - 8)) - 1);
-        raw_encode(stream, integer, k - 8);
+        raw_encode(stream, integer, static_cast<uint8_t>(k - 8));
       }
     }
   }
 
-  uint8_t prev_k() const { return m_symbol_encoders->m_prev_k; }
+  uint_fast16_t prev_k() const { return m_symbol_encoders->m_prev_k; }
 };
 
 template <uint8_t n_bits, uint8_t n_instances>
@@ -174,15 +175,15 @@ class MultiInstanceIntegerEncoder {
     }
   }
 
-  int32_t decode_int(uint8_t instance, InStream& stream) {
+  int32_t decode_int(uint32_t instance, InStream& stream) {
     return m_integer_encoders[instance].decode_int(stream);
   }
 
-  void encode_int(uint8_t instance, OutStream& stream, int32_t integer) {
+  void encode_int(uint32_t instance, OutStream& stream, int32_t integer) {
     return m_integer_encoders[instance].encode_int(stream, integer);
   }
 
-  IntegerEncoder<n_bits>& operator[](uint8_t instance) { return m_integer_encoders[instance]; }
+  IntegerEncoder<n_bits>& operator[](uint32_t instance) { return m_integer_encoders[instance]; }
 };
 
 }  // namespace laspp
