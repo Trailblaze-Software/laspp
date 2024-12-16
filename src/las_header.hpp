@@ -33,6 +33,7 @@
 #include <sstream>
 
 #include "las_point.hpp"
+#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -139,7 +140,7 @@ class LASPP_PACKED LASHeader {
  public:
   static LASHeader FromFile(std::ifstream& file) {
     LASHeader header;
-    file.read(reinterpret_cast<char*>(&header), sizeof(LASHeader));
+    LASPP_ASSERT(file.read(reinterpret_cast<char*>(&header), sizeof(LASHeader)));
     return header;
   }
 

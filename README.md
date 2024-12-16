@@ -26,6 +26,10 @@
 [![codecov](https://codecov.io/gh/Trailblaze-Software/laspp/graph/badge.svg?token=EK80UEXH3E)](https://codecov.io/gh/Trailblaze-Software/laspp)
 [![License: LGPL v2.1](https://img.shields.io/badge/License-LGPL_v2.1-blue.svg)](https://www.gnu.org/licenses/lgpl-2.1)
 [![REUSE status](https://api.reuse.software/badge/github.com/Trailblaze-Software/laspp)](https://api.reuse.software/info/github.com/Trailblaze-Software/laspp)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/9ff99e8d04cc49ec9acfd2c7fd4da6ad)](https://app.codacy.com/gh/Trailblaze-Software/laspp/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+![Repo Size](https://img.shields.io/github/repo-size/Trailblaze-Software/laspp)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+[![Stability - Alpha](https://img.shields.io/badge/stability-alpha-f4d03f.svg)](https://github.com/mkenney/software-guides/blob/master/STABILITY-BADGES.md#alpha)
 
 This is a lightweight portable C++20 LAS file reader with an emphasis on performance. This is in very early stages of development - contributions welcome!
 

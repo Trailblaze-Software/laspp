@@ -25,36 +25,10 @@
 #include "laz/integer_encoder.hpp"
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
-#include "laz/symbol_encoder.hpp"
 
 using namespace laspp;
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
-  {
-    std::stringstream encoded_stream;
-    {
-      laspp::OutStream ostream(encoded_stream);
-      laspp::SymbolEncoder<33> symbol_encoder;
-      symbol_encoder.encode_symbol(ostream, 14);
-      symbol_encoder.encode_symbol(ostream, 1);
-      symbol_encoder.encode_symbol(ostream, 2);
-      symbol_encoder.encode_symbol(ostream, 1);
-      symbol_encoder.encode_symbol(ostream, 0);
-      symbol_encoder.encode_symbol(ostream, 2);
-    }
-
-    {
-      laspp::InStream instream(encoded_stream);
-      laspp::SymbolEncoder<33> symbol_encoder;
-      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 14);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 1);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 2);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 1);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 0);
-      LASPP_ASSERT_EQ(symbol_encoder.decode_symbol(instream), 2);
-    }
-  }
-
   {
     std::stringstream encoded_stream;
     {

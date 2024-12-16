@@ -170,12 +170,12 @@ class GPSTime11Encoder {
     } else if (case_delta == 512) {
       uint32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(8, in_stream);
       uint32_t dgps_time = raw_decode(in_stream, 32);
-      uint64_t tmp =
-          ((uint64_t)((int32_t)(m_reference_frames[m_current_frame].prev_gps_time.as_uint64() >>
-                                32) +
-                      dgps_time_low)
-           << 32) +
-          dgps_time;
+      uint64_t tmp = (static_cast<uint64_t>(
+                          static_cast<int32_t>(
+                              m_reference_frames[m_current_frame].prev_gps_time.as_uint64() >> 32) +
+                          dgps_time_low)
+                      << 32) +
+                     dgps_time;
       m_current_frame = (m_current_frame + 1) % 4;
       m_reference_frames[m_current_frame].prev_gps_time.as_int64() = tmp;
       m_reference_frames[m_current_frame].delta = 0;
@@ -189,13 +189,13 @@ class GPSTime11Encoder {
   void encode(OutStream& out_stream, GPSTime gps_time) {
     ReferenceFrame& rf = m_reference_frames[m_current_frame];
     if (rf.delta == 0) {
-      if (rf.prev_gps_time == gps_time) {
+      if (rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
         m_case_0delta_encoder.encode_symbol(out_stream, 0);
         return;
       }
       int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
-      int32_t diff_32 = diff;
-      if (diff == diff_32) {
+      if (diff == static_cast<int32_t>(diff)) {
+        int32_t diff_32 = diff;
         m_case_0delta_encoder.encode_symbol(out_stream, 1);
         m_dgps_time_low_encoder.encode_int(0, out_stream, diff_32);
         rf.delta = diff_32;
@@ -206,21 +206,22 @@ class GPSTime11Encoder {
         m_case_0delta_encoder.encode_symbol(out_stream, 2);
         m_dgps_time_low_encoder.encode_int(
             8, out_stream,
-            (int32_t)(gps_time.as_uint64() >> 32) - (int32_t)(rf.prev_gps_time.as_uint64() >> 32));
-        raw_encode(out_stream, (uint32_t)(gps_time.as_uint64()), 32);
+            static_cast<int32_t>(gps_time.as_uint64() >> 32) -
+                static_cast<int32_t>(rf.prev_gps_time.as_uint64() >> 32));
+        raw_encode(out_stream, static_cast<uint32_t>(gps_time.as_uint64()), 32);
         m_current_frame = (m_current_frame + 1) % 4;
         m_reference_frames[m_current_frame].delta = 0;
         m_reference_frames[m_current_frame].counter = 0;
       }
       m_reference_frames[m_current_frame].prev_gps_time = gps_time;
     } else {
-      if (rf.prev_gps_time == gps_time) {
+      if (rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
         m_case_encoder.encode_symbol(out_stream, 511);
         return;
       }
       int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
-      int32_t diff_32 = diff;
-      if (diff == diff_32) {
+      if (diff == static_cast<int32_t>(diff)) {
+        int32_t diff_32 = diff;
         int32_t multiplier = (diff_32 + rf.delta / 2) / rf.delta;
         if (multiplier == 1) {
           m_case_encoder.encode_symbol(out_stream, multiplier);
@@ -271,8 +272,9 @@ class GPSTime11Encoder {
         m_case_encoder.encode_symbol(out_stream, 512);
         m_dgps_time_low_encoder.encode_int(
             8, out_stream,
-            (int32_t)(gps_time.as_uint64() >> 32) - (int32_t)(rf.prev_gps_time.as_uint64() >> 32));
-        raw_encode(out_stream, (uint32_t)(gps_time.as_uint64()), 32);
+            static_cast<int32_t>(gps_time.as_uint64() >> 32) -
+                static_cast<int32_t>(rf.prev_gps_time.as_uint64() >> 32));
+        raw_encode(out_stream, static_cast<uint32_t>(gps_time.as_uint64()), 32);
         m_current_frame = (m_current_frame + 1) % 4;
         m_reference_frames[m_current_frame].delta = 0;
         m_reference_frames[m_current_frame].counter = 0;

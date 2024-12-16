@@ -118,7 +118,8 @@ class LASWriter {
       for (size_t i = 0; i < points.size(); i++) {
         if constexpr (std::is_base_of_v<LASPointFormat0, PointType> &&
                       is_copy_assignable<LASPointFormat0, T>()) {
-          (LASPointFormat0&)points_to_write[i] = static_cast<LASPointFormat0>(points[i]);
+          static_cast<LASPointFormat0&>(points_to_write[i]) =
+              static_cast<LASPointFormat0>(points[i]);
           if (points_to_write[i].bit_byte.return_number < 15)
             local_points_by_return[points_to_write[i].bit_byte.return_number]++;
           local_min_pos[0] = std::min(local_min_pos[0], points_to_write[i].x);
@@ -129,7 +130,7 @@ class LASWriter {
           local_max_pos[2] = std::max(local_max_pos[2], points_to_write[i].z);
         }
         if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<GPSTime, T>()) {
-          (GPSTime&)points_to_write[i] = static_cast<GPSTime>(points[i]);
+          static_cast<GPSTime&>(points_to_write[i]) = static_cast<GPSTime>(points[i]);
         }
       }
 #pragma omp critical

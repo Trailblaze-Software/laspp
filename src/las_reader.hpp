@@ -137,15 +137,15 @@ class LASReader {
       m_ifs.read(reinterpret_cast<char*>(&las_point), sizeof(PointType));
       if constexpr (is_copy_assignable<T, LASPointFormat0>() &&
                     std::is_base_of_v<LASPointFormat0, PointType>) {
-        points[i] = (LASPointFormat0&)las_point;
+        points[i] = static_cast<LASPointFormat0&>(las_point);
       } else if constexpr (std::is_base_of_v<LASPointFormat0, T> &&
                            std::is_base_of_v<LASPointFormat0, PointType>) {
-        (LASPointFormat0&)points[i] = (LASPointFormat0&)las_point;
+        static_cast<LASPointFormat0&>(points[i]) = static_cast<LASPointFormat0&>(las_point);
       }
       if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<T, GPSTime>()) {
-        points[i] = (GPSTime&)las_point;
+        points[i] = static_cast<GPSTime&>(las_point);
       }
-      m_ifs.read(nullptr, header().point_data_record_length() - sizeof(PointType));
+      m_ifs.seekg(header().point_data_record_length() - sizeof(PointType), std::ios_base::cur);
     }
   }
 
@@ -200,7 +200,7 @@ class LASReader {
         size_t compressed_chunk_size =
             m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index);
         std::span<std::byte> compressed_chunk =
-            ((std::span<std::byte>)compressed_data).subspan(start_offset, compressed_chunk_size);
+            std::span<std::byte>(compressed_data).subspan(start_offset, compressed_chunk_size);
 
         size_t point_offset =
             m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_index] -

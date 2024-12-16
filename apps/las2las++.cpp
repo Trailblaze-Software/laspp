@@ -33,8 +33,6 @@ class LASPoint {
   double gps_time;
 
  public:
-  LASPoint() = default;
-
   void operator=(const laspp::LASPointFormat0& point) {
     position[0] = point.x;
     position[1] = point.y;

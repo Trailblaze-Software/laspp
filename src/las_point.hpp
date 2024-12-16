@@ -225,7 +225,7 @@ struct LASPP_PACKED GPSTime {
 
   friend std::ostream& operator<<(std::ostream& os, const GPSTime& gpst) {
     return os << "GPS Time: " << std::setprecision(20) << gpst.gps_time.f64 << " ( "
-              << *reinterpret_cast<const int64_t*>(&gpst.gps_time) << " )" << std::endl;
+              << gpst.gps_time.uint64 << " )" << std::endl;
   }
 };
 

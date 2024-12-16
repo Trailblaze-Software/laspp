@@ -27,7 +27,6 @@
 #include <iostream>
 #include <istream>
 #include <limits>
-#include <span>
 
 #include "utilities/assert.hpp"
 
@@ -87,7 +86,7 @@ class InStream : StreamVariables {
   }
 
  public:
-  InStream(std::istream& stream) : m_stream(stream), m_buffer(), buffer_idx(BUFFER_SIZE) {
+  explicit InStream(std::istream& stream) : m_stream(stream), m_buffer(), buffer_idx(BUFFER_SIZE) {
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
       m_value |= (uint8_t)read_byte();
@@ -179,7 +178,7 @@ class InStream : StreamVariables {
   }
 
  public:
-  InStream(std::istream& stream)
+  explicit InStream(std::istream& stream)
       : m_stream(stream),
         m_buffer(),
         current_big_chunk(0),
@@ -241,7 +240,7 @@ class OutStream : StreamVariables {
   }
 
  public:
-  OutStream(std::iostream& stream) : m_stream(stream) {
+  explicit OutStream(std::iostream& stream) : m_stream(stream) {
     m_base = 0;
     m_length = std::numeric_limits<uint32_t>::max();
   }

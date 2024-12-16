@@ -29,6 +29,14 @@
 #include "laz/streaming_median.hpp"
 
 namespace laspp {
+
+template <size_t N, typename T>
+constexpr std::array<T, N> create_array(const T& val) {
+  std::array<T, N> arr;
+  arr.fill(val);
+  return arr;
+}
+
 class LASPointFormat0Encoder {
   LASPointFormat0 m_last_las_point;
 
@@ -60,7 +68,9 @@ class LASPointFormat0Encoder {
   const LASPointFormat0& last_value() const { return m_last_las_point; }
 
   explicit LASPointFormat0Encoder(const LASPointFormat0& initial_las_point)
-      : m_last_las_point(initial_las_point), m_prev_dz({0, 0, 0, 0, 0, 0, 0, 0}) {
+      : m_last_las_point(initial_las_point),
+        m_prev_intensities(create_array<16, int16_t>(0)),
+        m_prev_dz(create_array<8>(0)) {
     m_m = return_map_m[m_last_las_point.bit_byte.number_of_returns]
                       [m_last_las_point.bit_byte.return_number];
   }
@@ -100,7 +110,7 @@ class LASPointFormat0Encoder {
       }
       if (changed_values & (1 << 1)) {
         m_last_las_point.user_data =
-            m_user_data_encoder[(uint8_t)m_last_las_point.user_data].decode_symbol(stream);
+            m_user_data_encoder[m_last_las_point.user_data].decode_symbol(stream);
       }
       if (changed_values & 1) {
         m_last_las_point.point_source_id += m_point_source_id_encoder.decode_int(stream);

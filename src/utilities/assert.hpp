@@ -115,19 +115,19 @@ class RawString {
   std::vector<char> m_str;
 
  public:
-  RawString(std::string str) : m_str(str.size()) {
+  explicit RawString(const std::string &str) : m_str(str.size()) {
     for (size_t i = 0; i < str.size(); i++) {
       m_str[i] = str[i];
     }
   }
 
-  RawString(std::stringstream &ss) {
+  explicit RawString(const std::stringstream &ss) {
     for (char c : ss.str()) {
       m_str.push_back(c);
     }
   }
 
-  RawString(std::initializer_list<uint8_t> vec) : m_str(vec.size()) {
+  explicit RawString(std::initializer_list<uint8_t> vec) : m_str(vec.size()) {
     size_t i = 0;
     for (auto c : vec) {
       m_str[i++] = c;
@@ -170,6 +170,12 @@ static_assert(f_arr(DEBRACKET(({4, 4}))));
       caught = true;                                       \
     }                                                      \
     LASPP_ASSERT(caught, "Expected exception " #exception) \
+  }
+
+#define LASPP_CHECK_READ(stream, result_ptr, size)                             \
+  auto n_bytes_read = stream.read(reinterpret_cast<char *>(result_ptr), size); \
+  if (n_bytes_read != (decltype(n_bytes_read))size) {                          \
+    LASPP_FAIL("Failed to read ", size, " bytes from stream");                 \
   }
 
 }  // namespace laspp

@@ -30,7 +30,9 @@
 
 namespace laspp {
 
-inline std::ostream& operator<<(std::ostream& os, const std::byte& b) { return os << (int)b; };
+inline std::ostream& operator<<(std::ostream& os, const std::byte& b) {
+  return os << static_cast<uint32_t>(b);
+};
 
 template <typename T>
 inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {

@@ -22,6 +22,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <numeric>
 #include <vector>
@@ -41,6 +42,8 @@ struct ConstSizeVector {
 
 template <uint16_t NSymbols>
 class SymbolEncoder {
+  static_assert(NSymbols > 1, "Number of symbols must be greater than 1");
+  static_assert(NSymbols < 1024, "Number of symbols must be less than 1024");
   enum class LookupTableType { NONE, ARRAY };
 
   static constexpr LookupTableType lookup_table_type =
@@ -56,7 +59,7 @@ class SymbolEncoder {
   struct LookupTable<LookupTableType::ARRAY, NumSymbols> {
     static constexpr uint_fast16_t lookup_table_n_bits(uint16_t N_symbols) {
       uint_fast16_t bits = 0;
-      while ((1u << bits) < N_symbols) {
+      while (((uint32_t)1 << bits) < N_symbols) {
         bits++;
       }
       return bits - 2;
@@ -86,7 +89,7 @@ class SymbolEncoder {
   uint16_t symbols_until_update;
 
   void update_distribution() {
-    uint16_t symbol_sum = std::accumulate(symbol_count.begin(), symbol_count.end(), 0);
+    uint32_t symbol_sum = std::accumulate(symbol_count.begin(), symbol_count.end(), 0);
     if (symbol_sum > (1 << 15)) {
       symbol_sum = 0;
       for (size_t s = 0; s < NSymbols; s++) {
@@ -94,6 +97,7 @@ class SymbolEncoder {
         symbol_sum += symbol_count[s];
       }
     }
+    assert(symbol_sum >= NSymbols && symbol_sum > 0);
     uint32_t scale_factor = (1u << 31) / symbol_sum;
     uint32_t cumulitive_sum = 0;
     uint32_t lookup_idx = 0;
@@ -136,15 +140,15 @@ class SymbolEncoder {
     uint16_t symbol = 0;
 
     if constexpr (lookup_table_type == LookupTableType::NONE) {
-      for (size_t s = symbol + 1; s < NSymbols && distribution[s] * l_tmp <= value; symbol = s++) {
+      for (; symbol + 1 < NSymbols && distribution[symbol + 1] * l_tmp <= value; symbol++) {
       }
     } else {
       uint32_t lookup_idx = (value / l_tmp) >> lookup_table.SHIFT;
 
       symbol = lookup_table[lookup_idx];
-      for (uint32_t s = symbol + 1;
-           s < NSymbols && s <= lookup_table[lookup_idx + 1] && distribution[s] * l_tmp <= value;
-           symbol = s++) {
+      for (; symbol + 1 < NSymbols && symbol + 1 <= lookup_table[lookup_idx + 1] &&
+             distribution[symbol + 1] * l_tmp <= value;
+           symbol++) {
       }
     }
 

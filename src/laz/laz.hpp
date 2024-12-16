@@ -90,7 +90,8 @@ class LAZReader {
           break;
         }
         default:
-          LASPP_FAIL("Currently unsupported LAZ item type: ", (LAZItemType)record.item_type);
+          LASPP_FAIL("Currently unsupported LAZ item type: ",
+                     static_cast<uint16_t>(record.item_type));
       }
     }
 
@@ -99,7 +100,7 @@ class LAZReader {
     InStream compressed_in_stream(compressed_stream);
     std::vector<std::byte> next_bytes;
     for (size_t i = 0; i < decompressed_data.size(); i++) {
-      for (LAZEncoder& encoder : encoders) {
+      for (LAZEncoder& laz_encoder : encoders) {
         std::visit(
             [&compressed_in_stream, &decompressed_data, &i](auto&& encoder) {
               if (i > 0) encoder.decode(compressed_in_stream);
@@ -109,12 +110,12 @@ class LAZReader {
               } else if constexpr (std::is_base_of_v<
                                        std::remove_reference_t<decltype(encoder.last_value())>,
                                        T>) {
-                using RefType = std::add_lvalue_reference_t<
-                    std::remove_const_t<std::remove_reference_t<decltype(encoder.last_value())>>>;
-                (RefType) decompressed_data[i] = encoder.last_value();
+                using RefType =
+                    std::remove_const_t<std::remove_reference_t<decltype(encoder.last_value())>>;
+                static_cast<RefType&>(decompressed_data[i]) = encoder.last_value();
               }
             },
-            encoder);
+            laz_encoder);
       }
     }
     return decompressed_data;

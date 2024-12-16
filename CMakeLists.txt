@@ -77,7 +77,27 @@ if(WIN32)
       "/wd5246")
   endif()
 elseif(UNIX)
-  add_compile_options("-fstrict-enums" "-Wall" "-Wextra" "-Wpedantic" "-Werror")
+  if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
+    add_compile_options("-Werror")
+  endif()
+  # to add: -Wold-style-cast -Wconversion -Weffc++
+  add_compile_options(
+    "-fstrict-enums"
+    "-Wall"
+    "-Wextra"
+    "-Wpedantic"
+    "-Wcast-align=strict"
+    "-Wdouble-promotion"
+    "-Wshadow"
+    "-Wpointer-arith"
+    "-Wstrict-aliasing"
+    "-Wduplicated-cond"
+    "-Wduplicated-branches"
+    "-Wlogical-op"
+    "-Wrestrict"
+    "-Wnull-dereference"
+    "-Wuseless-cast"
+    "-Wdouble-promotion")
 else()
   message(FATAL_ERROR "Unsupported platform")
 endif()

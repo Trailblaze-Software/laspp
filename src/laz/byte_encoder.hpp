@@ -25,7 +25,7 @@
 
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
-#include "utilities/assert.hpp"
+
 namespace laspp {
 
 class ByteEncoder {
@@ -50,7 +50,7 @@ class BytesEncoder {
   using EncodedType = std::vector<std::byte>;
   const EncodedType& last_value() const { return m_last_bytes; }
 
-  BytesEncoder(const std::vector<std::byte>& initial_bytes) {
+  explicit BytesEncoder(const std::vector<std::byte>& initial_bytes) {
     m_byte_encoders.reserve(initial_bytes.size());
     for (const auto& byte : initial_bytes) {
       m_byte_encoders.emplace_back(byte);

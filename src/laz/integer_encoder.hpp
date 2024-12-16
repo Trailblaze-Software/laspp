@@ -28,7 +28,6 @@
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
-#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -103,7 +102,7 @@ class IntegerEncoder {
   std::shared_ptr<SymbolEncoders> m_symbol_encoders;
 
  public:
-  IntegerEncoder(std::optional<std::shared_ptr<SymbolEncoders>> symbol_encoders = {})
+  explicit IntegerEncoder(std::optional<std::shared_ptr<SymbolEncoders>> symbol_encoders = {})
       : m_symbol_encoders(symbol_encoders.has_value() ? symbol_encoders.value()
                                                       : std::make_shared<SymbolEncoders>()) {}
 
