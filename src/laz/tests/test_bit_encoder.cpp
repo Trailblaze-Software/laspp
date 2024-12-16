@@ -54,14 +54,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   }
 
   std::vector<std::vector<bool>> multi_bits;
-  multi_bits.emplace_back();
-  multi_bits[0].reserve(1 << 14);
-  for (size_t i = 0; i < (1 << 14); i++) {
+  multi_bits.emplace_back(1 << 14);
+  for (size_t i = 0; i < multi_bits[0].size(); i++) {
     multi_bits[0][i] = i % 2 + i % 3 + i % 5 + i % 7 + i % 11 + i % 13;
   }
-  multi_bits.emplace_back();
-  multi_bits[1].reserve(1 << 14);
-  for (size_t i = 0; i < (1 << 14); i++) {
+  multi_bits.emplace_back(1 << 14);
+  for (size_t i = 0; i < multi_bits[1].size(); i++) {
     multi_bits[1][i] = 0;
   }
   for (const auto& bits : multi_bits) {
