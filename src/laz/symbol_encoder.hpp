@@ -59,7 +59,7 @@ class SymbolEncoder {
   struct LookupTable<LookupTableType::ARRAY, NumSymbols> {
     static constexpr uint_fast16_t lookup_table_n_bits(uint16_t N_symbols) {
       uint_fast16_t bits = 0;
-      while (((uint32_t)1 << bits) < N_symbols) {
+      while ((1ull << bits) < N_symbols) {
         bits++;
       }
       return bits - 2;

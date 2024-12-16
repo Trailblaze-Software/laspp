@@ -139,7 +139,7 @@ class RawString {
   friend std::ostream &operator<<(std::ostream &os, const RawString &rs) {
     os << "\"";
     for (size_t i = 0; i < rs.m_str.size(); i++) {
-      os << (uint32_t)(uint8_t)rs.m_str[i];
+      os << static_cast<uint32_t>(rs.m_str[i]);
       if (i < rs.m_str.size() - 1) {
         os << ", ";
       }

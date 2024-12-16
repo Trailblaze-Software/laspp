@@ -60,7 +60,8 @@ class BytesEncoder {
 
   void decode(InStream& in_stream) {
     for (size_t i = 0; i < m_byte_encoders.size(); i++) {
-      (uint8_t&)m_last_bytes[i] += (uint8_t)m_byte_encoders[i].decode(in_stream);
+      reinterpret_cast<uint8_t&>(m_last_bytes[i]) +=
+          static_cast<uint8_t>(m_byte_encoders[i].decode(in_stream));
     }
   }
 };

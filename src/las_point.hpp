@@ -149,10 +149,10 @@ struct LASPP_PACKED BitByte {
   }
 
   friend std::ostream& operator<<(std::ostream& os, const BitByte bit_byte) {
-    os << "Return number: " << (uint32_t)bit_byte.return_number << std::endl;
-    os << "Number of returns: " << (uint32_t)bit_byte.number_of_returns << std::endl;
-    os << "Scan direction flag: " << (uint32_t)bit_byte.scan_direction_flag << std::endl;
-    os << "Edge of flight line: " << (uint32_t)bit_byte.edge_of_flight_line << std::endl;
+    os << "Return number: " << static_cast<int>(bit_byte.return_number) << std::endl;
+    os << "Number of returns: " << static_cast<int>(bit_byte.number_of_returns) << std::endl;
+    os << "Scan direction flag: " << static_cast<int>(bit_byte.scan_direction_flag) << std::endl;
+    os << "Edge of flight line: " << static_cast<int>(bit_byte.edge_of_flight_line) << std::endl;
     return os;
   }
 };
@@ -172,9 +172,9 @@ struct LASPP_PACKED ClassificationByte {
 
   friend std::ostream& operator<<(std::ostream& os, const ClassificationByte& classification_byte) {
     os << "Classification: " << classification_byte.classification << std::endl;
-    os << "Synthetic: " << (uint32_t)classification_byte.synthetic << std::endl;
-    os << "Key point: " << (uint32_t)classification_byte.key_point << std::endl;
-    os << "Withheld: " << (uint32_t)classification_byte.withheld << std::endl;
+    os << "Synthetic: " << static_cast<int>(classification_byte.synthetic) << std::endl;
+    os << "Key point: " << static_cast<int>(classification_byte.key_point) << std::endl;
+    os << "Withheld: " << static_cast<int>(classification_byte.withheld) << std::endl;
     return os;
   }
 };
@@ -199,8 +199,8 @@ struct LASPP_PACKED LASPointFormat0 {
     os << "Intensity: " << point.intensity << std::endl;
     os << point.bit_byte;
     os << point.classification_byte;
-    os << "Scan angle rank: " << (uint32_t)point.scan_angle_rank << std::endl;
-    os << "User data: " << (uint32_t)point.user_data << std::endl;
+    os << "Scan angle rank: " << static_cast<int>(point.scan_angle_rank) << std::endl;
+    os << "User data: " << static_cast<int>(point.user_data) << std::endl;
     os << "Point source ID: " << point.point_source_id << std::endl;
     return os;
   }
@@ -231,7 +231,8 @@ struct LASPP_PACKED GPSTime {
 
 struct LASPP_PACKED LASPointFormat1 : LASPointFormat0, GPSTime {
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat1& lpf1) {
-    return os << (LASPointFormat0)(lpf1) << (GPSTime)(lpf1) << std::endl;
+    return os << static_cast<const LASPointFormat0&>(lpf1) << static_cast<const GPSTime&>(lpf1)
+              << std::endl;
   }
 };
 
@@ -281,14 +282,14 @@ struct LASPP_PACKED LASPointFormat6 {
     os << "Y: " << point.y << std::endl;
     os << "Z: " << point.z << std::endl;
     os << "Intensity: " << point.intensity << std::endl;
-    os << "Return number: " << (uint32_t)point.return_number << std::endl;
-    os << "Number of returns: " << (uint32_t)point.number_of_returns << std::endl;
-    os << "Classification flags: " << (uint32_t)point.classification_flags << std::endl;
-    os << "Scanner channel: " << (uint32_t)point.scanner_channel << std::endl;
-    os << "Scan direction flag: " << (uint32_t)point.scan_direction_flag << std::endl;
-    os << "Edge of flight line: " << (uint32_t)point.edge_of_flight_line << std::endl;
+    os << "Return number: " << static_cast<int>(point.return_number) << std::endl;
+    os << "Number of returns: " << static_cast<int>(point.number_of_returns) << std::endl;
+    os << "Classification flags: " << static_cast<int>(point.classification_flags) << std::endl;
+    os << "Scanner channel: " << static_cast<int>(point.scanner_channel) << std::endl;
+    os << "Scan direction flag: " << static_cast<int>(point.scan_direction_flag) << std::endl;
+    os << "Edge of flight line: " << static_cast<int>(point.edge_of_flight_line) << std::endl;
     os << "Classification: " << point.classification << std::endl;
-    os << "User data: " << (uint32_t)point.user_data << std::endl;
+    os << "User data: " << static_cast<int>(point.user_data) << std::endl;
     os << "Scan angle: " << point.scan_angle << std::endl;
     os << "Point source ID: " << point.point_source_id << std::endl;
     return os;

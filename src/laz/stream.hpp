@@ -89,7 +89,7 @@ class InStream : StreamVariables {
   explicit InStream(std::istream& stream) : m_stream(stream), m_buffer(), buffer_idx(BUFFER_SIZE) {
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
-      m_value |= (uint8_t)read_byte();
+      m_value |= static_cast<uint8_t>(read_byte());
     }
     m_length = std::numeric_limits<uint32_t>::max();
   }
@@ -119,7 +119,7 @@ class InStream : StreamVariables {
     } else if (length() < (1 << 24)) {
       m_value <<= 8;
       m_length <<= 8;
-      m_value |= (uint8_t)read_byte();
+      m_value |= static_cast<uint8_t>(read_byte());
     }
     return m_value;
   }
@@ -157,7 +157,7 @@ class InStream : StreamVariables {
     uint8_t byte = current_big_chunk;
     current_big_chunk >>= 8;
     num_bytes_valid--;
-    return (std::byte)byte;
+    return static_cast<std::byte>(byte);
   }
 
   template <size_t NumBytes>
@@ -186,7 +186,7 @@ class InStream : StreamVariables {
         buffer_idx(BUFFER_SIZE) {
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
-      m_value |= (uint8_t)read_byte();
+      m_value |= static_cast<uint8_t>(read_byte());
     }
     m_length = std::numeric_limits<uint32_t>::max();
   }
@@ -210,7 +210,7 @@ class InStream : StreamVariables {
     } else if (length() < (1 << 24)) {
       m_value <<= 8;
       m_length <<= 8;
-      m_value |= (uint8_t)read_byte();
+      m_value |= static_cast<uint8_t>(read_byte());
     }
     return m_value;
   }
@@ -271,7 +271,8 @@ class OutStream : StreamVariables {
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
-    if (((uint64_t)m_base + (uint64_t)lower) >= ((uint64_t)1 << 32)) {
+    if ((static_cast<uint64_t>(m_base) + static_cast<uint64_t>(lower)) >=
+        (static_cast<uint64_t>(1) << 32)) {
       propogate_carry();
     }
     m_base += lower;

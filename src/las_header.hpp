@@ -226,8 +226,8 @@ class LASPP_PACKED LASHeader {
     os << "Project ID 2: " << header.m_project_id_2 << std::endl;
     os << "Project ID 3: " << header.m_project_id_3 << std::endl;
     os << "Project ID 4: " << arr_to_string(header.m_project_id_4) << std::endl;
-    os << "Version major: " << (int)header.m_version_major << std::endl;
-    os << "Version minor: " << (int)header.m_version_minor << std::endl;
+    os << "Version major: " << static_cast<int>(header.m_version_major) << std::endl;
+    os << "Version minor: " << static_cast<int>(header.m_version_minor) << std::endl;
     os << "System ID: " << header.m_system_id << std::endl;
     os << "Generating software: " << header.m_generating_software << std::endl;
     os << "File creation day: " << header.m_file_creation_day << std::endl;
@@ -236,7 +236,8 @@ class LASPP_PACKED LASHeader {
     os << "Offset to point data: " << header.m_offset_to_point_data << std::endl;
     os << "Number of variable length records: " << header.m_number_of_variable_length_records
        << std::endl;
-    os << "Point data record format: " << (uint32_t)header.m_point_data_record_format << std::endl;
+    os << "Point data record format: " << static_cast<int>(header.m_point_data_record_format)
+       << std::endl;
     os << "Point data record length: " << header.m_point_data_record_length << std::endl;
     os << "Legacy number of point records: " << header.m_legacy_number_of_point_records
        << std::endl;

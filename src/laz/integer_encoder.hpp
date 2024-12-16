@@ -130,7 +130,8 @@ class IntegerEncoder {
 
   void encode_int(OutStream& stream, int32_t integer) {
     uint8_t k = 0;
-    while ((int64_t)integer > ((int64_t)1 << k) || (int64_t)integer < -(((int64_t)1 << k) - 1)) {
+    while (integer > (static_cast<int64_t>(1) << k) ||
+           integer < -((static_cast<int64_t>(1) << k) - 1)) {
       k++;
     }
 
@@ -143,7 +144,7 @@ class IntegerEncoder {
         return;
       }
       if (integer < 0) {
-        integer += ((uint64_t)1 << k) - 1;
+        integer += (1ull << k) - 1;
       } else {
         integer -= 1;
       }

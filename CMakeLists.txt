@@ -80,7 +80,7 @@ elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     add_compile_options("-Werror")
   endif()
-  # to add: -Wold-style-cast -Wconversion -Weffc++
+  # to add: -Wconversion -Weffc++
   add_compile_options(
     "-fstrict-enums"
     "-Wall"
@@ -92,12 +92,13 @@ elseif(UNIX)
     "-Wpointer-arith"
     "-Wstrict-aliasing"
     "-Wduplicated-cond"
-    "-Wduplicated-branches"
-    "-Wlogical-op"
-    "-Wrestrict"
     "-Wnull-dereference"
-    "-Wuseless-cast"
-    "-Wdouble-promotion")
+    "-Wdouble-promotion"
+    "-Wold-style-cast")
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options("-Wduplicated-branches" "-Wlogical-op" "-Wrestrict"
+                        "-Wuseless-cast")
+  endif()
 else()
   message(FATAL_ERROR "Unsupported platform")
 endif()
