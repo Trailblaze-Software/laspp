@@ -92,7 +92,8 @@ elseif(UNIX)
     "-Wnull-dereference"
     "-Wdouble-promotion"
     "-Wold-style-cast"
-    "-Wconversion")
+    "-Wconversion"
+    "-Wsign-conversion")
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(
       "-Wduplicated-branches" "-Wlogical-op" "-Wrestrict" "-Wcast-align=strict"

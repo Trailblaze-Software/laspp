@@ -28,11 +28,11 @@
 namespace laspp {
 
 class BitSymbolEncoder {
-  int32_t bit_0_count;
-  int32_t bit_count;
-  int32_t bit_0_prob;
-  int32_t update_cycle;
-  int32_t bits_until_update;
+  uint32_t bit_0_count;
+  uint32_t bit_count;
+  uint32_t bit_0_prob;
+  uint32_t update_cycle;
+  uint32_t bits_until_update;
 
   void update_distribution() {
     bit_count += update_cycle;
@@ -45,7 +45,7 @@ class BitSymbolEncoder {
       }
     }
     bit_0_prob = ((1u << 31) / bit_count) * bit_0_count / (1u << 18);
-    update_cycle = std::min((5 * update_cycle) / 4, 64);
+    update_cycle = std::min((5 * update_cycle) / 4, 64u);
     bits_until_update = update_cycle;
   }
 

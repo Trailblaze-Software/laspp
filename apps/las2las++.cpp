@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
     if (laz_compress) {
       point_format |= 1 << 7;
     } else {
-      point_format &= ~(1 << 7);
+      point_format &= static_cast<uint8_t>(~(1u << 7));
     }
     laspp::LASWriter writer(ofs, point_format);
 

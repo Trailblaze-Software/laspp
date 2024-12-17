@@ -141,7 +141,7 @@ class IntegerEncoder {
 
     if (k < 32) {
       if (k == 0) {
-        m_symbol_encoders->encode(stream, k, integer);
+        m_symbol_encoders->encode(stream, k, static_cast<uint32_t>(integer));
         return;
       }
       if (integer < 0) {
@@ -150,11 +150,11 @@ class IntegerEncoder {
         integer -= 1;
       }
       if (k <= 8) {
-        m_symbol_encoders->encode(stream, k, integer);
+        m_symbol_encoders->encode(stream, k, static_cast<uint_fast16_t>(integer));
       } else {
-        m_symbol_encoders->encode(stream, k, integer >> (k - 8));
+        m_symbol_encoders->encode(stream, k, static_cast<uint_fast16_t>(integer >> (k - 8)));
         integer = integer & ((1 << (k - 8)) - 1);
-        raw_encode(stream, integer, static_cast<uint8_t>(k - 8));
+        raw_encode(stream, static_cast<uint64_t>(integer), static_cast<uint8_t>(k - 8));
       }
     }
   }

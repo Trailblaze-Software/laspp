@@ -240,7 +240,7 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
   LAZSpecialVLR(const LAZSpecialVLRPt1& pt1, std::istream& is)
       : LAZSpecialVLRPt1(pt1), items_records(pt1.num_item_records) {
     for (auto& item : items_records) {
-      is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord));
+      LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
       if (is.fail()) {
         throw std::runtime_error("LASPP_FAILed to read LAZ item record");
       }

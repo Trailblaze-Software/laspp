@@ -58,13 +58,14 @@ class LAZChunkTable : LAZChunkTableHeader {
   explicit LAZChunkTable(std::istream& istream, size_t total_n_points,
                          std::optional<uint32_t> constant_chunk_size)
       : m_constant_chunk_size(constant_chunk_size) {
-    istream.read(reinterpret_cast<char*>(this), sizeof(LAZChunkTableHeader));
+    LASPP_CHECK_READ(istream.read(reinterpret_cast<char*>(this),
+                                  static_cast<int64_t>(sizeof(LAZChunkTableHeader))));
 
     InStream decoder(istream);
     IntegerEncoder<32> int_decoder;
     for (size_t i = 0; i < number_of_chunks; i++) {
-      int32_t decoded_int = int_decoder.decode_int(decoder);
-      int32_t previous_int = i == 0 ? 0 : m_compressed_chunk_size[i - 1];
+      uint32_t decoded_int = static_cast<uint32_t>(int_decoder.decode_int(decoder));
+      uint32_t previous_int = i == 0 ? 0u : m_compressed_chunk_size[i - 1];
       m_compressed_chunk_size.push_back(decoded_int + previous_int);
       m_compressed_chunk_offsets.push_back(
           i == 0 ? 8 : m_compressed_chunk_offsets[i - 1] + m_compressed_chunk_size[i - 1]);

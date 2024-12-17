@@ -65,7 +65,7 @@ class LASWriter {
 
   void write_header() {
     m_ofs.seekp(0);
-    m_ofs.write(reinterpret_cast<const char*>(&m_header), m_header.size());
+    m_ofs.write(reinterpret_cast<const char*>(&m_header), static_cast<int64_t>(m_header.size()));
   }
 
  public:
@@ -73,7 +73,7 @@ class LASWriter {
       : m_ofs(ofs) {
     header().set_point_format(point_format, num_extra_bytes);
     header().m_offset_to_point_data = static_cast<uint32_t>(header().size());
-    m_ofs.seekp(header().size());
+    m_ofs.seekp(static_cast<int64_t>(header().size()));
     LASPP_ASSERT_EQ(num_extra_bytes, 0);
   }
 
@@ -173,7 +173,7 @@ class LASWriter {
     std::cout << "Writing " << points_to_write.size() << " points ("
               << sizeof(PointType) * points_to_write.size() << " B)" << std::endl;
     m_ofs.write(reinterpret_cast<const char*>(points_to_write.data()),
-                points_to_write.size() * sizeof(PointType));
+                static_cast<int64_t>(points_to_write.size() * sizeof(PointType)));
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
   }
 
@@ -202,7 +202,8 @@ class LASWriter {
     m_stage = WritingStage::EVLRS;
     LASPP_ASSERT_EQ(evlr.record_length_after_header, data.size());
     m_ofs.write(reinterpret_cast<const char*>(&evlr), sizeof(LASEVLR));
-    m_ofs.write(reinterpret_cast<const char*>(data.data()), evlr.record_length_after_header);
+    m_ofs.write(reinterpret_cast<const char*>(data.data()),
+                static_cast<int64_t>(evlr.record_length_after_header));
     header().m_number_of_extended_variable_length_records++;
   }
 

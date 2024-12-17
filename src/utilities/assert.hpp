@@ -112,24 +112,24 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 #endif
 
 class RawString {
-  std::vector<char> m_str;
+  std::vector<uint8_t> m_str;
 
  public:
   explicit RawString(const std::string &str) : m_str(str.size()) {
     for (size_t i = 0; i < str.size(); i++) {
-      m_str[i] = str[i];
+      m_str[i] = static_cast<uint8_t>(str[i]);
     }
   }
 
   explicit RawString(const std::stringstream &ss) {
     for (char c : ss.str()) {
-      m_str.push_back(c);
+      m_str.push_back(static_cast<uint8_t>(c));
     }
   }
 
   explicit RawString(std::initializer_list<uint8_t> vec) : m_str(vec.size()) {
     size_t i = 0;
-    for (auto c : vec) {
+    for (uint8_t c : vec) {
       m_str[i++] = c;
     }
   }
@@ -172,10 +172,11 @@ static_assert(f_arr(DEBRACKET(({4, 4}))));
     LASPP_ASSERT(caught, "Expected exception " #exception) \
   }
 
-#define LASPP_CHECK_READ(stream, result_ptr, size)                             \
-  auto n_bytes_read = stream.read(reinterpret_cast<char *>(result_ptr), size); \
-  if (n_bytes_read != (decltype(n_bytes_read))size) {                          \
-    LASPP_FAIL("Failed to read ", size, " bytes from stream");                 \
+#define LASPP_CHECK_READ(read)                                                           \
+  {                                                                                      \
+    auto &laspp_check_stream = read;                                                     \
+    LASPP_ASSERT(laspp_check_stream, "Failed to read from stream ", #read, " returned ", \
+                 laspp_check_stream.gcount(), " bytes");                                 \
   }
 
 }  // namespace laspp

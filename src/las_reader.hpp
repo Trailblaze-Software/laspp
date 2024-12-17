@@ -44,28 +44,31 @@ class LASReader {
   static LASHeader read_header(std::ifstream& ifs) {
     ifs.seekg(0);
     LASHeader las_header;
-    ifs.read(reinterpret_cast<char*>(&las_header), sizeof(LASHeader));
+    LASPP_CHECK_READ(
+        ifs.read(reinterpret_cast<char*>(&las_header), static_cast<int64_t>(sizeof(LASHeader))));
     return las_header;
   }
 
   template <typename T>
-  std::vector<T> read_record_headers(size_t initial_offset, size_t n_records) {
+  std::vector<T> read_record_headers(int64_t initial_offset, size_t n_records) {
     std::vector<T> record_headers;
     m_ifs.seekg(initial_offset);
     for (unsigned int i = 0; i < n_records; ++i) {
       typename T::record_type record;
-      m_ifs.read(reinterpret_cast<char*>(&record), sizeof(LASVLR));
+      LASPP_CHECK_READ(
+          m_ifs.read(reinterpret_cast<char*>(&record), static_cast<int64_t>(sizeof(LASVLR))));
       record_headers.emplace_back(record, m_ifs.tellg());
       auto end_of_header_offset = std::ios_base::cur;
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
         if (record.is_laz_vlr()) {
           LAZSpecialVLRPt1 laz_vlr_pt1;
-          m_ifs.read(reinterpret_cast<char*>(&laz_vlr_pt1), sizeof(LAZSpecialVLRPt1));
+          LASPP_CHECK_READ(m_ifs.read(reinterpret_cast<char*>(&laz_vlr_pt1),
+                                      static_cast<int64_t>(sizeof(LAZSpecialVLRPt1))));
           LAZSpecialVLR laz_vlr(laz_vlr_pt1, m_ifs);
           m_laz_data.emplace(LAZReader(laz_vlr));
         }
       }
-      m_ifs.seekg(record.record_length_after_header, end_of_header_offset);
+      m_ifs.seekg(static_cast<int64_t>(record.record_length_after_header), end_of_header_offset);
     }
     return record_headers;
   }
@@ -75,8 +78,8 @@ class LASReader {
   }
 
   std::vector<LASEVLRWithGlobalOffset> read_evlr_headers() {
-    return read_record_headers<LASEVLRWithGlobalOffset>(m_header.EVLR_offset(),
-                                                        m_header.EVLR_count());
+    return read_record_headers<LASEVLRWithGlobalOffset>(
+        static_cast<int64_t>(m_header.EVLR_offset()), m_header.EVLR_count());
   }
 
  public:
@@ -91,7 +94,8 @@ class LASReader {
       m_ifs.seekg(header().offset_to_point_data());
       int64_t chunk_table_offset;
       // if (chunk_table_offset == -1) use last 8 bytes of file
-      ifs.read(reinterpret_cast<char*>(&chunk_table_offset), sizeof(size_t));
+      LASPP_CHECK_READ(ifs.read(reinterpret_cast<char*>(&chunk_table_offset),
+                                static_cast<int64_t>(sizeof(size_t))));
       std::cout << "Chunk table offset: " << chunk_table_offset << std::endl;
 
       m_ifs.seekg(chunk_table_offset);
@@ -109,7 +113,8 @@ class LASReader {
   std::vector<std::byte> read_point_data(const LASHeader& header) {
     std::vector<std::byte> point_data(header.point_data_record_length() * header.num_points());
     m_ifs.seekg(header.offset_to_point_data());
-    m_ifs.read(reinterpret_cast<char*>(point_data.data()), point_data.size());
+    LASPP_CHECK_READ(m_ifs.read(reinterpret_cast<char*>(point_data.data()),
+                                static_cast<int64_t>(point_data.size())));
     return point_data;
   }
 
@@ -134,7 +139,8 @@ class LASReader {
   void read_points(std::span<T> points) {
     for (size_t i = 0; i < points.size(); i++) {
       PointType las_point;
-      m_ifs.read(reinterpret_cast<char*>(&las_point), sizeof(PointType));
+      LASPP_CHECK_READ(
+          m_ifs.read(reinterpret_cast<char*>(&las_point), static_cast<int64_t>(sizeof(PointType))));
       if constexpr (is_copy_assignable<T, LASPointFormat0>() &&
                     std::is_base_of_v<LASPointFormat0, PointType>) {
         points[i] = static_cast<LASPointFormat0&>(las_point);
@@ -145,7 +151,8 @@ class LASReader {
       if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<T, GPSTime>()) {
         points[i] = static_cast<GPSTime&>(las_point);
       }
-      m_ifs.seekg(header().point_data_record_length() - sizeof(PointType), std::ios_base::cur);
+      m_ifs.seekg(static_cast<int64_t>(header().point_data_record_length() - sizeof(PointType)),
+                  std::ios_base::cur);
     }
   }
 
@@ -154,10 +161,11 @@ class LASReader {
   std::span<T> read_chunk(std::span<T> output_location, size_t chunk_index) {
     if (header().is_laz_compressed()) {
       size_t start_offset = m_laz_data->m_chunk_table->chunk_offset(chunk_index);
-      m_ifs.seekg(header().offset_to_point_data() + start_offset);
+      m_ifs.seekg(static_cast<int64_t>(header().offset_to_point_data() + start_offset));
       std::vector<std::byte> compressed_data(
           m_laz_data->m_chunk_table->compressed_chunk_size(chunk_index));
-      m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
+      LASPP_CHECK_READ(m_ifs.read(reinterpret_cast<char*>(compressed_data.data()),
+                                  static_cast<int64_t>(compressed_data.size())));
       size_t n_points = m_laz_data->m_chunk_table->points_per_chunk()[chunk_index];
       return m_laz_data->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
     }
@@ -187,10 +195,11 @@ class LASReader {
           m_laz_data->m_chunk_table->decompressed_chunk_offsets()[chunk_indexes.first];
       LASPP_ASSERT_GE(output_location.size(), total_n_points);
       std::vector<std::byte> compressed_data(total_compressed_size);
-      m_ifs.seekg(header().offset_to_point_data() + compressed_start_offset);
+      m_ifs.seekg(static_cast<int64_t>(header().offset_to_point_data() + compressed_start_offset));
       std::cout << "Reading " << total_compressed_size << " bytes from " << compressed_start_offset
                 << " to " << compressed_start_offset + total_compressed_size << std::endl;
-      m_ifs.read(reinterpret_cast<char*>(compressed_data.data()), compressed_data.size());
+      LASPP_CHECK_READ(m_ifs.read(reinterpret_cast<char*>(compressed_data.data()),
+                                  static_cast<int64_t>(compressed_data.size())));
 
 #pragma omp parallel for schedule(dynamic)
       for (size_t chunk_index = chunk_indexes.first; chunk_index < chunk_indexes.second;
@@ -221,8 +230,9 @@ class LASReader {
 
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
     std::vector<std::byte> data(vlr.record_length_after_header);
-    m_ifs.seekg(vlr.global_offset());
-    m_ifs.read(reinterpret_cast<char*>(data.data()), data.size());
+    m_ifs.seekg(static_cast<int64_t>(vlr.global_offset()));
+    LASPP_CHECK_READ(
+        m_ifs.read(reinterpret_cast<char*>(data.data()), static_cast<int64_t>(data.size())));
     return data;
   }
 };

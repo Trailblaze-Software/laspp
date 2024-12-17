@@ -49,7 +49,7 @@ class InStream : StreamVariables {
 
   std::byte read_byte() {
     if (buffer_idx == BUFFER_SIZE) {
-      m_stream.read(reinterpret_cast<char*>(m_buffer.data()), BUFFER_SIZE);
+      LASPP_CHECK_READ(m_stream.read(reinterpret_cast<char*>(m_buffer.data()), BUFFER_SIZE));
       buffer_idx = 0;
     }
     return m_buffer[buffer_idx++];
@@ -133,12 +133,17 @@ class InStream : StreamVariables {
   uint64_t current_big_chunk;
   uint32_t num_bytes_valid;
   uint32_t buffer_idx;
+  int64_t valid_elements = std::numeric_limits<uint32_t>::max();
 
   uint32_t read_chunk() {
     if (buffer_idx == BUFFER_SIZE) {
       m_stream.read(reinterpret_cast<char*>(m_buffer.data()), sizeof(m_buffer));
+      if (!m_stream) {
+        valid_elements = m_stream.gcount() / 4 + 1;
+      }
       buffer_idx = 0;
     }
+    LASPP_ASSERT_GE(valid_elements, buffer_idx);
     return m_buffer[buffer_idx++];
   }
 
@@ -253,8 +258,8 @@ class OutStream : StreamVariables {
   uint32_t length() const { return m_length; }
 
   void propogate_carry() {
-    const size_t current_p = m_stream.tellp();
-    size_t updated_p = current_p - 1;
+    const int64_t current_p = m_stream.tellp();
+    int64_t updated_p = current_p - 1;
     m_stream.seekg(updated_p);
     m_stream.seekp(updated_p);
     uint8_t carry = static_cast<uint8_t>(m_stream.get());
@@ -266,7 +271,7 @@ class OutStream : StreamVariables {
       m_stream.seekp(updated_p);
       carry = static_cast<uint8_t>(m_stream.get());
     }
-    m_stream.put(static_cast<uint8_t>(carry + 1));
+    m_stream.put(static_cast<char>(carry + 1));
     m_stream.seekp(current_p);
   }
 
@@ -281,7 +286,7 @@ class OutStream : StreamVariables {
 
   uint32_t get_base() {
     while (length() < (1 << 24)) {
-      m_stream.put(static_cast<uint8_t>(m_base >> 24));
+      m_stream.put(static_cast<char>(m_base >> 24));
       m_base <<= 8;
       m_length <<= 8;
     }

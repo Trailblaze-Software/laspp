@@ -146,8 +146,8 @@ class LASPointFormat0Encoder {
     }
 
     int32_t dz = m_dz_encoder[dz_instance].decode_int(stream);
-    int l = std::abs(m_last_las_point.bit_byte.number_of_returns -
-                     m_last_las_point.bit_byte.return_number);
+    uint32_t l = static_cast<uint32_t>(std::abs(m_last_las_point.bit_byte.number_of_returns -
+                                                m_last_las_point.bit_byte.return_number));
     m_last_las_point.z = m_prev_dz[l] + dz;
     m_prev_dz[l] = m_last_las_point.z;
 
