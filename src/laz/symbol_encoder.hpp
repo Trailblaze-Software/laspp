@@ -126,15 +126,13 @@ class SymbolEncoder {
 
  public:
   SymbolEncoder()
-      : symbol_count(),
-        distribution(),
-        lookup_table(),
-        update_cycle((NSymbols + 6) / 2),
-        symbols_until_update(update_cycle) {
+      : symbol_count(), distribution(), lookup_table(), update_cycle(), symbols_until_update() {
     for (size_t s = 0; s < NSymbols; s++) {
       symbol_count[s] = 1;
     }
     update_distribution();
+    update_cycle = (NSymbols + 6) / 2;
+    symbols_until_update = update_cycle;
   }
 
   uint_fast16_t decode_symbol(InStream& stream) {
