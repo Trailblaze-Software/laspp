@@ -182,7 +182,7 @@ class GPSTime11Encoder {
     LASPP_FAIL("Unkown case delta: ", case_delta);
   }
 
-  void encode(OutStream& out_stream, GPSTime gps_time) {
+  void encode(OutStream& out_stream, GPSTime gps_time, bool post_reference_frame = false) {
     ReferenceFrame& rf = m_reference_frames[m_current_frame];
     if (rf.delta == 0) {
       if (rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
@@ -197,14 +197,15 @@ class GPSTime11Encoder {
         rf.delta = diff_32;
         rf.counter = 0;
       } else {
-        // for (size_t i = 0; i < 4; i++) {
-        // int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
-        // if (static_cast<int32_t>(rf_diff) == rf_diff) {
-        // m_case_0delta_encoder.encode_symbol(out_stream, (4 + i - m_current_frame) % 4);
-        // m_current_frame = static_cast<uint_fast8_t>(i);
-        // return encode(out_stream, gps_time);
-        //}
-        //}
+        LASPP_ASSERT(!post_reference_frame, "Cannot encode reference frame after reference frame");
+        for (size_t i = 0; i < 4; i++) {
+          int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
+          if (static_cast<int32_t>(rf_diff) == rf_diff) {
+            m_case_0delta_encoder.encode_symbol(out_stream, 2 + (4 + i - m_current_frame) % 4);
+            m_current_frame = static_cast<uint_fast8_t>(i);
+            return encode(out_stream, gps_time, true);
+          }
+        }
 
         m_case_0delta_encoder.encode_symbol(out_stream, 2);
         m_dgps_time_low_encoder.encode_int(
@@ -270,7 +271,15 @@ class GPSTime11Encoder {
         }
         rf.prev_gps_time = gps_time;
       } else {
-        // TODO: USE MULTIPLE REFERENCE FRAMES
+        LASPP_ASSERT(!post_reference_frame, "Cannot encode reference frame after reference frame");
+        for (size_t i = 0; i < 4; i++) {
+          int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
+          if (static_cast<int32_t>(rf_diff) == rf_diff) {
+            m_case_0delta_encoder.encode_symbol(out_stream, 512 + (4 + i - m_current_frame) % 4);
+            m_current_frame = static_cast<uint_fast8_t>(i);
+            return encode(out_stream, gps_time, true);
+          }
+        }
 
         m_case_encoder.encode_symbol(out_stream, 512);
         m_dgps_time_low_encoder.encode_int(
