@@ -179,11 +179,11 @@ class MultiInstanceIntegerEncoder {
     return m_integer_encoders[instance].decode_int(stream);
   }
 
-  void encode_int(uint32_t instance, OutStream& stream, int32_t integer) {
-    return m_integer_encoders[instance].encode_int(stream, integer);
-  }
-
   IntegerEncoder<n_bits>& operator[](uint32_t instance) { return m_integer_encoders[instance]; }
+
+  void encode_int(uint32_t instance, OutStream& stream, int32_t integer) {
+    return this->operator[](instance).encode_int(stream, integer);
+  }
 };
 
 }  // namespace laspp

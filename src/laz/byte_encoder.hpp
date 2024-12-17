@@ -35,6 +35,12 @@ class ByteEncoder {
  public:
   explicit ByteEncoder(std::byte initial_byte) : m_previous_byte(initial_byte) {}
 
+  void encode(OutStream& out_stream, std::byte byte) {
+    uint8_t diff = static_cast<uint8_t>(byte) - static_cast<uint8_t>(m_previous_byte);
+    m_symbol_encoder.encode_symbol(out_stream, diff);
+    m_previous_byte = byte;
+  }
+
   std::byte decode(InStream& in_stream) {
     uint8_t diff = static_cast<uint8_t>(m_symbol_encoder.decode_symbol(in_stream));
     m_previous_byte = static_cast<std::byte>(static_cast<uint8_t>(m_previous_byte) + diff);
@@ -44,26 +50,33 @@ class ByteEncoder {
 
 class BytesEncoder {
   std::vector<ByteEncoder> m_byte_encoders;
-  std::vector<std::byte> m_last_bytes;
+  std::vector<std::byte> m_previous_bytes;
 
  public:
   using EncodedType = std::vector<std::byte>;
-  const EncodedType& last_value() const { return m_last_bytes; }
 
   explicit BytesEncoder(const std::vector<std::byte>& initial_bytes) {
     m_byte_encoders.reserve(initial_bytes.size());
     for (const auto& byte : initial_bytes) {
       m_byte_encoders.emplace_back(byte);
     }
-    m_last_bytes = initial_bytes;
+    m_previous_bytes = initial_bytes;
   }
 
-  void decode(InStream& in_stream) {
+  void encode(OutStream& out_stream, const std::vector<std::byte>& bytes) {
     for (size_t i = 0; i < m_byte_encoders.size(); i++) {
-      reinterpret_cast<uint8_t&>(m_last_bytes[i]) +=
-          static_cast<uint8_t>(m_byte_encoders[i].decode(in_stream));
+      m_byte_encoders[i].encode(out_stream, bytes[i]);
     }
   }
+
+  const std::vector<std::byte>& decode(InStream& in_stream) {
+    for (size_t i = 0; i < m_byte_encoders.size(); i++) {
+      m_previous_bytes[i] = m_byte_encoders[i].decode(in_stream);
+    }
+    return m_previous_bytes;
+  }
+
+  const std::vector<std::byte>& last_value() const { return m_previous_bytes; }
 };
 
 }  // namespace laspp

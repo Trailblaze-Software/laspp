@@ -25,6 +25,7 @@
 #include "laz/integer_encoder.hpp"
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
+#include "utilities/assert.hpp"
 
 using namespace laspp;
 
@@ -36,11 +37,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       laspp::IntegerEncoder<32> int_encoder;
       int_encoder.encode_int(ostream, 12442);
+      LASPP_ASSERT_EQ(int_encoder.prev_k(), 14);
       int_encoder.encode_int(ostream, 1);
+      LASPP_ASSERT_EQ(int_encoder.prev_k(), 0);
       int_encoder.encode_int(ostream, std::numeric_limits<int32_t>::max());
+      LASPP_ASSERT_EQ(int_encoder.prev_k(), 31);
       int_encoder.encode_int(ostream, std::numeric_limits<int32_t>::min());
+      LASPP_ASSERT_EQ(int_encoder.prev_k(), 32);
       int_encoder.encode_int(ostream, 0);
+      LASPP_ASSERT_EQ(int_encoder.prev_k(), 0);
       int_encoder.encode_int(ostream, -1);
+      LASPP_ASSERT_EQ(int_encoder.prev_k(), 1);
 
       laspp::raw_encode(ostream, 2445, 36);
     }

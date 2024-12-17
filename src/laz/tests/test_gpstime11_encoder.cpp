@@ -80,7 +80,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       std::stringstream encoded_stream;
       {
         laspp::OutStream ostream(encoded_stream);
-        laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
+        laspp::GPSTime11Encoder encoder(laspp::GPSTime(12));
         for (auto value : vec) {
           encoder.encode(ostream, laspp::GPSTime(value));
         }
@@ -88,9 +88,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       {
         laspp::InStream instream(encoded_stream);
-        laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
+        laspp::GPSTime11Encoder encoder(laspp::GPSTime(12));
+        LASPP_ASSERT_EQ(encoder.last_value(), laspp::GPSTime(12));
         for (auto value : vec) {
           LASPP_ASSERT_EQ(encoder.decode(instream), value);
+          LASPP_ASSERT_EQ(encoder.last_value(), value);
         }
       }
     }

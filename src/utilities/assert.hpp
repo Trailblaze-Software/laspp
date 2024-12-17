@@ -43,6 +43,8 @@ using source_location = std::experimental::source_location;
 
 #include <sstream>
 #include <string>
+
+#include "printing.hpp"
 #endif
 
 namespace laspp {

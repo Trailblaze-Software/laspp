@@ -110,9 +110,9 @@ class LAZReader {
               } else if constexpr (std::is_base_of_v<
                                        std::remove_reference_t<decltype(encoder.last_value())>,
                                        T>) {
-                using RefType =
+                using DecompressedType =
                     std::remove_const_t<std::remove_reference_t<decltype(encoder.last_value())>>;
-                static_cast<RefType&>(decompressed_data[i]) = encoder.last_value();
+                static_cast<DecompressedType&>(decompressed_data[i]) = encoder.last_value();
               }
             },
             laz_encoder);
