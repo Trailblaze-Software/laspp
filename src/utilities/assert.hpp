@@ -74,20 +74,23 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
   throw std::runtime_error(ss.str());
 }
 
-#define LASPP_ASSERT_BIN_OP(a, b, op, nop)                                  \
-  {                                                                         \
-    const auto A = a;                                                       \
-    const auto B = b;                                                       \
-    if (!((A)op(B))) laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop)); \
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)                                                  \
+  {                                                                                              \
+    const auto A = a;                                                                            \
+    const auto B = b;                                                                            \
+    if (!((A)op(B)))                                                                             \
+      laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop), laspp::OptionalString(__VA_ARGS__)); \
   }
 
 template <typename A, typename B>
 inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
                              const std::string &b_str, const std::string &nop,
+                             const std::optional<std::string> &message,
                              const std::source_location &loc = std::source_location::current()) {
   std::stringstream ss;
   ss << a << " " << nop << " " << b;
-  laspp::_LASPP_FAIL_ASSERT(a_str + " " + nop + " " + b_str, ss.str(), loc);
+  laspp::_LASPP_FAIL_ASSERT(a_str + " " + nop + " " + b_str,
+                            message ? (ss.str() + " " + *message) : ss.str(), loc);
 }
 
 #else
@@ -101,12 +104,12 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 
 #define LASPP_UNIMPLEMENTED(...) LASPP_FAIL("LASPP_UNIMPLEMENTED")
 
-#define LASPP_ASSERT_GE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, >=, <)
-#define LASPP_ASSERT_LE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, <=, >)
-#define LASPP_ASSERT_GT(expr, val) LASPP_ASSERT_BIN_OP(expr, val, >, <=)
-#define LASPP_ASSERT_LT(expr, val) LASPP_ASSERT_BIN_OP(expr, val, <, >=)
-#define LASPP_ASSERT_EQ(expr, val) LASPP_ASSERT_BIN_OP(expr, val, ==, !=)
-#define LASPP_ASSERT_NE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, !=, ==)
+#define LASPP_ASSERT_GE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, >=, <, __VA_ARGS__)
+#define LASPP_ASSERT_LE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, <=, >, __VA_ARGS__)
+#define LASPP_ASSERT_GT(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, >, <=, __VA_ARGS__)
+#define LASPP_ASSERT_LT(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, <, >=, __VA_ARGS__)
+#define LASPP_ASSERT_EQ(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, ==, !=, __VA_ARGS__)
+#define LASPP_ASSERT_NE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, !=, ==, __VA_ARGS__)
 
 #if defined(_MSC_VER) && !defined(__clang__)  // MSVC
 #define UNREACHABLE() __assume(false)
