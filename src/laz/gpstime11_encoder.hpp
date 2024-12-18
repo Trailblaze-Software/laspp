@@ -22,6 +22,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 
 #include "las_point.hpp"
@@ -274,8 +275,8 @@ class GPSTime11Encoder {
         LASPP_ASSERT(!post_reference_frame, "Cannot encode reference frame after reference frame");
         for (size_t i = 0; i < 4; i++) {
           int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
-          if (static_cast<int32_t>(rf_diff) == rf_diff) {
-            m_case_0delta_encoder.encode_symbol(out_stream, 512 + (4 + i - m_current_frame) % 4);
+          if (rf_diff == static_cast<int32_t>(rf_diff)) {
+            m_case_encoder.encode_symbol(out_stream, 512 + (4 + i - m_current_frame) % 4);
             m_current_frame = static_cast<uint_fast8_t>(i);
             return encode(out_stream, gps_time, true);
           }
@@ -290,6 +291,7 @@ class GPSTime11Encoder {
         m_current_frame = static_cast<uint_fast8_t>((m_current_frame + 1) % 4);
         m_reference_frames[m_current_frame].delta = 0;
         m_reference_frames[m_current_frame].counter = 0;
+        m_reference_frames[m_current_frame].prev_gps_time = gps_time;
       }
     }
   }

@@ -165,9 +165,8 @@ class SymbolEncoder {
   }
 
   void encode_symbol(OutStream& stream, uint_fast16_t symbol) {
-    stream.get_base();
+    LASPP_ASSERT_LT(symbol, NSymbols);
     uint32_t l_tmp = (stream.length() >> 15);
-
     stream.update_range(distribution[symbol] * l_tmp, symbol < NSymbols - 1
                                                           ? (distribution[symbol + 1] * l_tmp)
                                                           : stream.length());

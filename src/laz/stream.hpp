@@ -226,7 +226,6 @@ class OutStream : StreamVariables {
   std::iostream& m_stream;
 
   void finalize_stream() {
-    get_base();
     bool write_two_bytes;
     if (length() > (1u << 25)) {
       update_range(1u << 24, 0b11u << 23);
@@ -235,12 +234,18 @@ class OutStream : StreamVariables {
       update_range(1u << 23, (1u << 23) + (1u << 15));
       write_two_bytes = true;
     }
-    get_base();
-    get_base();
     m_stream.put(0);
     m_stream.put(0);
     if (!write_two_bytes) {
       m_stream.put(0);
+    }
+  }
+
+  void update_base() {
+    while (length() < (1 << 24)) {
+      m_stream.put(static_cast<char>(m_base >> 24));
+      m_base <<= 8;
+      m_length <<= 8;
     }
   }
 
@@ -282,15 +287,9 @@ class OutStream : StreamVariables {
     }
     m_base += lower;
     m_length = upper - lower;
+    update_base();
   }
 
-  uint32_t get_base() {
-    while (length() < (1 << 24)) {
-      m_stream.put(static_cast<char>(m_base >> 24));
-      m_base <<= 8;
-      m_length <<= 8;
-    }
-    return m_base;
-  }
+  uint32_t get_base() const { return m_base; }
 };
 }  // namespace laspp

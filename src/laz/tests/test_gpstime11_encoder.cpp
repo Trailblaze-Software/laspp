@@ -19,7 +19,10 @@
  * trailblaze.software@gmail.com
  */
 
+#include <iomanip>
+
 #include "laz/gpstime11_encoder.hpp"
+#include "utilities/assert.hpp"
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
@@ -35,6 +38,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       encoder.encode(ostream, laspp::GPSTime(2.0));
     }
 
+    LASPP_ASSERT_EQ(encoded_stream.str().size(), 22);
+
     {
       laspp::InStream instream(encoded_stream);
       laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
@@ -49,34 +54,50 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
   {
     std::vector<std::vector<double>> values;
+    std::vector<size_t> compressed_sizes;
 
-    values.emplace_back();
-    values[0].reserve(2000);
-    for (int i = 0; i < 2000; i++) {
-      values[0].push_back(i);
+    values.emplace_back(2000);
+    for (size_t i = 0; i < values.back().size(); i++) {
+      values[0][i] = static_cast<double>(i);
     }
+    compressed_sizes.push_back(10376);
 
-    values.emplace_back();
-    values[1].reserve(1000);
-    for (int i = 0; i < 1000; i++) {
+    values.emplace_back(1000);
+    for (size_t i = 0; i < values.back().size(); i++) {
       if (i % 50 < 5) {
-        values[1].push_back(7888823421312 * i);
+        values[1][i] = (7888823421312. * static_cast<double>(i));
       } else {
-        values[1].push_back(i % 5);
+        values[1][i] = static_cast<double>(i % 5);
       }
     }
+    compressed_sizes.push_back(6895);
 
-    values.emplace_back();
-    values[2].reserve(1000);
-    for (int i = 0; i < 1000; i++) {
+    values.emplace_back(1000);
+    for (size_t i = 0; i < values.back().size(); i++) {
       if (i % 50 < 5) {
-        values[2].push_back(0.2131233 + 0.5123 * i);
+        values[2][i] = (0.2131233 + 0.5123 * static_cast<double>(i));
       } else {
-        values[2].push_back(0);
+        values[2][i] = 0;
       }
     }
+    compressed_sizes.push_back(900);
 
-    for (const std::vector<double>& vec : values) {
+    values.emplace_back(1000);
+    for (size_t i = 0; i < values.back().size(); i++) {
+      if (i % 50 < 5) {
+        values[3][i] = 15666123123 * static_cast<double>(i) + 1e34;
+      } else if (i % 50 < 10) {
+        values[3][i] = 1e-65 - 1e-76 * static_cast<double>(i);
+      } else if (i % 50 < 15) {
+        values[3][i] = 1e13 + 0.5123 * static_cast<double>(i);
+      } else {
+        values[3][i] = 15666123123123123123. * static_cast<double>(i) + 1e34;
+      }
+    }
+    compressed_sizes.push_back(816);
+
+    for (size_t i = 0; i < values.size(); i++) {
+      const auto& vec = values[i];
       std::stringstream encoded_stream;
       {
         laspp::OutStream ostream(encoded_stream);
@@ -85,6 +106,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           encoder.encode(ostream, laspp::GPSTime(value));
         }
       }
+
+      LASPP_ASSERT_EQ(encoded_stream.str().size(), compressed_sizes[i]);
 
       {
         laspp::InStream instream(encoded_stream);

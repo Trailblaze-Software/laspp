@@ -104,6 +104,7 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 #define LASPP_ASSERT_GE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, >=, <)
 #define LASPP_ASSERT_LE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, <=, >)
 #define LASPP_ASSERT_GT(expr, val) LASPP_ASSERT_BIN_OP(expr, val, >, <=)
+#define LASPP_ASSERT_LT(expr, val) LASPP_ASSERT_BIN_OP(expr, val, <, >=)
 #define LASPP_ASSERT_EQ(expr, val) LASPP_ASSERT_BIN_OP(expr, val, ==, !=)
 #define LASPP_ASSERT_NE(expr, val) LASPP_ASSERT_BIN_OP(expr, val, !=, ==)
 

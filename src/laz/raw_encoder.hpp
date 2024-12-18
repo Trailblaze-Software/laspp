@@ -48,7 +48,6 @@ inline void raw_encode(OutStream& out_stream, uint64_t bits, uint8_t n_bits) {
     return;
   }
 
-  out_stream.get_base();
   uint32_t resolution = out_stream.length() / (1u << n_bits);
 
   uint32_t bits_32 = static_cast<uint32_t>(bits);
