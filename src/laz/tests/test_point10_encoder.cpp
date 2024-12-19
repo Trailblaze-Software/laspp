@@ -65,26 +65,25 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                         .point_source_id = 1});
     std::mt19937 gen(0);
     std::uniform_int_distribution<int> int_dist;
-    std::uniform_int_distribution<uint8_t> uint8_dist;
     std::uniform_int_distribution<uint16_t> uint16_dist;
     for (size_t i = points.size(); i < 1000; i++) {
       const LASPointFormat0& prev = points.back();
       LASPointFormat0 next = prev;
-      uint8_t changed = uint8_dist(gen) % 64;
+      uint8_t changed = uint16_dist(gen) % 64;
       if (changed & (1 << 5)) {
-        next.bit_byte = uint8_dist(gen);
+        next.bit_byte = static_cast<uint8_t>(uint16_dist(gen));
       }
       if (changed & (1 << 4)) {
         next.intensity = uint16_dist(gen);
       }
       if (changed & (1 << 3)) {
-        next.classification_byte = uint8_dist(gen);
+        next.classification_byte = static_cast<uint8_t>(uint16_dist(gen));
       }
       if (changed & (1 << 2)) {
-        next.scan_angle_rank = uint8_dist(gen);
+        next.scan_angle_rank = static_cast<uint8_t>(uint16_dist(gen));
       }
       if (changed & (1 << 1)) {
-        next.user_data = uint8_dist(gen);
+        next.user_data = static_cast<uint8_t>(uint16_dist(gen));
       }
       if (changed & (1 << 0)) {
         next.point_source_id = uint16_dist(gen);
@@ -104,7 +103,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       }
     }
 
-    LASPP_ASSERT_EQ(encoded_stream.str().size(), 17336);
+    LASPP_ASSERT_EQ(encoded_stream.str().size(), 17341);
 
     {
       laspp::InStream instream(encoded_stream);

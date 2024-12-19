@@ -121,9 +121,16 @@ class LASPointFormat0Encoder {
     }
 
     // X
-    int32_t dx = m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].decode_int(stream) +
-                 m_dx_streamed_median[m_m].get_median();
-    m_dx_streamed_median[m_m].insert(dx);
+    int32_t decoded_int =
+        m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].decode_int(stream);
+#ifdef __clang__
+    volatile int32_t median = m_dx_streamed_median[m_m].get_median();
+#else
+    int32_t median = m_dx_streamed_median[m_m].get_median();
+#endif
+    atomic_signal_fence(std::memory_order_acq_rel);
+    int32_t dx = decoded_int + median;
+    m_dx_streamed_median[m_m].insert(decoded_int + median);
     m_last_las_point.x = m_last_las_point.x + dx;
 
     uint_fast16_t dx_k = m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].prev_k();
@@ -221,16 +228,16 @@ class LASPointFormat0Encoder {
 
     // X
     int32_t dx = las_point.x - m_last_las_point.x;
-    m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].encode_int(
+    m_dx_encoder[las_point.bit_byte.number_of_returns == 1].encode_int(
         out_stream, dx - m_dx_streamed_median[m_m].get_median());
     m_dx_streamed_median[m_m].insert(dx);
     m_last_las_point.x = las_point.x;
 
-    uint_fast16_t dx_k = m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].prev_k();
+    uint_fast16_t dx_k = m_dx_encoder[las_point.bit_byte.number_of_returns == 1].prev_k();
 
     // Y
     uint32_t dy_instance = (dx_k < 20) ? (dx_k & (~1u)) : 20;
-    if (m_last_las_point.bit_byte.number_of_returns == 1) {
+    if (las_point.bit_byte.number_of_returns == 1) {
       dy_instance++;
     }
     int32_t dy = las_point.y - m_last_las_point.y;
@@ -244,8 +251,8 @@ class LASPointFormat0Encoder {
     if (m_last_las_point.bit_byte.number_of_returns == 1) {
       dz_instance++;
     }
-    uint32_t l = static_cast<uint32_t>(std::abs(m_last_las_point.bit_byte.number_of_returns -
-                                                m_last_las_point.bit_byte.return_number));
+    uint32_t l = static_cast<uint32_t>(
+        std::abs(las_point.bit_byte.number_of_returns - las_point.bit_byte.return_number));
     int32_t dz = las_point.z - m_prev_dz[l];
     m_dz_encoder[dz_instance].encode_int(out_stream, dz);
     m_prev_dz[l] = las_point.z;

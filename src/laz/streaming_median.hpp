@@ -23,7 +23,12 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
+#include <iostream>
+#include <ostream>
+
+#include "utilities/printing.hpp"
 
 namespace laspp {
 
@@ -35,7 +40,7 @@ class StreamingMedian {
  public:
   StreamingMedian() : m_vals{0, 0, 0, 0, 0}, m_remove_largest(true) {}
 
-  void insert(T val) {
+  void insert(const T val) {
     bool next_remove_largest;
     if (val > get_median()) {
       next_remove_largest = false;
@@ -63,5 +68,11 @@ class StreamingMedian {
   }
 
   T get_median() { return m_vals[2]; }
+
+  const std::array<T, 5>& get_vals() const { return m_vals; }
+
+  friend std::ostream& operator<<(std::ostream& os, const StreamingMedian& sm) {
+    return os << sm.m_vals << " " << sm.m_remove_largest;
+  }
 };
 }  // namespace laspp
