@@ -140,8 +140,12 @@ class LASPointFormat0Encoder {
     if (m_last_las_point.bit_byte.number_of_returns == 1) {
       dy_instance++;
     }
-    int32_t dy =
-        m_dy_encoder[dy_instance].decode_int(stream) + m_dy_streamed_median[m_m].get_median();
+#ifdef __clang__
+    volatile int32_t median_y = m_dy_streamed_median[m_m].get_median();
+#else
+    int32_t median_y = m_dy_streamed_median[m_m].get_median();
+#endif
+    int32_t dy = m_dy_encoder[dy_instance].decode_int(stream) + median_y;
     m_last_las_point.y = m_last_las_point.y + dy;
     m_dy_streamed_median[m_m].insert(dy);
 
