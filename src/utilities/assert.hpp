@@ -68,7 +68,7 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
                                const std::optional<std::string> &message,
                                const std::source_location &loc = std::source_location::current()) {
   std::stringstream ss;
-  ss << "Blaze assertion failed: " << condition_str << (message ? " " + *message : "") << "\n in "
+  ss << "LAS++ assertion failed: " << condition_str << (message ? " " + *message : "") << "\n in "
      << loc.function_name() << " at " << loc.file_name() << ":" << loc.line() << std::endl;
   std::cerr << ss.str();
   throw std::runtime_error(ss.str());

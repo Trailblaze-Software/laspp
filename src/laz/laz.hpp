@@ -27,12 +27,12 @@
 #include <span>
 #include <variant>
 
+#include "chunktable.hpp"
 #include "las_point.hpp"
 #include "laz/byte_encoder.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
 #include "laz/stream.hpp"
-#include "lazchunktable.hpp"
 #include "lazvlr.hpp"
 
 namespace laspp {

@@ -82,10 +82,7 @@ int main(int argc, char* argv[]) {
 
   std::filesystem::path in_file(argv[1]);
   std::ifstream ifs(in_file, std::ios::binary);
-  if (!ifs) {
-    std::cerr << "Failed to open " << in_file << std::endl;
-    return 1;
-  }
+  LASPP_ASSERT(ifs.is_open(), "Failed to open ", in_file);
   laspp::LASReader reader(ifs);
   std::cout << reader.header() << std::endl;
 
@@ -100,11 +97,9 @@ int main(int argc, char* argv[]) {
   }
 
   std::filesystem::path out_file(argv[2]);
-  std::ofstream ofs(out_file, std::ios::binary);
-  if (!ofs) {
-    std::cerr << "Failed to open " << out_file << std::endl;
-    return 1;
-  }
+  std::fstream ofs;
+  ofs.open(out_file, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+  LASPP_ASSERT(ofs.is_open(), "Failed to open ", out_file);
 
   std::string out_extension = out_file.extension().string();
   bool laz_compress;

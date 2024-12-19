@@ -111,6 +111,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPointFormat0Encoder encoder(points.back());
       for (LASPointFormat0& point : points) {
         LASPP_ASSERT_EQ(encoder.decode(instream), point);
+        LASPP_ASSERT_EQ(encoder.last_value(), point);
       }
     }
   }

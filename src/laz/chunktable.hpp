@@ -37,8 +37,8 @@ namespace laspp {
 #pragma pack(push, 1)
 
 struct LASPP_PACKED LAZChunkTableHeader {
-  uint32_t version;  // 0
-  uint32_t number_of_chunks;
+  uint32_t version = 0;  // 0
+  uint32_t number_of_chunks = 0;
 
   friend std::ostream& operator<<(std::ostream& os, const LAZChunkTableHeader& chunk_header) {
     os << "Version: " << chunk_header.version << std::endl;
@@ -55,11 +55,16 @@ class LAZChunkTable : LAZChunkTableHeader {
   std::vector<size_t> m_decompressed_chunk_offsets;
 
  public:
-  explicit LAZChunkTable(std::istream& istream, size_t total_n_points,
-                         std::optional<uint32_t> constant_chunk_size)
+  explicit LAZChunkTable(std::istream& istream,
+                         std::optional<uint32_t> constant_chunk_size = std::nullopt,
+                         size_t total_n_points = 0)
       : m_constant_chunk_size(constant_chunk_size) {
     LASPP_CHECK_READ(istream.read(reinterpret_cast<char*>(this),
                                   static_cast<int64_t>(sizeof(LAZChunkTableHeader))));
+    if (constant_chunk_size)
+      LASPP_ASSERT_EQ(
+          (total_n_points + constant_chunk_size.value() - 1) / constant_chunk_size.value(),
+          number_of_chunks);
 
     InStream decoder(istream);
     IntegerEncoder<32> int_decoder;
@@ -76,7 +81,25 @@ class LAZChunkTable : LAZChunkTableHeader {
         m_decompressed_chunk_offsets.push_back(
             i == 0 ? 0 : m_decompressed_chunk_offsets[i - 1] + m_n_points_per_chunk[i - 1]);
       } else {
-        LASPP_UNIMPLEMENTED(...);
+        LASPP_UNIMPLEMENTED();
+      }
+    }
+  }
+
+  explicit LAZChunkTable() = default;
+
+  void write(std::iostream& ostream) const {
+    ostream.write(reinterpret_cast<const char*>(this),
+                  static_cast<int64_t>(sizeof(LAZChunkTableHeader)));
+    OutStream encoder(ostream);
+    IntegerEncoder<32> int_encoder;
+    for (size_t i = 0; i < number_of_chunks; i++) {
+      uint32_t previous_chunk_size = i == 0 ? 0u : m_compressed_chunk_size[i - 1];
+      if (m_constant_chunk_size) {
+        int_encoder.encode_int(
+            encoder, static_cast<int32_t>(m_compressed_chunk_size[i] - previous_chunk_size));
+      } else {
+        LASPP_UNIMPLEMENTED();
       }
     }
   }
@@ -85,17 +108,40 @@ class LAZChunkTable : LAZChunkTableHeader {
   size_t chunk_offset(size_t i) const { return m_compressed_chunk_offsets.at(i); }
   size_t compressed_chunk_size(size_t i) const { return m_compressed_chunk_size.at(i); }
 
+  void add_chunk(size_t num_points, uint32_t compressed_size) {
+    if (m_constant_chunk_size && m_compressed_chunk_size.size() > 0) {
+      if (m_n_points_per_chunk.back() != m_constant_chunk_size.value()) {
+        m_constant_chunk_size = std::nullopt;
+      }
+    } else if (m_n_points_per_chunk.size() == 0 && !m_constant_chunk_size) {
+      m_constant_chunk_size = num_points;
+    }
+    m_compressed_chunk_offsets.push_back(
+        m_compressed_chunk_offsets.empty()
+            ? 8
+            : (m_compressed_chunk_offsets.back() + m_compressed_chunk_size.back()));
+    m_compressed_chunk_size.push_back(compressed_size);
+    m_decompressed_chunk_offsets.push_back(m_decompressed_chunk_offsets.empty()
+                                               ? 0
+                                               : m_decompressed_chunk_offsets.back() +
+                                                     m_n_points_per_chunk.back());
+    m_n_points_per_chunk.push_back(num_points);
+    number_of_chunks++;
+  }
+
   const std::vector<size_t>& points_per_chunk() const { return m_n_points_per_chunk; }
   const std::vector<size_t>& decompressed_chunk_offsets() const {
     return m_decompressed_chunk_offsets;
   }
+  std::optional<uint32_t> constant_chunk_size() const { return m_constant_chunk_size; }
 
   friend std::ostream& operator<<(std::ostream& os, const LAZChunkTable& chunk_table) {
     os << static_cast<const LAZChunkTableHeader>(chunk_table) << std::endl;
     os << "Compressed chunk sizes: " << chunk_table.m_compressed_chunk_size << std::endl;
-    if (!chunk_table.m_constant_chunk_size) {
-      os << "# points by chunk: " << chunk_table.m_n_points_per_chunk << std::endl;
-    }
+    os << "Constant chunk size: " << chunk_table.m_constant_chunk_size << std::endl;
+    os << "Compressed chunk offsets: " << chunk_table.m_compressed_chunk_offsets << std::endl;
+    os << "Decompressed chunk offsets: " << chunk_table.m_decompressed_chunk_offsets << std::endl;
+    os << "# points by chunk: " << chunk_table.m_n_points_per_chunk << std::endl;
     return os;
   }
 };
