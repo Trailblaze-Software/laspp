@@ -141,7 +141,7 @@ struct LASPP_PACKED BitByte {
   uint8_t scan_direction_flag : 1;
   uint8_t edge_of_flight_line : 1;
 
-  operator uint8_t() { return *reinterpret_cast<uint8_t*>(this); }
+  operator uint8_t() const { return *reinterpret_cast<const uint8_t*>(this); }
 
   BitByte& operator=(const uint8_t byte) {
     *reinterpret_cast<uint8_t*>(this) = byte;
@@ -163,7 +163,7 @@ struct LASPP_PACKED ClassificationByte {
   uint8_t key_point : 1;
   uint8_t withheld : 1;
 
-  operator uint8_t() { return *reinterpret_cast<uint8_t*>(this); }
+  operator uint8_t() const { return *reinterpret_cast<const uint8_t*>(this); }
 
   ClassificationByte& operator=(const uint8_t byte) {
     *reinterpret_cast<uint8_t*>(this) = byte;
@@ -203,6 +203,15 @@ struct LASPP_PACKED LASPointFormat0 {
     os << "User data: " << static_cast<int>(point.user_data) << std::endl;
     os << "Point source ID: " << point.point_source_id << std::endl;
     return os;
+  }
+
+  bool operator==(const LASPointFormat0& other) const {
+    return x == other.x && y == other.y && z == other.z && intensity == other.intensity &&
+           static_cast<uint8_t>(bit_byte) == static_cast<uint8_t>(other.bit_byte) &&
+           static_cast<uint8_t>(classification_byte) ==
+               static_cast<uint8_t>(other.classification_byte) &&
+           scan_angle_rank == other.scan_angle_rank && user_data == other.user_data &&
+           point_source_id == other.point_source_id;
   }
 };
 
