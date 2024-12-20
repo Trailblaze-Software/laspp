@@ -122,7 +122,7 @@ class IntegerEncoder {
       if (val >= (1 << (k - 1))) {
         return val + 1;
       } else {
-        return val - ((1 << k) - 1);
+        return static_cast<int32_t>(static_cast<uint32_t>(val) - ((1u << k) - 1u));
       }
     } else {
       return std::numeric_limits<int32_t>::min();
@@ -145,7 +145,7 @@ class IntegerEncoder {
         return;
       }
       if (integer < 0) {
-        integer += (1 << k) - 1;
+        integer += (1u << k) - 1u;
       } else {
         integer -= 1;
       }

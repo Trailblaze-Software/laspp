@@ -53,7 +53,7 @@ class BitSymbolEncoder {
   BitSymbolEncoder()
       : bit_0_count(1), bit_count(2), bit_0_prob(4096), update_cycle(4), bits_until_update(4) {}
 
-  uint16_t decode_bit(InStream& stream) {
+  bool decode_bit(InStream& stream) {
     uint32_t value = stream.get_value();
 
     uint32_t mid = bit_0_prob * (stream.length() / (1u << 13));

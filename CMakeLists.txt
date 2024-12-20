@@ -80,6 +80,11 @@ elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     add_compile_options("-Werror")
   endif()
+  if(CMAKE_BUILD_TYPE MATCHES "Debug")
+    add_compile_options("-fsanitize=address,undefined"
+                        "-fno-sanitize-recover=all")
+    add_link_options("-lasan" "-lubsan")
+  endif()
   add_compile_options(
     "-fstrict-enums"
     "-Wall"

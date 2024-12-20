@@ -64,6 +64,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                         .user_data = 32,
                         .point_source_id = 1});
     std::mt19937 gen(0);
+    gen.seed(0);
     std::uniform_int_distribution<int> int_dist;
     std::uniform_int_distribution<uint16_t> uint16_dist;
     for (size_t i = points.size(); i < 1000; i++) {
@@ -104,6 +105,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     LASPP_ASSERT_EQ(encoded_stream.str().size(), 17341);
+    // LASPP_ASSERT_EQ(encoded_stream.str().size(), 17279);
 
     {
       laspp::InStream instream(encoded_stream);
