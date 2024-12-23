@@ -78,8 +78,8 @@ struct LASPP_PACKED LAZSpecialVLRPt1 {
     LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(this), sizeof(LAZSpecialVLRPt1)));
   }
 
-  explicit LAZSpecialVLRPt1(LAZCompressor compressor)
-      : compressor(compressor), compatibility_mode(false), options_reserved(0) {}
+  explicit LAZSpecialVLRPt1(LAZCompressor laz_compressor)
+      : compressor(laz_compressor), compatibility_mode(false), options_reserved(0) {}
 
   friend std::ostream& operator<<(std::ostream& os, const LAZSpecialVLRPt1& pt1) {
     os << "Compressor: " << pt1.compressor << std::endl;
@@ -259,14 +259,14 @@ struct LASPP_PACKED LAZItemRecord {
   uint16_t item_size;
   LAZItemVersion item_version;
 
-  explicit LAZItemRecord(LAZItemType item_type)
-      : item_type(item_type),
-        item_size(default_size(item_type)),
+  explicit LAZItemRecord(LAZItemType laz_item_type)
+      : item_type(laz_item_type),
+        item_size(default_size(laz_item_type)),
         item_version(LAZItemVersion::Version1) {}
 
-  LAZItemRecord(LAZItemType item_type, uint16_t item_size)
-      : item_type(item_type), item_size(item_size), item_version(LAZItemVersion::Version1) {
-    LASPP_ASSERT(check_size_from_type(item_type, item_size));
+  LAZItemRecord(LAZItemType laz_item_type, uint16_t laz_item_size)
+      : item_type(laz_item_type), item_size(laz_item_size), item_version(LAZItemVersion::Version1) {
+    LASPP_ASSERT(check_size_from_type(laz_item_type, laz_item_size));
   }
 
   LAZItemRecord() = default;
@@ -287,7 +287,7 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
     }
   }
 
-  LAZSpecialVLR(LAZCompressor compressor) : LAZSpecialVLRPt1(compressor) {}
+  explicit LAZSpecialVLR(LAZCompressor laz_compressor) : LAZSpecialVLRPt1(laz_compressor) {}
 
   void write_to(std::ostream& os) const {
     os.write(reinterpret_cast<const char*>(this), sizeof(LAZSpecialVLRPt1));

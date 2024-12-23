@@ -145,7 +145,7 @@ class IntegerEncoder {
         return;
       }
       if (integer < 0) {
-        integer += (1u << k) - 1u;
+        integer += static_cast<int32_t>((1u << k) - 1);
       } else {
         integer -= 1;
       }
