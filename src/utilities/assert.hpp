@@ -74,12 +74,13 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
   throw std::runtime_error(ss.str());
 }
 
-#define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)                                                  \
-  {                                                                                              \
-    const auto A = a;                                                                            \
-    const auto B = b;                                                                            \
-    if (!((A)op(B)))                                                                             \
-      laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop), laspp::OptionalString(__VA_ARGS__)); \
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)                                                 \
+  {                                                                                             \
+    const auto A = a;                                                                           \
+    const auto B = b;                                                                           \
+    if (!((A)op(B)))                                                                            \
+      laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop), laspp::OptionalString(__VA_ARGS__), \
+                              std::source_location::current());                                 \
   }
 
 template <typename A, typename B>

@@ -30,6 +30,12 @@
 
 namespace laspp {
 
+inline int32_t wrapping_int32_add(int32_t a, int32_t b) {
+  return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
+}
+
+inline int32_t wrapping_int32_sub(int32_t a, int32_t b) { return wrapping_int32_add(a, -b); }
+
 template <size_t N, typename T>
 constexpr std::array<T, N> create_array(const T& val) {
   std::array<T, N> arr;
@@ -125,13 +131,10 @@ class LASPointFormat0Encoder {
     // X
     int32_t decoded_int =
         m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].decode_int(stream);
-    int32_t dx =
-        static_cast<int32_t>(static_cast<uint32_t>(decoded_int) +
-                             static_cast<uint32_t>(m_dx_streamed_median[m_m].get_median()));
+    int32_t dx = wrapping_int32_add(decoded_int, m_dx_streamed_median[m_m].get_median());
     m_dx_streamed_median[m_m].insert(
-        static_cast<int32_t>(static_cast<uint32_t>(decoded_int) +
-                             static_cast<uint32_t>(m_dx_streamed_median[m_m].get_median())));
-    m_last_las_point.x = m_last_las_point.x + dx;
+        wrapping_int32_add(decoded_int, m_dx_streamed_median[m_m].get_median()));
+    m_last_las_point.x = wrapping_int32_add(m_last_las_point.x, dx);
 
     uint_fast16_t dx_k = m_dx_encoder[m_last_las_point.bit_byte.number_of_returns == 1].prev_k();
 
@@ -140,10 +143,9 @@ class LASPointFormat0Encoder {
     if (m_last_las_point.bit_byte.number_of_returns == 1) {
       dy_instance++;
     }
-    int32_t dy =
-        static_cast<int32_t>(static_cast<uint32_t>(m_dy_encoder[dy_instance].decode_int(stream)) +
-                             static_cast<uint32_t>(m_dy_streamed_median[m_m].get_median()));
-    m_last_las_point.y = m_last_las_point.y + dy;
+    int32_t dy = wrapping_int32_add(m_dy_encoder[dy_instance].decode_int(stream),
+                                    m_dy_streamed_median[m_m].get_median());
+    m_last_las_point.y = wrapping_int32_add(m_last_las_point.y, dy);
     m_dy_streamed_median[m_m].insert(dy);
 
     // Z
@@ -156,7 +158,7 @@ class LASPointFormat0Encoder {
     int32_t dz = m_dz_encoder[dz_instance].decode_int(stream);
     uint32_t l = static_cast<uint32_t>(std::abs(m_last_las_point.bit_byte.number_of_returns -
                                                 m_last_las_point.bit_byte.return_number));
-    m_last_las_point.z = m_prev_dz[l] + dz;
+    m_last_las_point.z = wrapping_int32_add(m_prev_dz[l], dz);
     m_prev_dz[l] = m_last_las_point.z;
 
     return m_last_las_point;
@@ -228,11 +230,9 @@ class LASPointFormat0Encoder {
     }
 
     // X
-    int32_t dx = las_point.x - m_last_las_point.x;
+    int32_t dx = wrapping_int32_sub(las_point.x, m_last_las_point.x);
     m_dx_encoder[las_point.bit_byte.number_of_returns == 1].encode_int(
-        out_stream,
-        static_cast<int32_t>(static_cast<uint32_t>(dx) -
-                             static_cast<uint32_t>(m_dx_streamed_median[m_m].get_median())));
+        out_stream, wrapping_int32_sub(dx, m_dx_streamed_median[m_m].get_median()));
     m_dx_streamed_median[m_m].insert(dx);
     m_last_las_point.x = las_point.x;
 
@@ -243,11 +243,9 @@ class LASPointFormat0Encoder {
     if (las_point.bit_byte.number_of_returns == 1) {
       dy_instance++;
     }
-    int32_t dy = las_point.y - m_last_las_point.y;
+    int32_t dy = wrapping_int32_sub(las_point.y, m_last_las_point.y);
     m_dy_encoder[dy_instance].encode_int(
-        out_stream,
-        static_cast<int32_t>(static_cast<uint32_t>(dy) -
-                             static_cast<uint32_t>(m_dy_streamed_median[m_m].get_median())));
+        out_stream, wrapping_int32_sub(dy, m_dy_streamed_median[m_m].get_median()));
     m_last_las_point.y = las_point.y;
     m_dy_streamed_median[m_m].insert(dy);
 
@@ -259,7 +257,7 @@ class LASPointFormat0Encoder {
     }
     uint32_t l = static_cast<uint32_t>(
         std::abs(las_point.bit_byte.number_of_returns - las_point.bit_byte.return_number));
-    int32_t dz = las_point.z - m_prev_dz[l];
+    int32_t dz = wrapping_int32_sub(las_point.z, m_prev_dz[l]);
     m_dz_encoder[dz_instance].encode_int(out_stream, dz);
     m_prev_dz[l] = las_point.z;
     m_last_las_point.z = las_point.z;
