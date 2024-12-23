@@ -33,7 +33,7 @@
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
 #include "laz/stream.hpp"
-#include "lazvlr.hpp"
+#include "laz_vlr.hpp"
 
 namespace laspp {
 

@@ -61,8 +61,10 @@ std::optional<std::string> OptionalString(Args &&...args) {
   }
 }
 
-#define LASPP_ASSERT(condition, ...) \
-  if (!(condition)) laspp::_LASPP_FAIL_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__));
+#define LASPP_ASSERT(condition, ...)                                          \
+  if (!(condition))                                                           \
+    laspp::_LASPP_FAIL_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__), \
+                              std::source_location::current());
 
 inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
                                const std::optional<std::string> &message,

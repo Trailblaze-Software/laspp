@@ -61,10 +61,7 @@ class LASReader {
       auto end_of_header_offset = std::ios_base::cur;
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
         if (record.is_laz_vlr()) {
-          LAZSpecialVLRPt1 laz_vlr_pt1;
-          LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&laz_vlr_pt1),
-                                               static_cast<int64_t>(sizeof(LAZSpecialVLRPt1))));
-          LAZSpecialVLR laz_vlr(laz_vlr_pt1, m_input_stream);
+          LAZSpecialVLR laz_vlr(m_input_stream);
           m_laz_data.emplace(LAZReader(laz_vlr));
         }
       }

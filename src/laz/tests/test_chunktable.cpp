@@ -50,5 +50,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   }
   LASPP_ASSERT_EQ(read_chunktable.constant_chunk_size(), 1000);
 
+  std::cout << read_chunktable << std::endl;
+
   return 0;
 }

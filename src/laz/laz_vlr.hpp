@@ -61,18 +61,25 @@ std::ostream& operator<<(std::ostream& os, const LAZCompressor& compressor) {
 
 struct LASPP_PACKED LAZSpecialVLRPt1 {
   LAZCompressor compressor;
-  uint16_t coder;  // 0 for arithmetic coder
-  uint8_t version_major;
-  uint8_t version_minor;
-  uint16_t version_revision;
-  uint32_t compatibility_mode : 1;
+  uint16_t coder = 0;  // 0 for arithmetic coder
+  uint8_t version_major = 1;
+  uint8_t version_minor = 4;
+  uint16_t version_revision = 0;
+  uint32_t compatibility_mode : 1;  // Store point formats 6-10 as 0-5 plus extra bytes
   uint32_t options_reserved : 31;
-  uint32_t chunk_size;
-  int64_t num_special_evlrs;        // reserved, -1
-  int64_t offset_of_special_evlrs;  // reserved, -1
-  uint16_t num_item_records;
+  uint32_t chunk_size = 0;
+  int64_t num_special_evlrs = -1;        // reserved, -1
+  int64_t offset_of_special_evlrs = -1;  // reserved, -1
+  uint16_t num_item_records = 0;
 
   bool adaptive_chunking() const { return chunk_size == std::numeric_limits<uint32_t>::max(); }
+
+  explicit LAZSpecialVLRPt1(std::istream& is) {
+    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(this), sizeof(LAZSpecialVLRPt1)));
+  }
+
+  explicit LAZSpecialVLRPt1(LAZCompressor compressor)
+      : compressor(compressor), compatibility_mode(false), options_reserved(0) {}
 
   friend std::ostream& operator<<(std::ostream& os, const LAZSpecialVLRPt1& pt1) {
     os << "Compressor: " << pt1.compressor << std::endl;
@@ -107,6 +114,42 @@ enum class LAZItemType : uint16_t {
   Byte14 = 14,
 };
 
+inline uint16_t default_size(LAZItemType type) {
+  switch (type) {
+    case LAZItemType::Byte:
+      return 1;
+    case LAZItemType::Short:
+      return 2;
+    case LAZItemType::Integer:
+      return 4;
+    case LAZItemType::Long:
+      return 8;
+    case LAZItemType::Float:
+      return 4;
+    case LAZItemType::Double:
+      return 8;
+    case LAZItemType::Point10:
+      return 20;
+    case LAZItemType::GPSTime11:
+      return 8;
+    case LAZItemType::RGB12:
+      return 6;
+    case LAZItemType::Wavepacket13:
+      return 29;
+    case LAZItemType::Point14:
+      return 30;
+    case LAZItemType::RGB14:
+      return 6;
+    case LAZItemType::RGBNIR14:
+      return 8;
+    case LAZItemType::Wavepacket14:
+      return 29;
+    case LAZItemType::Byte14:
+      return 1;
+  }
+  LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
+}
+
 inline bool check_size_from_type(LAZItemType type, uint16_t size) {
   if (size == 0) return false;
   switch (type) {
@@ -122,26 +165,11 @@ inline bool check_size_from_type(LAZItemType type, uint16_t size) {
       return size % 4 == 0;  // Spec says 8??
     case LAZItemType::Double:
       return size % 8 == 0;
-    case LAZItemType::Point10:
-      return size == 20;
-    case LAZItemType::GPSTime11:
-      return size == 8;
-    case LAZItemType::RGB12:
-      return size == 6;
-    case LAZItemType::Wavepacket13:
-      return size == 29;
-    case LAZItemType::Point14:
-      return size == 30;
-    case LAZItemType::RGB14:
-      return size == 6;
-    case LAZItemType::RGBNIR14:
-      return size == 8;
-    case LAZItemType::Wavepacket14:
-      return size == 29;
     case LAZItemType::Byte14:
       return true;
+    default:
+      return size == default_size(type);
   }
-  LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
 }
 
 inline std::ostream& operator<<(std::ostream& os, const LAZItemType& type) {
@@ -230,6 +258,18 @@ struct LASPP_PACKED LAZItemRecord {
   LAZItemType item_type;
   uint16_t item_size;
   LAZItemVersion item_version;
+
+  explicit LAZItemRecord(LAZItemType item_type)
+      : item_type(item_type),
+        item_size(default_size(item_type)),
+        item_version(LAZItemVersion::Version1) {}
+
+  LAZItemRecord(LAZItemType item_type, uint16_t item_size)
+      : item_type(item_type), item_size(item_size), item_version(LAZItemVersion::Version1) {
+    LASPP_ASSERT(check_size_from_type(item_type, item_size));
+  }
+
+  LAZItemRecord() = default;
 };
 
 #pragma pack(pop)
@@ -237,15 +277,28 @@ struct LASPP_PACKED LAZItemRecord {
 struct LAZSpecialVLR : LAZSpecialVLRPt1 {
   std::vector<LAZItemRecord> items_records;
 
-  LAZSpecialVLR(const LAZSpecialVLRPt1& pt1, std::istream& is)
-      : LAZSpecialVLRPt1(pt1), items_records(pt1.num_item_records) {
+  explicit LAZSpecialVLR(std::istream& is) : LAZSpecialVLRPt1(is), items_records(num_item_records) {
     for (auto& item : items_records) {
       LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
       if (is.fail()) {
         throw std::runtime_error("LASPP_FAILed to read LAZ item record");
       }
-      assert(check_size_from_type(item.item_type, item.item_size));
+      LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
     }
+  }
+
+  LAZSpecialVLR(LAZCompressor compressor) : LAZSpecialVLRPt1(compressor) {}
+
+  void write_to(std::ostream& os) const {
+    os.write(reinterpret_cast<const char*>(this), sizeof(LAZSpecialVLRPt1));
+    for (const auto& item : items_records) {
+      os.write(reinterpret_cast<const char*>(&item), sizeof(LAZItemRecord));
+    }
+  }
+
+  void add_item_record(LAZItemRecord item) {
+    items_records.push_back(item);
+    num_item_records = static_cast<uint16_t>(items_records.size());
   }
 
   friend std::ostream& operator<<(std::ostream& os, const LAZSpecialVLR& vlr) {
