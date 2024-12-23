@@ -270,6 +270,13 @@ struct LASPP_PACKED LAZItemRecord {
   }
 
   LAZItemRecord() = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LAZItemRecord& record) {
+    os << "Item type: " << record.item_type << std::endl;
+    os << "Item size: " << record.item_size << std::endl;
+    os << "Item version: " << record.item_version << std::endl;
+    return os;
+  }
 };
 
 #pragma pack(pop)
@@ -280,9 +287,6 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
   explicit LAZSpecialVLR(std::istream& is) : LAZSpecialVLRPt1(is), items_records(num_item_records) {
     for (auto& item : items_records) {
       LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
-      if (is.fail()) {
-        throw std::runtime_error("LASPP_FAILed to read LAZ item record");
-      }
       LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
     }
   }
