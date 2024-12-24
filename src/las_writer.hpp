@@ -27,6 +27,7 @@
 
 #include "las_header.hpp"
 #include "las_point.hpp"
+#include "laz/laz_writer.hpp"
 #include "utilities/assert.hpp"
 #include "vlr.hpp"
 
@@ -65,8 +66,7 @@ class LASWriter {
 
   void write_header() {
     m_output_stream.seekp(0);
-    m_output_stream.write(reinterpret_cast<const char*>(&m_header),
-                          static_cast<int64_t>(m_header.size()));
+    m_header.write(m_output_stream);
   }
 
  public:

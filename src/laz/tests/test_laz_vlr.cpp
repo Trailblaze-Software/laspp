@@ -83,6 +83,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         LASPP_ASSERT_THROWS(laz_vlr.add_item_record(LAZItemRecord(LAZItemType, 1)),
                             std::runtime_error);
       }
+      LASPP_ASSERT_THROWS(laz_vlr.add_item_record(LAZItemRecord(static_cast<LAZItemType>(15))),
+                          std::runtime_error);
       laz_vlr.write_to(stream);
     }
 

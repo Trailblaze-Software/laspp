@@ -25,11 +25,11 @@
 #include <cstdint>
 #include <limits>
 #include <span>
-#include <variant>
 
 #include "chunktable.hpp"
 #include "las_point.hpp"
 #include "laz/byte_encoder.hpp"
+#include "laz/encoders.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
 #include "laz/stream.hpp"
@@ -37,20 +37,8 @@
 
 namespace laspp {
 
-class PointerStreamBuffer : public std::streambuf {
- public:
-  PointerStreamBuffer(std::byte* data, size_t size) {
-    setg(reinterpret_cast<char*>(data), reinterpret_cast<char*>(data),
-         reinterpret_cast<char*>(data + size));
-  }
-};
-
-typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, BytesEncoder> LAZEncoder;
-
 class LAZReader {
   LAZSpecialVLR m_special_vlr;
-
- public:  // make private
   std::optional<LAZChunkTable> m_chunk_table;
 
  public:
@@ -62,6 +50,21 @@ class LAZReader {
     }
     return m_special_vlr.chunk_size;
   }
+
+  void read_chunk_table(std::istream& in_stream, size_t n_points) {
+    int64_t chunk_table_offset;
+    LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&chunk_table_offset),
+                                    static_cast<int64_t>(sizeof(size_t))));
+    if (chunk_table_offset == -1) {
+      LASPP_UNIMPLEMENTED("Reading chunk table from LAS file");
+    }
+
+    in_stream.seekg(chunk_table_offset);
+
+    m_chunk_table.emplace(LAZChunkTable(in_stream, chunk_size(), n_points));
+  }
+
+  const LAZChunkTable& chunk_table() const { return m_chunk_table.value(); }
 
   template <typename T>
   std::span<T> decompress_chunk(std::span<std::byte> compressed_data,
@@ -98,7 +101,6 @@ class LAZReader {
     PointerStreamBuffer compressed_buffer(compressed_data.data(), compressed_data.size());
     std::istream compressed_stream(&compressed_buffer);
     InStream compressed_in_stream(compressed_stream);
-    std::vector<std::byte> next_bytes;
     for (size_t i = 0; i < decompressed_data.size(); i++) {
       for (LAZEncoder& laz_encoder : encoders) {
         std::visit(

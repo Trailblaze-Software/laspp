@@ -32,6 +32,14 @@
 
 namespace laspp {
 
+class PointerStreamBuffer : public std::streambuf {
+ public:
+  PointerStreamBuffer(std::byte* data, size_t size) {
+    setg(reinterpret_cast<char*>(data), reinterpret_cast<char*>(data),
+         reinterpret_cast<char*>(data + size));
+  }
+};
+
 // #define BORING_VERSION
 
 struct StreamVariables {

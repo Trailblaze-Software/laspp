@@ -26,20 +26,27 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <span>
 #include <sstream>
 
 #include "las_point.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/macros.hpp"
 
 namespace laspp {
 
+template <typename T, size_t N>
+std::array<T, N> to_array(const T(arr)[N]) {
+  std::array<T, N> ret;
+  std::memcpy(ret.begin(), arr, N);
+  return ret;
+}
+
 class LASWriter;
 
-#pragma pack(push, 1)
 enum GlobalEncoding : uint16_t {
   GPS_TIME = 2 << 0,
   WAVEFORM_DATA_INTERNAL = 2 << 1,
@@ -58,7 +65,7 @@ inline std::string global_encoding_string(const uint16_t& encoding) {
   return ss.str();
 }
 
-class LASPP_PACKED Vector3D {
+class Vector3D {
   std::array<double, 3> m_data;
 
  public:
@@ -66,15 +73,25 @@ class LASPP_PACKED Vector3D {
   double& y() { return m_data[1]; }
   double& z() { return m_data[2]; }
 
+  explicit Vector3D(std::istream& in_stream) {
+    LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
+  }
+
+  Vector3D() = default;
+
   friend std::ostream& operator<<(std::ostream& os, const Vector3D& vec) {
     os << "(" << vec.m_data[0] << ", " << vec.m_data[1] << ", " << vec.m_data[2] << ")";
     return os;
   }
 };
 
-struct LASPP_PACKED Transform {
+struct Transform {
   Vector3D m_scale_factors;
   Vector3D m_offsets;
+
+  explicit Transform(std::istream& in_stream) : m_scale_factors(in_stream), m_offsets(in_stream) {}
+
+  Transform() = default;
 
   friend std::ostream& operator<<(std::ostream& os, const Transform& transform) {
     os << "Scale factors: " << transform.m_scale_factors << std::endl;
@@ -102,7 +119,46 @@ std::string arr_to_string(const T (&arr)[N]) {
   return ss.str();
 }
 
-class LASPP_PACKED LASHeader {
+#pragma pack(push, 1)
+struct LASPP_PACKED LASHeaderPacked {
+  char m_file_signature[4];
+  uint16_t m_file_source_id;
+  uint16_t m_global_encoding;
+  uint32_t m_project_id_1;
+  uint16_t m_project_id_2;
+  uint16_t m_project_id_3;
+  uint8_t m_project_id_4[8];
+  uint8_t m_version_major;
+  uint8_t m_version_minor;
+  char m_system_id[32];
+  char m_generating_software[32];
+  uint16_t m_file_creation_day;
+  uint16_t m_file_creation_year;
+  uint16_t m_header_size;
+  uint32_t m_offset_to_point_data;
+  uint32_t m_number_of_variable_length_records;
+  uint8_t m_point_data_record_format;
+  uint16_t m_point_data_record_length;
+  uint32_t m_legacy_number_of_point_records;
+  uint32_t m_legacy_number_of_points_by_return[5];
+  Transform m_transform;
+  double m_max_x;
+  double m_min_x;
+  double m_max_y;
+  double m_min_y;
+  double m_max_z;
+  double m_min_z;
+  uint64_t m_start_of_waveform_data_packet_record;
+  uint64_t m_start_of_first_extended_variable_length_record;
+  uint32_t m_number_of_extended_variable_length_records;
+  uint64_t m_number_of_point_records;
+  uint64_t m_number_of_points_by_return[15];
+};
+#pragma pack(pop)
+
+static_assert(sizeof(LASHeaderPacked) == 375);
+
+class LASHeader {
   char m_file_signature[4] = {'L', 'A', 'S', 'F'};
   uint16_t m_file_source_id = 0;
   uint16_t m_global_encoding = 0;
@@ -116,7 +172,7 @@ class LASPP_PACKED LASHeader {
   char m_generating_software[32] = {'\0'};
   uint16_t m_file_creation_day = 0;
   uint16_t m_file_creation_year = 0;
-  uint16_t m_header_size = sizeof(LASHeader);
+  uint16_t m_header_size = sizeof(LASHeaderPacked);
   uint32_t m_offset_to_point_data = 0;
   uint32_t m_number_of_variable_length_records = 0;
   uint8_t m_point_data_record_format = 127;
@@ -137,11 +193,52 @@ class LASPP_PACKED LASHeader {
   uint64_t m_number_of_point_records = 0;
   uint64_t m_number_of_points_by_return[15] = {0};
 
+  template <typename F>
+  void apply_all_in_order(F f) {
+    f(m_file_signature);
+    f(m_file_source_id);
+    f(m_global_encoding);
+    f(m_project_id_1);
+    f(m_project_id_2);
+    f(m_project_id_3);
+    f(m_project_id_4);
+    f(m_version_major);
+    f(m_version_minor);
+    f(m_system_id);
+    f(m_generating_software);
+    f(m_file_creation_day);
+    f(m_file_creation_year);
+    f(m_header_size);
+    f(m_offset_to_point_data);
+    f(m_number_of_variable_length_records);
+    f(m_point_data_record_format);
+    f(m_point_data_record_length);
+    f(m_legacy_number_of_point_records);
+    f(m_legacy_number_of_points_by_return);
+    f(m_transform);
+    f(m_max_x);
+    f(m_min_x);
+    f(m_max_y);
+    f(m_min_y);
+    f(m_max_z);
+    f(m_min_z);
+    f(m_start_of_waveform_data_packet_record);
+    f(m_start_of_first_extended_variable_length_record);
+    f(m_number_of_extended_variable_length_records);
+    f(m_number_of_point_records);
+    f(m_number_of_points_by_return);
+  }
+
  public:
-  static LASHeader FromFile(std::ifstream& file) {
-    LASHeader header;
-    LASPP_CHECK_READ(file.read(reinterpret_cast<char*>(&header), sizeof(LASHeader)));
-    return header;
+  explicit LASHeader(std::istream& in_stream) {
+    apply_all_in_order([&](auto& val) {
+      LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&val), sizeof(val)));
+    });
+  }
+
+  void write(std::ostream& out_stream) const {
+    const_cast<LASHeader*>(this)->apply_all_in_order(
+        [&](auto& val) { out_stream.write(reinterpret_cast<const char*>(&val), sizeof(val)); });
   }
 
   LASHeader() {
@@ -243,7 +340,7 @@ class LASPP_PACKED LASHeader {
     os << "Legacy number of point records: " << header.m_legacy_number_of_point_records
        << std::endl;
     os << "Legacy number of points by return: "
-       << arr_to_string(header.m_legacy_number_of_points_by_return) << std::endl;
+       << to_array<uint32_t, 5>(header.m_legacy_number_of_points_by_return) << std::endl;
     os << header.m_transform;
     os << "Max X: " << header.m_max_x << std::endl;
     os << "Max Y: " << header.m_max_y << std::endl;
@@ -265,7 +362,5 @@ class LASPP_PACKED LASHeader {
 
   friend LASWriter;
 };
-
-#pragma pack(pop)
 
 }  // namespace laspp
