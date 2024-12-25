@@ -38,13 +38,6 @@
 
 namespace laspp {
 
-template <typename T, size_t N>
-std::array<T, N> to_array(const T(arr)[N]) {
-  std::array<T, N> ret;
-  std::memcpy(ret.begin(), arr, N);
-  return ret;
-}
-
 class LASWriter;
 
 enum GlobalEncoding : uint16_t {
@@ -141,7 +134,12 @@ struct LASPP_PACKED LASHeaderPacked {
   uint16_t m_point_data_record_length;
   uint32_t m_legacy_number_of_point_records;
   uint32_t m_legacy_number_of_points_by_return[5];
-  Transform m_transform;
+  double m_scale_x;
+  double m_scale_y;
+  double m_scale_z;
+  double m_offset_x;
+  double m_offset_y;
+  double m_offset_z;
   double m_max_x;
   double m_min_x;
   double m_max_y;
@@ -340,7 +338,7 @@ class LASHeader {
     os << "Legacy number of point records: " << header.m_legacy_number_of_point_records
        << std::endl;
     os << "Legacy number of points by return: "
-       << to_array<uint32_t, 5>(header.m_legacy_number_of_points_by_return) << std::endl;
+       << arr_to_string(header.m_legacy_number_of_points_by_return) << std::endl;
     os << header.m_transform;
     os << "Max X: " << header.m_max_x << std::endl;
     os << "Max Y: " << header.m_max_y << std::endl;
