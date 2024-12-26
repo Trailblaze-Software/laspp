@@ -72,22 +72,26 @@ class LAZChunkTable : LAZChunkTableHeader {
     }
 
     InStream decoder(istream);
-    IntegerEncoder<32> int_decoder;
+    IntegerEncoder<32> compressed_size_int_decoder;
+    IntegerEncoder<32> n_points_int_decoder;
     for (size_t i = 0; i < number_of_chunks; i++) {
-      uint32_t decoded_int = static_cast<uint32_t>(int_decoder.decode_int(decoder));
+      if (m_constant_chunk_size) {
+        m_n_points_per_chunk.push_back(
+            i == number_of_chunks - 1
+                ? static_cast<uint32_t>(total_n_points - i * constant_chunk_size.value())
+                : constant_chunk_size.value());
+      } else {
+        uint32_t decoded_int = static_cast<uint32_t>(n_points_int_decoder.decode_int(decoder));
+        uint32_t previous_int = i == 0 ? 0u : static_cast<uint32_t>(m_n_points_per_chunk[i - 1]);
+        m_n_points_per_chunk.push_back(decoded_int + previous_int);
+      }
+      m_decompressed_chunk_offsets.push_back(
+          i == 0 ? 0 : m_decompressed_chunk_offsets[i - 1] + m_n_points_per_chunk[i - 1]);
+      uint32_t decoded_int = static_cast<uint32_t>(compressed_size_int_decoder.decode_int(decoder));
       uint32_t previous_int = i == 0 ? 0u : m_compressed_chunk_size[i - 1];
       m_compressed_chunk_size.push_back(decoded_int + previous_int);
       m_compressed_chunk_offsets.push_back(
           i == 0 ? 8 : m_compressed_chunk_offsets[i - 1] + m_compressed_chunk_size[i - 1]);
-      if (m_constant_chunk_size) {
-        m_n_points_per_chunk.push_back(i == number_of_chunks - 1
-                                           ? total_n_points - i * constant_chunk_size.value()
-                                           : constant_chunk_size.value());
-        m_decompressed_chunk_offsets.push_back(
-            i == 0 ? 0 : m_decompressed_chunk_offsets[i - 1] + m_n_points_per_chunk[i - 1]);
-      } else {
-        LASPP_UNIMPLEMENTED();
-      }
     }
   }
 
@@ -97,15 +101,18 @@ class LAZChunkTable : LAZChunkTableHeader {
     ostream.write(reinterpret_cast<const char*>(this),
                   static_cast<int64_t>(sizeof(LAZChunkTableHeader)));
     OutStream encoder(ostream);
-    IntegerEncoder<32> int_encoder;
+    IntegerEncoder<32> compressed_chunk_size_int_encoder;
+    IntegerEncoder<32> n_points_int_encoder;
     for (size_t i = 0; i < number_of_chunks; i++) {
-      uint32_t previous_chunk_size = i == 0 ? 0u : m_compressed_chunk_size[i - 1];
-      if (m_constant_chunk_size) {
-        int_encoder.encode_int(
-            encoder, static_cast<int32_t>(m_compressed_chunk_size[i] - previous_chunk_size));
-      } else {
-        LASPP_UNIMPLEMENTED();
+      if (!m_constant_chunk_size.has_value()) {
+        uint32_t previous_n_points =
+            i == 0 ? 0u : static_cast<uint32_t>(m_n_points_per_chunk[i - 1]);
+        n_points_int_encoder.encode_int(
+            encoder, static_cast<int32_t>(m_n_points_per_chunk[i] - previous_n_points));
       }
+      uint32_t previous_chunk_size = i == 0 ? 0u : m_compressed_chunk_size[i - 1];
+      compressed_chunk_size_int_encoder.encode_int(
+          encoder, static_cast<int32_t>(m_compressed_chunk_size[i] - previous_chunk_size));
     }
   }
 
@@ -113,7 +120,7 @@ class LAZChunkTable : LAZChunkTableHeader {
   size_t chunk_offset(size_t i) const { return m_compressed_chunk_offsets.at(i); }
   size_t compressed_chunk_size(size_t i) const { return m_compressed_chunk_size.at(i); }
 
-  void add_chunk(size_t num_points, uint32_t compressed_size) {
+  void add_chunk(uint32_t num_points, uint32_t compressed_size) {
     if (m_constant_chunk_size && m_compressed_chunk_size.size() > 0) {
       if (m_n_points_per_chunk.back() != m_constant_chunk_size.value()) {
         m_constant_chunk_size = std::nullopt;
