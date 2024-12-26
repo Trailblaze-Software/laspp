@@ -205,14 +205,7 @@ struct LASPP_PACKED LASPointFormat0 {
     return os;
   }
 
-  bool operator==(const LASPointFormat0& other) const {
-    return x == other.x && y == other.y && z == other.z && intensity == other.intensity &&
-           static_cast<uint8_t>(bit_byte) == static_cast<uint8_t>(other.bit_byte) &&
-           static_cast<uint8_t>(classification_byte) ==
-               static_cast<uint8_t>(other.classification_byte) &&
-           scan_angle_rank == other.scan_angle_rank && user_data == other.user_data &&
-           point_source_id == other.point_source_id;
-  }
+  bool operator==(const LASPointFormat0& other) const = default;
 };
 
 typedef union {
@@ -239,6 +232,8 @@ struct LASPP_PACKED GPSTime {
 };
 
 struct LASPP_PACKED LASPointFormat1 : LASPointFormat0, GPSTime {
+  bool operator==(const LASPointFormat1& other) const = default;
+
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat1& lpf1) {
     return os << static_cast<const LASPointFormat0&>(lpf1) << static_cast<const GPSTime&>(lpf1)
               << std::endl;
@@ -249,11 +244,17 @@ struct LASPP_PACKED ColorData {
   uint16_t red;
   uint16_t green;
   uint16_t blue;
+
+  bool operator==(const ColorData& other) const = default;
 };
 
-struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {};
+struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {
+  bool operator==(const LASPointFormat2& other) const = default;
+};
 
-struct LASPP_PACKED LASPointFormat3 : LASPointFormat1, ColorData {};
+struct LASPP_PACKED LASPointFormat3 : LASPointFormat1, ColorData {
+  bool operator==(const LASPointFormat3& other) const = default;
+};
 
 struct LASPP_PACKED WavePacketData {
   uint8_t wave_packet_descriptor_index;
@@ -263,11 +264,17 @@ struct LASPP_PACKED WavePacketData {
   float x_t;
   float y_t;
   float z_t;
+
+  bool operator==(const WavePacketData& other) const = default;
 };
 
-struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {};
+struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {
+  bool operator==(const LASPointFormat4& other) const = default;
+};
 
-struct LASPP_PACKED LASPointFormat5 : LASPointFormat3, WavePacketData {};
+struct LASPP_PACKED LASPointFormat5 : LASPointFormat3, WavePacketData {
+  bool operator==(const LASPointFormat5& other) const = default;
+};
 
 struct LASPP_PACKED LASPointFormat6 {
   int32_t x;
@@ -303,18 +310,26 @@ struct LASPP_PACKED LASPointFormat6 {
     os << "Point source ID: " << point.point_source_id << std::endl;
     return os;
   }
+
+  bool operator==(const LASPointFormat6& other) const = default;
 };
 
-struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {};
+struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
+  bool operator==(const LASPointFormat7& other) const = default;
+};
 
 struct LASPP_PACKED LASPointFormat8 : LASPointFormat7 {
   uint16_t NIR;
 };
 
-struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {};
+struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
+  bool operator==(const LASPointFormat9& other) const = default;
+};
 
 struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData {
   uint16_t NIR;
+
+  bool operator==(const LASPointFormat10& other) const = default;
 };
 
 #define LASPP_SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \

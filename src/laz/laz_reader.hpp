@@ -41,15 +41,15 @@ class LAZReader {
   LAZSpecialVLR m_special_vlr;
   std::optional<LAZChunkTable> m_chunk_table;
 
- public:
-  explicit LAZReader(const LAZSpecialVLR& special_vlr) : m_special_vlr(special_vlr) {}
-
   std::optional<size_t> chunk_size() const {
     if (m_special_vlr.chunk_size == std::numeric_limits<uint32_t>::max()) {
       return std::nullopt;
     }
     return m_special_vlr.chunk_size;
   }
+
+ public:
+  explicit LAZReader(const LAZSpecialVLR& special_vlr) : m_special_vlr(special_vlr) {}
 
   void read_chunk_table(std::istream& in_stream, size_t n_points) {
     int64_t chunk_table_offset;
