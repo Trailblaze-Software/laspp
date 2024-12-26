@@ -147,7 +147,7 @@ class InStream : StreamVariables {
     if (buffer_idx == BUFFER_SIZE) {
       m_stream.read(reinterpret_cast<char*>(m_buffer.data()), sizeof(m_buffer));
       if (!m_stream) {
-        valid_elements = m_stream.gcount() / 4 + 1;
+        valid_elements = (m_stream.gcount() + 3) / 4;
       }
       buffer_idx = 0;
     }
@@ -227,6 +227,8 @@ class InStream : StreamVariables {
     }
     return m_value;
   }
+
+  std::istream& stream() { return m_stream; }
 };
 #endif
 

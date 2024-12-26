@@ -24,6 +24,7 @@
 #include <span>
 #include <sstream>
 
+#include "las_point.hpp"
 #include "laz/chunktable.hpp"
 #include "laz/encoders.hpp"
 #include "laz/point10_encoder.hpp"
@@ -48,9 +49,10 @@ class LAZWriter {
   }
 
   const LAZSpecialVLR& special_vlr() const { return m_special_vlr; }
+  LAZSpecialVLR& special_vlr() { return m_special_vlr; }
 
   template <typename T>
-  std::stringstream compress_chunk(std::span<T> points) {
+  std::stringstream compress_chunk(const std::span<T>& points) {
     std::stringstream compressed_data;
 
     std::vector<LAZEncoder> encoders;
@@ -97,7 +99,9 @@ class LAZWriter {
       for (LAZEncoder& laz_encoder : encoders) {
         std::visit(
             [&compressed_out_stream, &points, &i](auto&& encoder) {
-              if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {
+              if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
+                                                   decltype(encoder.last_value())>>,
+                                               T>()) {
                 decltype(encoder.last_value()) value_to_encode = points[i];
                 encoder.encode(compressed_out_stream, value_to_encode);
               }
@@ -108,14 +112,23 @@ class LAZWriter {
     return compressed_data;
   }
 
+  template <typename T>
+  void write_chunk(const std::span<T>& points) {
+    std::stringstream compressed_chunk = compress_chunk(points);
+    int64_t compressed_chunk_size = compressed_chunk.tellp();
+    LASPP_ASSERT_LT(points.size(), std::numeric_limits<uint32_t>::max());
+    LASPP_ASSERT_LT(compressed_chunk_size, std::numeric_limits<uint32_t>::max());
+    m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
+                            static_cast<uint32_t>(compressed_chunk_size));
+    m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
+    m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
+                                   ? m_chunk_table.constant_chunk_size().value()
+                                   : std::numeric_limits<uint32_t>::max();
+  }
+
   ~LAZWriter() {
     int64_t chunk_table_offset = m_stream.tellp();
-    std::cout << "Writing chunk table: " << m_chunk_table << std::endl;
-    std::cout << "Chunk table offset: " << chunk_table_offset << " " << m_stream.tellp()
-              << std::endl;
     m_chunk_table.write(m_stream);
-    std::cout << "Chunk table offset: " << chunk_table_offset << " " << m_stream.tellp()
-              << std::endl;
     m_stream.seekp(m_initial_stream_offset);
     m_stream.write(reinterpret_cast<const char*>(&chunk_table_offset), sizeof(chunk_table_offset));
     m_stream.seekp(0, std::ios::end);

@@ -25,6 +25,7 @@
 #include <iostream>
 #include <optional>
 #include <set>
+#include <span>
 #include <tuple>
 #include <vector>
 
@@ -35,7 +36,7 @@ inline std::ostream& operator<<(std::ostream& os, const std::byte& b) {
 };
 
 template <typename T>
-inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
+inline std::ostream& operator<<(std::ostream& os, const std::span<T>& vec) {
   os << "[";
   for (size_t i = 0; i < vec.size(); i++) {
     os << vec[i];
@@ -44,6 +45,11 @@ inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
     }
   }
   return os << "]";
+}
+
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
+  return os << std::span<const T>(vec);
 }
 
 template <typename T, size_t N>
