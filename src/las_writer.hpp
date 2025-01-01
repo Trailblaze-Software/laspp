@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2024 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2024-2025 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -13,7 +13,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public License along
  * with this library; if not, write to the Free Software Foundation, Inc., 51
- * Franklin Street, Fifth Floor, Boston, MA 02110-2024 USA
+ * Franklin Street, Fifth Floor, Boston, MA 02110-2024-2025 USA
  *
  * For LGPL2 incompatible licensing or development requests, please contact
  * trailblaze.software@gmail.com
@@ -72,10 +72,11 @@ class LASWriter {
  public:
   explicit LASWriter(std::iostream& ofs, uint8_t point_format, uint16_t num_extra_bytes = 0)
       : m_output_stream(ofs) {
+    LASPP_ASSERT_EQ(num_extra_bytes, 0);
     header().set_point_format(point_format, num_extra_bytes);
     header().m_offset_to_point_data = static_cast<uint32_t>(header().size());
-    m_output_stream.seekp(static_cast<int64_t>(header().size()));
-    LASPP_ASSERT_EQ(num_extra_bytes, 0);
+    // placeholder
+    header().write(m_output_stream);
   }
 
   const LASHeader& header() const { return m_header; }
@@ -189,6 +190,7 @@ class LASWriter {
     }
   }
 
+ private:
   void write_chunktable() {
     if (header().is_laz_compressed() && !m_written_chunktable) {
       LASPP_ASSERT_LE(m_stage, WritingStage::CHUNKTABLE);
@@ -198,6 +200,7 @@ class LASWriter {
     }
   }
 
+ public:
   void write_evlr(const LASEVLR& evlr, const std::vector<std::byte>& data) {
     write_chunktable();
     LASPP_ASSERT_LE(m_stage, WritingStage::EVLRS);
