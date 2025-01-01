@@ -18,6 +18,7 @@
 
 #include "las_reader.hpp"
 #include "las_writer.hpp"
+#include "vlr.hpp"
 using namespace laspp;
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
@@ -32,6 +33,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         points.emplace_back();
         points.back().x = static_cast<int32_t>(i);
       }
+
+      writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
+
       writer.write_points(std::span<LASPointFormat0>(points));
 
       LASPP_ASSERT_THROWS(writer.write_vlr(LASVLR(), std::vector<std::byte>()), std::runtime_error);
@@ -42,7 +46,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPP_ASSERT_EQ(reader.header().num_points(), 100);
       LASPP_ASSERT_EQ(reader.header().point_format(), 0);
       LASPP_ASSERT_EQ(reader.header().point_data_record_length(), 20);
-      LASPP_ASSERT_EQ(reader.header().offset_to_point_data(), 375);
+
+      const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
+      LASPP_ASSERT_EQ(vlrs.size(), 1);
+      LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
+
+      LASPP_ASSERT_EQ(reader.header().offset_to_point_data(), 375 + sizeof(LASVLR));
 
       std::vector<LASPointFormat0> points(100);
       reader.read_chunk(std::span<LASPointFormat0>(points), 0);
