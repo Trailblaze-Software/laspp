@@ -92,6 +92,7 @@ class LASWriter {
  private:
   template <typename PointType, typename T>
   void t_write_points(const std::span<T>& points) {
+    LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
     LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
     m_stage = WritingStage::POINTS;
     LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_output_stream.tellp());
@@ -173,7 +174,6 @@ class LASWriter {
               << sizeof(PointType) * points_to_write.size() << " B)" << std::endl;
     m_output_stream.write(reinterpret_cast<const char*>(points_to_write.data()),
                           static_cast<int64_t>(points_to_write.size() * sizeof(PointType)));
-    LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
   }
 
  public:

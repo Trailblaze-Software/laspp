@@ -118,6 +118,7 @@ class LASReader {
  private:
   template <typename PointType, typename T>
   void read_points(std::span<T> points) {
+    LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
     for (size_t i = 0; i < points.size(); i++) {
       PointType las_point;
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&las_point),
@@ -131,6 +132,8 @@ class LASReader {
       }
       if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<T, GPSTime>()) {
         points[i] = static_cast<GPSTime&>(las_point);
+      } else if constexpr (std::is_base_of_v<GPSTime, T> && std::is_base_of_v<GPSTime, PointType>) {
+        static_cast<GPSTime&>(points[i]) = static_cast<GPSTime&>(las_point);
       }
       m_input_stream.seekg(
           static_cast<int64_t>(header().point_data_record_length() - sizeof(PointType)),
