@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <vector>
 #ifndef _MSC_VER
 #define LASPP_HAS_BUILTIN(x) __has_builtin(x)

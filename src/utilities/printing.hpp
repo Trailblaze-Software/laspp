@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <set>

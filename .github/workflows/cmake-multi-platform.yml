@@ -54,7 +54,7 @@ jobs:
           echo "build-output-dir=${{ github.workspace }}/build" >> \
           "$GITHUB_OUTPUT"
       - name: Install OpenMP
-        run: sudo apt -y install libomp-14-dev
+        run: sudo apt -y install libomp-18-dev
         if: matrix.cpp_compiler == 'clang++'
       - name: Configure CMake
         run: >
