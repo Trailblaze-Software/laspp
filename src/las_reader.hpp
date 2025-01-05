@@ -21,6 +21,7 @@
 #include <span>
 #include <vector>
 
+#include "example_custom_las_point.hpp"
 #include "las_header.hpp"
 #include "las_point.hpp"
 #include "laz/chunktable.hpp"
@@ -121,6 +122,8 @@ class LASReader {
       PointType las_point;
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&las_point),
                                            static_cast<int64_t>(sizeof(PointType))));
+      static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
+      static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
       if constexpr (is_copy_assignable<T, LASPointFormat0>() &&
                     std::is_base_of_v<LASPointFormat0, PointType>) {
         points[i] = static_cast<LASPointFormat0&>(las_point);
@@ -215,8 +218,6 @@ class LASReader {
 
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
     std::vector<std::byte> data(vlr.record_length_after_header);
-    std::cout << "Reading " << vlr.record_length_after_header << " bytes from offset "
-              << vlr.global_offset() << " " << m_input_stream.tellg() << std::endl;
     m_input_stream.seekg(static_cast<int64_t>(vlr.global_offset()));
     LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(data.data()),
                                          static_cast<int64_t>(data.size())));

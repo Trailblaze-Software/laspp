@@ -142,6 +142,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPP_ASSERT_EQ(reader.header().offset_to_point_data(),
                       375 + 2 * sizeof(LASVLR) + vlrs[1].record_length_after_header);
 
+      LASPP_ASSERT_EQ(reader.num_chunks(), 1);
+
       std::vector<LASPointFormat1> points(100);
       reader.read_chunk(std::span<LASPointFormat1>(points), 0);
 
@@ -153,9 +155,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   }
 
   {
-    std::stringstream stream;
+    std::stringstream las_stream;
+    std::stringstream laz_stream;
     {
-      LASWriter writer(stream, 1 | 128, 0);
+      LASWriter las_writer(las_stream, 1, 0);
+      LASWriter laz_writer(laz_stream, 1 | 128, 0);
 
       std::vector<ExampleFullLASPoint> points;
       points.reserve(100);
@@ -165,60 +169,68 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         points.back().gps_time = static_cast<double>(i) * 32.0;
       }
 
-      writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
-      writer.write_points(std::span<ExampleFullLASPoint>(points).subspan(0, 20));
-      writer.write_points(std::span<ExampleFullLASPoint>(points).subspan(20, 61));
-      writer.write_points(std::span<ExampleFullLASPoint>(points).subspan(81, 19));
-
-      LASPP_ASSERT_THROWS(writer.write_vlr(LASVLR(), std::vector<std::byte>()), std::runtime_error);
-    }
-
-    {
-      LASReader reader(stream);
-      LASPP_ASSERT_EQ(reader.header().num_points(), 100);
-      LASPP_ASSERT_EQ(reader.header().point_format(), 129);
-      LASPP_ASSERT_EQ(reader.header().point_data_record_length(), 28);
-
-      const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
-      LASPP_ASSERT_EQ(vlrs.size(), 2);
-      LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
-
-      LASPP_ASSERT_EQ(reader.header().offset_to_point_data(),
-                      375 + 2 * sizeof(LASVLR) + vlrs[1].record_length_after_header);
-
-      std::vector<ExampleFullLASPoint> points(100);
-      reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(0, 20), 0);
-      reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(20, 61), 1);
-      reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(81, 19), 2);
-
-      for (size_t i = 0; i < points.size(); i++) {
-        LASPP_ASSERT_EQ(points[i].position[0], static_cast<int32_t>(i));
-        LASPP_ASSERT_EQ(points[i].gps_time, static_cast<double>(i) * 32.0);
+      for (LASWriter* writer : {&las_writer, &laz_writer}) {
+        writer->write_vlr(LASVLR(), std::vector<std::byte>(0));
+        writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(0, 20));
+        writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(20, 61));
+        writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(81, 19));
+        LASPP_ASSERT_THROWS(writer->write_vlr(LASVLR(), std::vector<std::byte>()),
+                            std::runtime_error);
       }
     }
 
-    stream.seekg(0);
     {
-      LASReader reader(stream);
-      LASPP_ASSERT_EQ(reader.header().num_points(), 100);
-      LASPP_ASSERT_EQ(reader.header().point_format(), 129);
-      LASPP_ASSERT_EQ(reader.header().point_data_record_length(), 28);
+      for (std::stringstream* stream : {&las_stream, &laz_stream}) {
+        {
+          LASReader reader(*stream);
+          std::cout << reader.header() << std::endl;
+          LASPP_ASSERT_EQ(reader.header().num_points(), 100);
+          LASPP_ASSERT_EQ(reader.header().point_format(), stream == &las_stream ? 1 : 129);
+          LASPP_ASSERT_EQ(reader.header().point_data_record_length(), 28);
 
-      const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
-      LASPP_ASSERT_EQ(vlrs.size(), 2);
-      LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
+          const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
+          size_t num_vlrs = stream == &las_stream ? 1 : 2;
+          LASPP_ASSERT_EQ(vlrs.size(), num_vlrs);
+          LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
 
-      LASPP_ASSERT_EQ(reader.header().offset_to_point_data(),
-                      375 + 2 * sizeof(LASVLR) + vlrs[1].record_length_after_header);
+          LASPP_ASSERT_EQ(reader.header().offset_to_point_data(),
+                          375 + num_vlrs * sizeof(LASVLR) +
+                              (stream == &las_stream ? 0u : vlrs[1].record_length_after_header));
 
-      std::vector<LASPointFormat1> points(100);
-      reader.read_chunk(std::span<LASPointFormat1>(points).subspan(0, 20), 0);
-      reader.read_chunk(std::span<LASPointFormat1>(points).subspan(20, 61), 1);
-      reader.read_chunk(std::span<LASPointFormat1>(points).subspan(81, 19), 2);
+          std::vector<ExampleFullLASPoint> points(100);
+          if (stream == &laz_stream) {
+            reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(0, 20), 0);
+            reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(20, 61), 1);
+            reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(81, 19), 2);
+          } else {
+            reader.read_chunk(std::span<ExampleFullLASPoint>(points), 0);
+            std::cout << points << std::endl;
+          }
 
-      for (size_t i = 0; i < points.size(); i++) {
-        LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
-        LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
+          for (size_t i = 0; i < points.size(); i++) {
+            LASPP_ASSERT_EQ(points[i].position[0], static_cast<int32_t>(i));
+            LASPP_ASSERT_EQ(points[i].gps_time, static_cast<double>(i) * 32.0);
+          }
+        }
+        stream->seekg(0);
+        {
+          LASReader reader(*stream);
+
+          std::vector<LASPointFormat1> points(100);
+          // reader.read_chunks<LASPointFormat1>(points, {0, reader.num_chunks()});
+          if (stream == &laz_stream) {
+            reader.read_chunk(std::span<LASPointFormat1>(points).subspan(0, 20), 0);
+            reader.read_chunk(std::span<LASPointFormat1>(points).subspan(20, 61), 1);
+            reader.read_chunk(std::span<LASPointFormat1>(points).subspan(81, 19), 2);
+          } else {
+            reader.read_chunk(std::span<LASPointFormat1>(points), 0);
+          }
+
+          for (size_t i = 0; i < points.size(); i++) {
+            LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
+            LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
+          }
+        }
       }
     }
   }

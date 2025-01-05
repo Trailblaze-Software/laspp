@@ -51,31 +51,11 @@ struct ExampleMinimalLASPoint {
   }
 };
 
-struct ExampleFullLASPoint {
-  std::array<int32_t, 3> position;
+struct ExampleFullLASPoint : ExampleMinimalLASPoint {
   double gps_time;
 
-  void operator=(const laspp::LASPointFormat0& point) {
-    position[0] = point.x;
-    position[1] = point.y;
-    position[2] = point.z;
-  }
-
+  void operator=(const laspp::LASPointFormat0& point) { ExampleMinimalLASPoint::operator=(point); }
   void operator=(const laspp::GPSTime& point) { gps_time = point; }
-
-  operator laspp::LASPointFormat0() const {
-    laspp::LASPointFormat0 point;
-    point.x = position[0];
-    point.y = position[1];
-    point.z = position[2];
-    point.intensity = 0;
-    point.bit_byte = 0;
-    point.classification_byte = 0;
-    point.scan_angle_rank = 0;
-    point.user_data = 0;
-    point.point_source_id = 0;
-    return point;
-  }
 
   operator laspp::GPSTime() const { return laspp::GPSTime(gps_time); }
 

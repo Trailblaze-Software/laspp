@@ -314,17 +314,17 @@ struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
   bool operator==(const LASPointFormat7& other) const = default;
 };
 
-struct LASPP_PACKED LASPointFormat8 : LASPointFormat7 {
+struct LASPP_PACKED NIRData {
   uint16_t NIR;
 };
+
+struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {};
 
 struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
   bool operator==(const LASPointFormat9& other) const = default;
 };
 
-struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData {
-  uint16_t NIR;
-
+struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
   bool operator==(const LASPointFormat10& other) const = default;
 };
 
