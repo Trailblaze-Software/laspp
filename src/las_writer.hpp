@@ -23,6 +23,7 @@
 
 #include "las_header.hpp"
 #include "las_point.hpp"
+#include "laz/laz_vlr.hpp"
 #include "laz/laz_writer.hpp"
 #include "utilities/assert.hpp"
 #include "vlr.hpp"
@@ -58,7 +59,9 @@ class LASWriter {
   LASHeader m_header;
 
   WritingStage m_stage = WritingStage::VLRS;
+  std::optional<LAZWriter> m_laz_writer;
   bool m_written_chunktable = false;
+  int64_t m_laz_vlr_offset = -1;
 
   void write_header() {
     m_output_stream.seekp(0);
@@ -94,9 +97,41 @@ class LASWriter {
   void t_write_points(const std::span<T>& points) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
     LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
-    m_stage = WritingStage::POINTS;
     LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_output_stream.tellp());
-    m_output_stream.seekp(m_header.offset_to_point_data());
+    if (m_header.is_laz_compressed()) {
+      if (m_stage < WritingStage::POINTS) {
+        LAZSpecialVLRContent laz_vlr_content(LAZCompressor::PointwiseChunked);
+
+        // FIXME
+        laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Point10));
+        laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::GPSTime11));
+
+        std::stringstream laz_vlr_content_stream;
+        laz_vlr_content.write_to(laz_vlr_content_stream);
+        std::vector<char> laz_vlr_content_char(
+            (std::istreambuf_iterator<char>(laz_vlr_content_stream)),
+            std::istreambuf_iterator<char>());
+        std::vector<std::byte>& laz_vlr_content_bytes =
+            reinterpret_cast<std::vector<std::byte>&>(laz_vlr_content_char);
+
+        LASVLR laz_vlr;
+        laz_vlr.reserved = 0xAABB;
+        string_to_arr("LAZ encoded", laz_vlr.user_id);
+        laz_vlr.record_id = 22204;
+        laz_vlr.record_length_after_header = static_cast<uint16_t>(laz_vlr_content_bytes.size());
+        string_to_arr("LAZ VLR", laz_vlr.description);
+
+        m_laz_vlr_offset = m_output_stream.tellp();
+        write_vlr(laz_vlr, laz_vlr_content_bytes);
+
+        LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_output_stream.tellp());
+
+        m_laz_writer.emplace(m_output_stream, std::move(laz_vlr_content));
+      } else {
+        LASPP_ASSERT(m_laz_writer.has_value());
+      }
+    }
+    m_stage = WritingStage::POINTS;
 
     std::vector<PointType> points_to_write(points.size());
 
@@ -123,12 +158,13 @@ class LASWriter {
               static_cast<LASPointFormat0>(points[i]);
           if (points_to_write[i].bit_byte.return_number < 15)
             local_points_by_return[points_to_write[i].bit_byte.return_number]++;
-          local_min_pos[0] = std::min(local_min_pos[0], points_to_write[i].x);
-          local_min_pos[1] = std::min(local_min_pos[1], points_to_write[i].y);
-          local_min_pos[2] = std::min(local_min_pos[2], points_to_write[i].z);
-          local_max_pos[0] = std::max(local_max_pos[0], points_to_write[i].x);
-          local_max_pos[1] = std::max(local_max_pos[1], points_to_write[i].y);
-          local_max_pos[2] = std::max(local_max_pos[2], points_to_write[i].z);
+          PointType point = points_to_write[i];
+          local_min_pos[0] = std::min(local_min_pos[0], point.x);
+          local_min_pos[1] = std::min(local_min_pos[1], point.y);
+          local_min_pos[2] = std::min(local_min_pos[2], point.z);
+          local_max_pos[0] = std::max(local_max_pos[0], point.x);
+          local_max_pos[1] = std::max(local_max_pos[1], point.y);
+          local_max_pos[2] = std::max(local_max_pos[2], point.z);
         }
         if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<GPSTime, T>()) {
           static_cast<GPSTime&>(points_to_write[i]) = static_cast<GPSTime>(points[i]);
@@ -170,10 +206,12 @@ class LASWriter {
     header().update_bounds({min_pos[0], min_pos[1], min_pos[2]});
     header().update_bounds({max_pos[0], max_pos[1], max_pos[2]});
 
-    std::cout << "Writing " << points_to_write.size() << " points ("
-              << sizeof(PointType) * points_to_write.size() << " B)" << std::endl;
-    m_output_stream.write(reinterpret_cast<const char*>(points_to_write.data()),
-                          static_cast<int64_t>(points_to_write.size() * sizeof(PointType)));
+    if (m_header.is_laz_compressed()) {
+      m_laz_writer->write_chunk(std::span<PointType>(points_to_write));
+    } else {
+      m_output_stream.write(reinterpret_cast<const char*>(points_to_write.data()),
+                            static_cast<int64_t>(points_to_write.size() * sizeof(PointType)));
+    }
   }
 
  public:
@@ -190,8 +228,13 @@ class LASWriter {
   void write_chunktable() {
     if (header().is_laz_compressed() && !m_written_chunktable) {
       LASPP_ASSERT_LE(m_stage, WritingStage::CHUNKTABLE);
+      LASPP_ASSERT_GE(m_laz_vlr_offset, 0);
       m_stage = WritingStage::CHUNKTABLE;
-
+      LAZSpecialVLRContent laz_vlr_content(m_laz_writer->special_vlr());
+      m_laz_writer.reset();
+      m_output_stream.seekp(m_laz_vlr_offset + static_cast<int64_t>(sizeof(LASVLR)));
+      laz_vlr_content.write_to(m_output_stream);
+      m_output_stream.seekp(0, std::ios::end);
       m_written_chunktable = true;
     }
   }

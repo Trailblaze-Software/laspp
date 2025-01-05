@@ -31,11 +31,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
   {
     {
       std::stringstream stream;
-      std::unique_ptr<LAZSpecialVLR> laz_special_vlr;
+      std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
       {
         LAZWriter writer(stream, LAZCompressor::PointwiseChunked);
-        laz_special_vlr = std::make_unique<LAZSpecialVLR>(writer.special_vlr());
+        laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
       {
@@ -49,7 +49,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
 
     {
       std::stringstream stream;
-      std::unique_ptr<LAZSpecialVLR> laz_special_vlr;
+      std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
       std::mt19937 gen(0);
       gen.seed(42);
@@ -75,7 +75,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::Point10));
 
         writer.write_chunk(std::span<LASPointFormat1>(points));
-        laz_special_vlr = std::make_unique<LAZSpecialVLR>(writer.special_vlr());
+        laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
       LASPP_ASSERT_EQ(stream.str().size(), 2136);
@@ -88,7 +88,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
 
         size_t compressed_size = reader.chunk_table().compressed_chunk_size(0);
         std::vector<std::byte> compressed_chunk(compressed_size);
-        stream.clear();
         stream.seekg(static_cast<int64_t>(reader.chunk_table().chunk_offset(0)));
         stream.read(reinterpret_cast<char *>(compressed_chunk.data()),
                     static_cast<int64_t>(compressed_size));
@@ -105,11 +104,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
   {
     {
       std::stringstream stream;
-      std::unique_ptr<LAZSpecialVLR> laz_special_vlr;
+      std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
       {
         LAZWriter writer(stream, LAZCompressor::PointwiseChunked);
-        laz_special_vlr = std::make_unique<LAZSpecialVLR>(writer.special_vlr());
+        laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
       {
@@ -123,7 +122,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
 
     {
       std::stringstream stream;
-      std::unique_ptr<LAZSpecialVLR> laz_special_vlr;
+      std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
       std::mt19937 gen(0);
       gen.seed(42);
@@ -154,7 +153,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         writer.write_chunk(std::span<LASPointFormat1>(points).subspan(30, 120));
         writer.write_chunk(std::span<LASPointFormat1>(points).subspan(150, 1));
         writer.write_chunk(std::span<LASPointFormat1>(points).subspan(151, 49));
-        laz_special_vlr = std::make_unique<LAZSpecialVLR>(writer.special_vlr());
+        laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
       LASPP_ASSERT_EQ(stream.str().size(), 5740);
@@ -169,7 +168,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         for (size_t i = 0; i < reader.chunk_table().num_chunks(); i++) {
           size_t compressed_size = reader.chunk_table().compressed_chunk_size(i);
           std::vector<std::byte> compressed_chunk(compressed_size);
-          stream.clear();
           stream.seekg(static_cast<int64_t>(reader.chunk_table().chunk_offset(i)));
           stream.read(reinterpret_cast<char *>(compressed_chunk.data()),
                       static_cast<int64_t>(compressed_size));

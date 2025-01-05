@@ -29,23 +29,23 @@
 namespace laspp {
 
 class LAZWriter {
-  LAZSpecialVLR m_special_vlr;
+  LAZSpecialVLRContent m_special_vlr;
   LAZChunkTable m_chunk_table;
   std::iostream& m_stream;
   int64_t m_initial_stream_offset;
 
  public:
   template <typename... Args>
-  explicit LAZWriter(std::iostream& stream, Args... args)
-      : m_special_vlr(std::forward<Args>(args)...),
+  explicit LAZWriter(std::iostream& stream, Args... laz_special_vlr_args)
+      : m_special_vlr(std::forward<Args>(laz_special_vlr_args)...),
         m_stream(stream),
         m_initial_stream_offset(stream.tellp()) {
     int64_t chunk_table_offset = -1;  // Come back and overwrite this later
     m_stream.write(reinterpret_cast<const char*>(&chunk_table_offset), sizeof(chunk_table_offset));
   }
 
-  const LAZSpecialVLR& special_vlr() const { return m_special_vlr; }
-  LAZSpecialVLR& special_vlr() { return m_special_vlr; }
+  const LAZSpecialVLRContent& special_vlr() const { return m_special_vlr; }
+  LAZSpecialVLRContent& special_vlr() { return m_special_vlr; }
 
   template <typename T>
   std::stringstream compress_chunk(const std::span<T>& points) {
@@ -125,6 +125,8 @@ class LAZWriter {
   ~LAZWriter() {
     int64_t chunk_table_offset = m_stream.tellp();
     m_chunk_table.write(m_stream);
+    std::cout << "Wrote chunktable: " << m_chunk_table << " at offset " << chunk_table_offset
+              << std::endl;
     m_stream.seekp(m_initial_stream_offset);
     m_stream.write(reinterpret_cast<const char*>(&chunk_table_offset), sizeof(chunk_table_offset));
     m_stream.seekp(0, std::ios::end);

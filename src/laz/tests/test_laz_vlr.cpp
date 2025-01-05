@@ -1,4 +1,3 @@
-
 /*
  * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
@@ -25,12 +24,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
   {
     std::stringstream stream;
     {
-      LAZSpecialVLR laz_vlr(LAZCompressor::None);
+      LAZSpecialVLRContent laz_vlr(LAZCompressor::None);
       laz_vlr.write_to(stream);
     }
 
     {
-      LAZSpecialVLR laz_vlr(stream);
+      LAZSpecialVLRContent laz_vlr(stream);
 
       LASPP_ASSERT_EQ(laz_vlr.compressor, LAZCompressor::None);
       LASPP_ASSERT(laz_vlr.items_records.empty());
@@ -50,7 +49,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
   {
     std::stringstream stream;
     {
-      LAZSpecialVLR laz_vlr(LAZCompressor::None);
+      LAZSpecialVLRContent laz_vlr(LAZCompressor::None);
       laz_vlr.add_item_record(LAZItemRecord(LAZItemType::Point10));
       laz_vlr.add_item_record(LAZItemRecord(LAZItemType::RGB12));
       LASPP_ASSERT_THROWS(laz_vlr.add_item_record(LAZItemRecord(LAZItemType::Point10, 3)),
@@ -85,7 +84,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     }
 
     {
-      LAZSpecialVLR laz_vlr(stream);
+      LAZSpecialVLRContent laz_vlr(stream);
 
       LASPP_ASSERT_EQ(laz_vlr.compressor, LAZCompressor::None);
       LASPP_ASSERT_EQ(laz_vlr.items_records.size(), 17);

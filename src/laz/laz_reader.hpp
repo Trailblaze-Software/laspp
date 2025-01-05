@@ -34,7 +34,7 @@
 namespace laspp {
 
 class LAZReader {
-  LAZSpecialVLR m_special_vlr;
+  LAZSpecialVLRContent m_special_vlr;
   std::optional<LAZChunkTable> m_chunk_table;
 
   std::optional<size_t> chunk_size() const {
@@ -45,7 +45,7 @@ class LAZReader {
   }
 
  public:
-  explicit LAZReader(const LAZSpecialVLR& special_vlr) : m_special_vlr(special_vlr) {}
+  explicit LAZReader(const LAZSpecialVLRContent& special_vlr) : m_special_vlr(special_vlr) {}
 
   void read_chunk_table(std::istream& in_stream, size_t n_points) {
     int64_t chunk_table_offset;

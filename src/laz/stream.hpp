@@ -144,6 +144,7 @@ class InStream : StreamVariables {
       m_stream.read(reinterpret_cast<char*>(m_buffer.data()), sizeof(m_buffer));
       if (!m_stream) {
         valid_elements = (m_stream.gcount() + 3) / 4;
+        m_stream.clear();
       }
       buffer_idx = 0;
     }

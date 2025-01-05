@@ -54,7 +54,7 @@ class LASReader {
       auto end_of_header_offset = std::ios_base::cur;
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
         if (record.is_laz_vlr()) {
-          LAZSpecialVLR laz_vlr(m_input_stream);
+          LAZSpecialVLRContent laz_vlr(m_input_stream);
           m_laz_reader.emplace(LAZReader(laz_vlr));
         }
       }
@@ -80,11 +80,9 @@ class LASReader {
         m_vlr_headers(read_vlr_headers()),
         m_evlr_headers(read_evlr_headers()) {
     if (m_header.is_laz_compressed()) {
-      LASPP_ASSERT(m_laz_reader.has_value());
-
+      LASPP_ASSERT(m_laz_reader.has_value(), "LASReader: LAZ point format without LAZ VLR");
       m_input_stream.seekg(header().offset_to_point_data());
       m_laz_reader->read_chunk_table(m_input_stream, header().num_points());
-      std::cout << "Chunk table:\n" << m_laz_reader->chunk_table() << std::endl;
     }
   }
 
@@ -217,6 +215,8 @@ class LASReader {
 
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
     std::vector<std::byte> data(vlr.record_length_after_header);
+    std::cout << "Reading " << vlr.record_length_after_header << " bytes from offset "
+              << vlr.global_offset() << " " << m_input_stream.tellg() << std::endl;
     m_input_stream.seekg(static_cast<int64_t>(vlr.global_offset()));
     LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(data.data()),
                                          static_cast<int64_t>(data.size())));

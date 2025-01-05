@@ -277,17 +277,18 @@ struct LASPP_PACKED LAZItemRecord {
 
 #pragma pack(pop)
 
-struct LAZSpecialVLR : LAZSpecialVLRPt1 {
+struct LAZSpecialVLRContent : LAZSpecialVLRPt1 {
   std::vector<LAZItemRecord> items_records;
 
-  explicit LAZSpecialVLR(std::istream& is) : LAZSpecialVLRPt1(is), items_records(num_item_records) {
+  explicit LAZSpecialVLRContent(std::istream& is)
+      : LAZSpecialVLRPt1(is), items_records(num_item_records) {
     for (auto& item : items_records) {
       LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
       LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
     }
   }
 
-  explicit LAZSpecialVLR(LAZCompressor laz_compressor) : LAZSpecialVLRPt1(laz_compressor) {}
+  explicit LAZSpecialVLRContent(LAZCompressor laz_compressor) : LAZSpecialVLRPt1(laz_compressor) {}
 
   void write_to(std::ostream& os) const {
     os.write(reinterpret_cast<const char*>(this), sizeof(LAZSpecialVLRPt1));
@@ -301,7 +302,7 @@ struct LAZSpecialVLR : LAZSpecialVLRPt1 {
     num_item_records = static_cast<uint16_t>(items_records.size());
   }
 
-  friend std::ostream& operator<<(std::ostream& os, const LAZSpecialVLR& vlr) {
+  friend std::ostream& operator<<(std::ostream& os, const LAZSpecialVLRContent& vlr) {
     os << static_cast<const LAZSpecialVLRPt1&>(vlr);
     os << "Item records:" << std::endl;
     for (const auto& item : vlr.items_records) {
