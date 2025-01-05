@@ -97,14 +97,25 @@ class LASWriter {
   void t_write_points(const std::span<T>& points) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
     LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
-    LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_output_stream.tellp());
     if (m_header.is_laz_compressed()) {
       if (m_stage < WritingStage::POINTS) {
         LAZSpecialVLRContent laz_vlr_content(LAZCompressor::PointwiseChunked);
 
-        // FIXME
-        laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Point10));
-        laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::GPSTime11));
+        if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+          laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Point10));
+        }
+        if constexpr (std::is_base_of_v<GPSTime, PointType>) {
+          laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::GPSTime11));
+        }
+        if constexpr (std::is_base_of_v<ColorData, PointType>) {
+          laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB12));
+        }
+        if constexpr (std::is_base_of_v<WavePacketData, PointType>) {
+          laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Wavepacket13));
+        }
+        if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+          LASPP_FAIL("LASPointFormat6-10 is not currently supported in LAZ compression");
+        }
 
         std::stringstream laz_vlr_content_stream;
         laz_vlr_content.write_to(laz_vlr_content_stream);
