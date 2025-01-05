@@ -111,8 +111,11 @@ class LASWriter {
         std::vector<char> laz_vlr_content_char(
             (std::istreambuf_iterator<char>(laz_vlr_content_stream)),
             std::istreambuf_iterator<char>());
-        std::vector<std::byte>& laz_vlr_content_bytes =
-            reinterpret_cast<std::vector<std::byte>&>(laz_vlr_content_char);
+        std::vector<std::byte> laz_vlr_content_bytes;
+        laz_vlr_content_bytes.reserve(laz_vlr_content_char.size());
+        for (char c : laz_vlr_content_char) {
+          laz_vlr_content_bytes.push_back(static_cast<std::byte>(c));
+        }
 
         LASVLR laz_vlr;
         laz_vlr.reserved = 0xAABB;
