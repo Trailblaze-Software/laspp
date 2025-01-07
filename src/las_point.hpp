@@ -315,6 +315,7 @@ struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
 };
 
 struct LASPP_PACKED NIRData {
+  bool operator==(const NIRData& other) const = default;
   uint16_t NIR;
 };
 

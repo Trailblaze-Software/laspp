@@ -199,10 +199,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
           std::vector<ExampleFullLASPoint> points(100);
           if (stream == &laz_stream) {
+            LASPP_ASSERT_EQ(reader.num_chunks(), 3);
             reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(0, 20), 0);
             reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(20, 61), 1);
             reader.read_chunk(std::span<ExampleFullLASPoint>(points).subspan(81, 19), 2);
           } else {
+            LASPP_ASSERT_EQ(reader.num_chunks(), 1);
             reader.read_chunk(std::span<ExampleFullLASPoint>(points), 0);
             std::cout << points << std::endl;
           }
@@ -217,13 +219,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           LASReader reader(*stream);
 
           std::vector<LASPointFormat1> points(100);
-          // reader.read_chunks<LASPointFormat1>(points, {0, reader.num_chunks()});
-          if (stream == &laz_stream) {
-            reader.read_chunk(std::span<LASPointFormat1>(points).subspan(0, 20), 0);
-            reader.read_chunk(std::span<LASPointFormat1>(points).subspan(20, 61), 1);
-            reader.read_chunk(std::span<LASPointFormat1>(points).subspan(81, 19), 2);
-          } else {
-            reader.read_chunk(std::span<LASPointFormat1>(points), 0);
+          reader.read_chunks<LASPointFormat1>(points, {0, reader.num_chunks()});
+          std::vector<LASPointFormat0> points_0(100);
+          if (stream == &las_stream) {
+            LASPP_ASSERT_THROWS(
+                reader.read_chunks<LASPointFormat0>(points_0, {0, reader.num_chunks()}),
+                std::runtime_error);
           }
 
           for (size_t i = 0; i < points.size(); i++) {
