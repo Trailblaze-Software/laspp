@@ -17,6 +17,7 @@
  */
 
 #include "example_custom_las_point.hpp"
+#include "las_header.hpp"
 #include "las_reader.hpp"
 #include "las_writer.hpp"
 #include "vlr.hpp"
@@ -37,6 +38,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
 
+      writer.header().transform() = Transform({1, 1, 1}, {0, 0, 0});
+
       writer.write_points(std::span<LASPointFormat0>(points));
 
       LASPP_ASSERT_THROWS(writer.write_vlr(LASVLR(), std::vector<std::byte>()), std::runtime_error);
@@ -47,6 +50,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPP_ASSERT_EQ(reader.header().num_points(), 100);
       LASPP_ASSERT_EQ(reader.header().point_format(), 0);
       LASPP_ASSERT_EQ(reader.header().point_data_record_length(), 20);
+      LASPP_ASSERT_EQ(reader.header().bounds().min_x(), 0);
+      LASPP_ASSERT_EQ(reader.header().bounds().max_x(), 99);
+      LASPP_ASSERT_EQ(reader.header().bounds().min_y(), 0);
+      LASPP_ASSERT_EQ(reader.header().bounds().max_y(), 0);
+      LASPP_ASSERT_EQ(reader.header().bounds().min_z(), 0);
+      LASPP_ASSERT_EQ(reader.header().bounds().max_z(), 0);
 
       const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
       LASPP_ASSERT_EQ(vlrs.size(), 1);
@@ -176,6 +185,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(81, 19));
         LASPP_ASSERT_THROWS(writer->write_vlr(LASVLR(), std::vector<std::byte>()),
                             std::runtime_error);
+
+        writer->write_evlr(LASEVLR{.reserved = 23,
+                                   .user_id = "hello",
+                                   .record_id = 7,
+                                   .record_length_after_header = 3,
+                                   .description = "description"},
+                           std::vector<std::byte>({std::byte(0), std::byte(1), std::byte(2)}));
       }
     }
 
@@ -197,6 +213,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                           375 + num_vlrs * sizeof(LASVLR) +
                               (stream == &las_stream ? 0u : vlrs[1].record_length_after_header));
 
+          LASPP_ASSERT_EQ(reader.header().EVLR_count(), 1);
+          const std::vector<LASEVLRWithGlobalOffset>& evlrs = reader.evlr_headers();
+          LASPP_ASSERT_EQ(evlrs.size(), 1);
+          LASPP_ASSERT_EQ(reader.read_evlr_data(evlrs[0]),
+                          std::vector<std::byte>({std::byte(0), std::byte(1), std::byte(2)}));
+
           std::vector<ExampleFullLASPoint> points(100);
           if (stream == &laz_stream) {
             LASPP_ASSERT_EQ(reader.num_chunks(), 3);
@@ -206,7 +228,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           } else {
             LASPP_ASSERT_EQ(reader.num_chunks(), 1);
             reader.read_chunk(std::span<ExampleFullLASPoint>(points), 0);
-            std::cout << points << std::endl;
           }
 
           for (size_t i = 0; i < points.size(); i++) {

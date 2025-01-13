@@ -50,7 +50,7 @@ class LASReader {
     for (unsigned int i = 0; i < n_records; ++i) {
       typename T::record_type record;
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&record),
-                                           static_cast<int64_t>(sizeof(LASVLR))));
+                                           static_cast<int64_t>(sizeof(typename T::record_type))));
       record_headers.emplace_back(record, m_input_stream.tellg());
       auto end_of_header_offset = std::ios_base::cur;
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
@@ -61,6 +61,9 @@ class LASReader {
       }
       m_input_stream.seekg(static_cast<int64_t>(record.record_length_after_header),
                            end_of_header_offset);
+      if (m_input_stream.tellg() == -1) {
+        m_input_stream.clear();
+      }
     }
     return record_headers;
   }
@@ -219,6 +222,14 @@ class LASReader {
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
     std::vector<std::byte> data(vlr.record_length_after_header);
     m_input_stream.seekg(static_cast<int64_t>(vlr.global_offset()));
+    LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(data.data()),
+                                         static_cast<int64_t>(data.size())));
+    return data;
+  }
+
+  std::vector<std::byte> read_evlr_data(const LASEVLRWithGlobalOffset& evlr) {
+    std::vector<std::byte> data(evlr.record_length_after_header);
+    m_input_stream.seekg(static_cast<int64_t>(evlr.global_offset()));
     LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(data.data()),
                                          static_cast<int64_t>(data.size())));
     return data;

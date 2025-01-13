@@ -62,9 +62,14 @@ class Vector3D {
   double& y() { return m_data[1]; }
   double& z() { return m_data[2]; }
 
+  double& operator[](size_t i) { return m_data[i]; }
+  double operator[](size_t i) const { return m_data[i]; }
+
   explicit Vector3D(std::istream& in_stream) {
     LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
   }
+
+  Vector3D(double x, double y, double z) : m_data{x, y, z} {}
 
   Vector3D() = default;
 
@@ -79,6 +84,9 @@ struct Transform {
   Vector3D m_offsets;
 
   explicit Transform(std::istream& in_stream) : m_scale_factors(in_stream), m_offsets(in_stream) {}
+
+  Transform(const Vector3D& scale_factors, const Vector3D& offsets)
+      : m_scale_factors(scale_factors), m_offsets(offsets) {}
 
   Transform() = default;
 
@@ -152,6 +160,40 @@ struct LASPP_PACKED LASHeaderPacked {
 
 static_assert(sizeof(LASHeaderPacked) == 375);
 
+class Bound3D {
+  Vector3D m_min;
+  Vector3D m_max;
+
+ public:
+  Bound3D()
+      : m_min(std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+              std::numeric_limits<double>::max()),
+        m_max(std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(),
+              std::numeric_limits<double>::lowest()) {}
+
+  double min_x() const { return m_min[0]; }
+  double min_y() const { return m_min[1]; }
+  double min_z() const { return m_min[2]; }
+  double max_x() const { return m_max[0]; }
+  double max_y() const { return m_max[1]; }
+  double max_z() const { return m_max[2]; }
+
+  Vector3D& min() { return m_min; }
+  Vector3D& max() { return m_max; }
+
+  void update(const std::array<double, 3>& pos) {
+    for (size_t i = 0; i < 3; ++i) {
+      m_min[i] = std::min(m_min[i], pos[i]);
+      m_max[i] = std::max(m_max[i], pos[i]);
+    }
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const Bound3D& bound) {
+    os << "Bounds: " << bound.m_min << " to " << bound.m_max << std::endl;
+    return os;
+  }
+};
+
 class LASHeader {
   char m_file_signature[4] = {'L', 'A', 'S', 'F'};
   uint16_t m_file_source_id = 0;
@@ -174,13 +216,7 @@ class LASHeader {
   uint32_t m_legacy_number_of_point_records = 0;
   uint32_t m_legacy_number_of_points_by_return[5] = {0};
   Transform m_transform;
-  double m_max_x = std::numeric_limits<double>::lowest();
-  double m_min_x =
-      std::numeric_limits<double>::max();  // Spec seems to disagree with this ordering :(
-  double m_max_y = std::numeric_limits<double>::lowest();
-  double m_min_y = std::numeric_limits<double>::max();
-  double m_max_z = std::numeric_limits<double>::lowest();
-  double m_min_z = std::numeric_limits<double>::max();
+  Bound3D m_bounds;
   uint64_t m_start_of_waveform_data_packet_record = 0;
   uint64_t m_start_of_first_extended_variable_length_record = 0;
   uint32_t m_number_of_extended_variable_length_records = 0;
@@ -210,12 +246,12 @@ class LASHeader {
     f(m_legacy_number_of_point_records);
     f(m_legacy_number_of_points_by_return);
     f(m_transform);
-    f(m_max_x);
-    f(m_min_x);
-    f(m_max_y);
-    f(m_min_y);
-    f(m_max_z);
-    f(m_min_z);
+    f(m_bounds.max().x());
+    f(m_bounds.min().x());
+    f(m_bounds.max().y());
+    f(m_bounds.min().y());
+    f(m_bounds.max().z());
+    f(m_bounds.min().z());
     f(m_start_of_waveform_data_packet_record);
     f(m_start_of_first_extended_variable_length_record);
     f(m_number_of_extended_variable_length_records);
@@ -266,20 +302,14 @@ class LASHeader {
     };
   }
 
-  void update_bounds(std::array<int32_t, 3> pos) {
-    std::array<double, 3> transformed = transform(pos);
-    m_max_x = std::max(m_max_x, transformed[0]);
-    m_min_x = std::min(m_min_x, transformed[0]);
-    m_max_y = std::max(m_max_y, transformed[1]);
-    m_min_y = std::min(m_min_y, transformed[1]);
-    m_max_z = std::max(m_max_z, transformed[2]);
-    m_min_z = std::min(m_min_z, transformed[2]);
-  }
+  void update_bounds(std::array<int32_t, 3> pos) { m_bounds.update(transform(pos)); }
 
   void set_point_format(uint8_t point_format, uint16_t num_extra_bytes) {
     m_point_data_record_format = point_format;
     m_point_data_record_length = size_of_point_format(point_format) + num_extra_bytes;
   }
+
+  const Bound3D& bounds() const { return m_bounds; }
 
   size_t size() const { return m_header_size; }
 
@@ -336,12 +366,7 @@ class LASHeader {
     os << "Legacy number of points by return: "
        << arr_to_string(header.m_legacy_number_of_points_by_return) << std::endl;
     os << header.m_transform;
-    os << "Max X: " << header.m_max_x << std::endl;
-    os << "Max Y: " << header.m_max_y << std::endl;
-    os << "Max Z: " << header.m_max_z << std::endl;
-    os << "Min X: " << header.m_min_x << std::endl;
-    os << "Min Y: " << header.m_min_y << std::endl;
-    os << "Min Z: " << header.m_min_z << std::endl;
+    os << header.bounds();
     os << "Start of waveform data packet record: " << header.m_start_of_waveform_data_packet_record
        << std::endl;
     os << "Start of first extended variable length record: "

@@ -172,7 +172,6 @@ class LASWriter {
                       is_copy_assignable<LASPointFormat0, T>()) {
           static_cast<LASPointFormat0&>(points_to_write[i]) =
               static_cast<LASPointFormat0>(points[i]);
-          std::cout << static_cast<LASPointFormat0>(points[i]) << std::endl;
           if (points_to_write[i].bit_byte.return_number < 15)
             local_points_by_return[points_to_write[i].bit_byte.return_number]++;
           PointType point = points_to_write[i];
@@ -268,6 +267,8 @@ class LASWriter {
       m_output_stream.seekp(m_laz_vlr_offset + static_cast<int64_t>(sizeof(LASVLR)));
       laz_vlr_content.write_to(m_output_stream);
       m_output_stream.seekp(0, std::ios::end);
+      header().m_start_of_first_extended_variable_length_record =
+          static_cast<size_t>(m_output_stream.tellp());
       m_written_chunktable = true;
     }
   }
@@ -276,6 +277,10 @@ class LASWriter {
   void write_evlr(const LASEVLR& evlr, const std::vector<std::byte>& data) {
     write_chunktable();
     LASPP_ASSERT_LE(m_stage, WritingStage::EVLRS);
+    if (m_stage < WritingStage::EVLRS) {
+      header().m_start_of_first_extended_variable_length_record =
+          static_cast<size_t>(m_output_stream.tellp());
+    }
     m_stage = WritingStage::EVLRS;
     LASPP_ASSERT_EQ(evlr.record_length_after_header, data.size());
     m_output_stream.write(reinterpret_cast<const char*>(&evlr), sizeof(LASEVLR));
