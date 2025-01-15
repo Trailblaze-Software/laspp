@@ -89,20 +89,22 @@ class LAZWriter {
       }
     }
 
-    OutStream compressed_out_stream(compressed_data);
-    std::vector<std::byte> next_bytes;
-    for (size_t i = 1; i < points.size(); i++) {
-      for (LAZEncoder& laz_encoder : encoders) {
-        std::visit(
-            [&compressed_out_stream, &points, &i](auto&& encoder) {
-              if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
-                                                   decltype(encoder.last_value())>>,
-                                               T>()) {
-                decltype(encoder.last_value()) value_to_encode = points[i];
-                encoder.encode(compressed_out_stream, value_to_encode);
-              }
-            },
-            laz_encoder);
+    {
+      OutStream compressed_out_stream(compressed_data);
+      std::vector<std::byte> next_bytes;
+      for (size_t i = 1; i < points.size(); i++) {
+        for (LAZEncoder& laz_encoder : encoders) {
+          std::visit(
+              [&compressed_out_stream, &points, &i](auto&& encoder) {
+                if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
+                                                     decltype(encoder.last_value())>>,
+                                                 T>()) {
+                  decltype(encoder.last_value()) value_to_encode = points[i];
+                  encoder.encode(compressed_out_stream, value_to_encode);
+                }
+              },
+              laz_encoder);
+        }
       }
     }
     return compressed_data;
