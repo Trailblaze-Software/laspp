@@ -262,14 +262,12 @@ class OutStream : StreamVariables {
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  ~OutStream() {
-    finalize_stream();
-    m_stream.seekg(0);
-  }
+  ~OutStream() { finalize_stream(); }
 
   uint32_t length() const { return m_length; }
 
   void propogate_carry() {
+    const int64_t current_g = m_stream.tellg();
     const int64_t current_p = m_stream.tellp();
     int64_t updated_p = current_p - 1;
     m_stream.seekg(updated_p);
@@ -285,6 +283,7 @@ class OutStream : StreamVariables {
     }
     m_stream.put(static_cast<char>(carry + 1));
     m_stream.seekp(current_p);
+    m_stream.seekg(current_g);
   }
 
   void update_range(uint32_t lower, uint32_t upper) {

@@ -44,7 +44,12 @@ endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
 
-set(CMAKE_CXX_FLAGS_COVERAGE "-O0 -g -coverage")
+set(CMAKE_CXX_FLAGS_COVERAGE
+    "-O0 -g -coverage -fprofile-arcs -ftest-coverage -fno-elide-constructors")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(CMAKE_CXX_FLAGS_COVERAGE
+      "${CMAKE_CXX_FLAGS_COVERAGE} -fno-default-inline")
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")

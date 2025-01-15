@@ -61,9 +61,7 @@ class LASReader {
       }
       m_input_stream.seekg(static_cast<int64_t>(record.record_length_after_header),
                            end_of_header_offset);
-      if (m_input_stream.tellg() == -1) {
-        m_input_stream.clear();
-      }
+      LASPP_ASSERT_NE(m_input_stream.tellg(), -1);
     }
     return record_headers;
   }
