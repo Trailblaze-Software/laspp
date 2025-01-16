@@ -34,12 +34,9 @@ if(LASPP_DEBUG_ASSERTS)
 endif()
 
 if(LASPP_BUILD_TESTS)
-  include(FetchContent)
-  FetchContent_Declare(
-    laszip
-    GIT_REPOSITORY https://github.com/LASzip/LASzip.git
-    GIT_TAG 3.4.4)
-  FetchContent_MakeAvailable(laszip)
+  # include(FetchContent) FetchContent_Declare( laszip GIT_REPOSITORY
+  # https://github.com/LASzip/LASzip.git GIT_TAG 3.4.4)
+  # FetchContent_MakeAvailable(laszip)
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
