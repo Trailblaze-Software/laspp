@@ -19,6 +19,7 @@
 
 #include <optional>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 #include "example_custom_las_point.hpp"
@@ -116,6 +117,19 @@ class LASReader {
   }
 
  private:
+  template <typename CopyType, typename PointType, typename T>
+  static void copy_if_possible(const PointType& las_point, T& point) {
+    if constexpr (std::is_base_of_v<CopyType, PointType>) {
+      if constexpr (is_copy_fromable<T, CopyType>()) {
+        copy_from(point, static_cast<const CopyType&>(las_point));
+      } else if constexpr (is_copy_assignable<T, CopyType>()) {
+        point = static_cast<const CopyType&>(las_point);
+      } else if constexpr (std::is_base_of_v<CopyType, T>) {
+        static_cast<CopyType&>(point) = static_cast<const CopyType&>(las_point);
+      }
+    }
+  }
+
   template <typename PointType, typename T>
   void read_points(std::span<T> points) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
@@ -125,20 +139,11 @@ class LASReader {
                                            static_cast<int64_t>(sizeof(PointType))));
       static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
       static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
+      static_assert(is_copy_fromable<ExampleFullLASPoint, GPSTime>());
       static_assert(is_convertable<T, LASPointFormat0>() || is_convertable<T, GPSTime>(),
                     "PointType should use data from LAS file");
-      if constexpr (is_copy_assignable<T, LASPointFormat0>() &&
-                    std::is_base_of_v<LASPointFormat0, PointType>) {
-        points[i] = static_cast<LASPointFormat0&>(las_point);
-      } else if constexpr (std::is_base_of_v<LASPointFormat0, T> &&
-                           std::is_base_of_v<LASPointFormat0, PointType>) {
-        static_cast<LASPointFormat0&>(points[i]) = static_cast<LASPointFormat0&>(las_point);
-      }
-      if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<T, GPSTime>()) {
-        points[i] = static_cast<GPSTime&>(las_point);
-      } else if constexpr (std::is_base_of_v<GPSTime, T> && std::is_base_of_v<GPSTime, PointType>) {
-        static_cast<GPSTime&>(points[i]) = static_cast<GPSTime&>(las_point);
-      }
+      copy_if_possible<LASPointFormat0>(las_point, points[i]);
+      copy_if_possible<GPSTime>(las_point, points[i]);
       m_input_stream.seekg(
           static_cast<int64_t>(header().point_data_record_length() - sizeof(PointType)),
           std::ios_base::cur);

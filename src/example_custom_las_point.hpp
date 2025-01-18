@@ -55,9 +55,6 @@ struct ExampleFullLASPoint : ExampleMinimalLASPoint {
   double gps_time;
 
   void operator=(const laspp::LASPointFormat0& point) { ExampleMinimalLASPoint::operator=(point); }
-  void operator=(const laspp::GPSTime& point) { gps_time = point; }
-
-  operator laspp::GPSTime() const { return laspp::GPSTime(gps_time); }
 
   friend std::ostream& operator<<(std::ostream& os, const ExampleFullLASPoint& point) {
     os << "Position: (" << point.position[0] << ", " << point.position[1] << ", "
@@ -66,3 +63,11 @@ struct ExampleFullLASPoint : ExampleMinimalLASPoint {
     return os;
   }
 };
+
+inline void copy_from(ExampleFullLASPoint& dest, const laspp::GPSTime& src) {
+  dest.gps_time = src.gps_time.f64;
+}
+
+inline void copy_from(laspp::GPSTime& dest, const ExampleFullLASPoint& src) {
+  dest.gps_time.f64 = src.gps_time;
+}

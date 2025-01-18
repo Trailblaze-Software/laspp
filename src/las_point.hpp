@@ -413,9 +413,20 @@ struct CopyAssignable<T1, T2, decltype(void(std::declval<T1>() = std::declval<T2
 template <typename T1, typename T2>
 using is_copy_assignable = CopyAssignable<T1, T2>;
 
+template <typename T1, typename T2, typename = void>
+struct CopyFromable : std::false_type {};
+
+template <typename T1, typename T2>
+struct CopyFromable<T1, T2, decltype(copy_from(std::declval<T1&>(), std::declval<const T2&>()))>
+    : std::true_type {};
+
+template <typename T1, typename T2>
+using is_copy_fromable = CopyFromable<T1, T2>;
+
 template <typename T1, typename T2>
 constexpr bool is_convertable() {
-  return is_copy_assignable<T2, T1>::value || std::is_base_of_v<T2, T1>;
+  return is_copy_assignable<T2, T1>::value || std::is_base_of_v<T2, T1> ||
+         is_copy_fromable<T1, T2>::value;
 }
 
 #pragma pack(pop)

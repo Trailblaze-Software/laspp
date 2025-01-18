@@ -94,6 +94,17 @@ class LASWriter {
   }
 
  private:
+  template <typename CopyType, typename PointType, typename T>
+  static void copy_if_possible(PointType& dest, const T& src) {
+    if constexpr (std::is_base_of_v<CopyType, PointType>) {
+      if constexpr (is_copy_fromable<CopyType&, T>()) {
+        copy_from(static_cast<CopyType&>(dest), src);
+      } else if constexpr (is_copy_assignable<CopyType, T>()) {
+        static_cast<CopyType&>(dest) = static_cast<CopyType>(src);
+      }
+    }
+  }
+
   template <typename PointType, typename T>
   void t_write_points(const std::span<T>& points) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
@@ -168,10 +179,13 @@ class LASWriter {
 #pragma omp for
       for (size_t i = 0; i < points.size(); i++) {
         static_assert(is_copy_assignable<LASPointFormat0, ExampleFullLASPoint>());
-        if constexpr (std::is_base_of_v<LASPointFormat0, PointType> &&
-                      is_copy_assignable<LASPointFormat0, T>()) {
-          static_cast<LASPointFormat0&>(points_to_write[i]) =
-              static_cast<LASPointFormat0>(points[i]);
+        static_assert(is_copy_fromable<GPSTime, ExampleFullLASPoint>());
+
+        copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
+        copy_if_possible<GPSTime>(points_to_write[i], points[i]);
+        copy_if_possible<ColorData>(points_to_write[i], points[i]);
+        copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
+        if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
           if (points_to_write[i].bit_byte.return_number < 15)
             local_points_by_return[points_to_write[i].bit_byte.return_number]++;
           PointType point = points_to_write[i];
@@ -181,25 +195,6 @@ class LASWriter {
           local_max_pos[0] = std::max(local_max_pos[0], point.x);
           local_max_pos[1] = std::max(local_max_pos[1], point.y);
           local_max_pos[2] = std::max(local_max_pos[2], point.z);
-        }
-        if constexpr (std::is_base_of_v<GPSTime, PointType> && is_copy_assignable<GPSTime, T>()) {
-          static_cast<GPSTime&>(points_to_write[i]) = static_cast<GPSTime>(points[i]);
-        }
-        if constexpr (std::is_base_of_v<ColorData, PointType> &&
-                      is_copy_assignable<ColorData, T>()) {
-          static_cast<ColorData&>(points_to_write[i]) = static_cast<ColorData>(points[i]);
-        }
-        if constexpr (std::is_base_of_v<WavePacketData, PointType> &&
-                      is_copy_assignable<WavePacketData, T>()) {
-          static_cast<WavePacketData&>(points_to_write[i]) = static_cast<WavePacketData>(points[i]);
-        }
-        if constexpr (std::is_base_of_v<LASPointFormat6, PointType> &&
-                      is_copy_assignable<LASPointFormat6, T>()) {
-          static_cast<LASPointFormat6&>(points_to_write[i]) =
-              static_cast<LASPointFormat6>(points[i]);
-        }
-        if constexpr (std::is_base_of_v<NIRData, PointType> && is_copy_assignable<NIRData, T>()) {
-          static_cast<NIRData&>(points_to_write[i]) = static_cast<NIRData>(points[i]);
         }
       }
 #pragma omp critical

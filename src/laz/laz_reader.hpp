@@ -103,7 +103,9 @@ class LAZReader {
             [&compressed_in_stream, &decompressed_data, &i](auto&& encoder) {
               if (i > 0) encoder.decode(compressed_in_stream);
 
-              if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {
+              if constexpr (is_copy_fromable<T, decltype(encoder.last_value())>()) {
+                copy_from(decompressed_data[i], encoder.last_value());
+              } else if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {
                 decompressed_data[i] = encoder.last_value();
               } else if constexpr (std::is_base_of_v<
                                        std::remove_reference_t<decltype(encoder.last_value())>,
