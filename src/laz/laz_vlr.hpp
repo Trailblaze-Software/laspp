@@ -37,7 +37,7 @@ enum class LAZCompressor : uint16_t {
   LayeredChunked = 3,
 };
 
-std::ostream& operator<<(std::ostream& os, const LAZCompressor& compressor) {
+inline std::ostream& operator<<(std::ostream& os, const LAZCompressor& compressor) {
   switch (compressor) {
     case LAZCompressor::None:
       os << "None";
