@@ -27,8 +27,6 @@ project(
   LANGUAGES CXX)
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
-add_compile_definitions(LASPP_VERSION="${PROJECT_VERSION}")
-
 if(LASPP_BUILD_TESTS)
   # include(FetchContent) FetchContent_Declare( laszip GIT_REPOSITORY
   # https://github.com/LASzip/LASzip.git GIT_TAG 3.4.4)
@@ -113,9 +111,9 @@ endif()
 
 set(LIBRARY_NAME las++)
 
-include_directories(src)
-
 add_library(${LIBRARY_NAME} INTERFACE)
+
+target_include_directories(${LIBRARY_NAME} INTERFACE src)
 
 if(LASPP_DEBUG_ASSERTS)
   message(WARNING "Enabling LAS++ debugging asserts. May be slow.")
@@ -125,6 +123,8 @@ endif()
 find_package(OpenMP REQUIRED)
 
 target_link_libraries(${LIBRARY_NAME} INTERFACE OpenMP::OpenMP_CXX)
+target_compile_definitions(${LIBRARY_NAME}
+                           INTERFACE LASPP_VERSION="${PROJECT_VERSION}")
 
 add_subdirectory(src)
 if(LASPP_BUILD_APPS)
