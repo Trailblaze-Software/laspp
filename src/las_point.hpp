@@ -413,6 +413,11 @@ struct CopyAssignable<T1, T2, decltype(void(std::declval<T1>() = std::declval<T2
 template <typename T1, typename T2>
 using is_copy_assignable = CopyAssignable<T1, T2>;
 
+template <typename T1, typename T2>
+constexpr bool is_convertable() {
+  return is_copy_assignable<T2, T1>::value || std::is_base_of_v<T2, T1>;
+}
+
 #pragma pack(pop)
 
 }  // namespace laspp

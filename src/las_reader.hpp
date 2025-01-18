@@ -125,6 +125,8 @@ class LASReader {
                                            static_cast<int64_t>(sizeof(PointType))));
       static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
       static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
+      static_assert(is_convertable<T, LASPointFormat0>() || is_convertable<T, GPSTime>(),
+                    "PointType should use data from LAS file");
       if constexpr (is_copy_assignable<T, LASPointFormat0>() &&
                     std::is_base_of_v<LASPointFormat0, PointType>) {
         points[i] = static_cast<LASPointFormat0&>(las_point);
