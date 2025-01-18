@@ -97,7 +97,7 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 
 #else
 #define LASPP_ASSERT(condition, ...)
-#define LASPP_ASSERT_BIN_OP(a, b, op, nop)
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)
 #endif
 
 #define LASPP_FAIL(...)             \
@@ -169,6 +169,7 @@ static_assert(f_arr(DEBRACKET(({4, 4}))));
 #define LASPP_ASSERT_RAW_STR_EQ(expr, val) \
   LASPP_ASSERT_EQ(laspp::RawString(DEBRACKET(expr)), laspp::RawString(DEBRACKET(val)))
 
+#ifdef LASPP_DEBUG_ASSERTS
 #define LASPP_ASSERT_THROWS(expr, exception)               \
   {                                                        \
     bool caught = false;                                   \
@@ -186,5 +187,9 @@ static_assert(f_arr(DEBRACKET(({4, 4}))));
     LASPP_ASSERT(laspp_check_stream, "Failed to read from stream ", #read, " returned ", \
                  laspp_check_stream.gcount(), " bytes");                                 \
   }
+#else
+#define LASPP_ASSERT_THROWS(expr, exception)
+#define LASPP_CHECK_READ(read) read
+#endif
 
 }  // namespace laspp

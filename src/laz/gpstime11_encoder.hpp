@@ -78,14 +78,13 @@ class GPSTime11Encoder {
     LASPP_FAIL("Unknown case delta: ", case_delta);
   }
 
-  GPSTime decode(InStream& in_stream, bool post_reference_frame = false) {
+  GPSTime decode(InStream& in_stream) {
     uint_fast16_t case_delta;
     if (m_reference_frames[m_current_frame].delta == 0) {
       case_delta = m_case_0delta_encoder.decode_symbol(in_stream);
       if (case_delta >= 3) {
-        LASPP_ASSERT(!post_reference_frame, "Invalid case delta: ", case_delta);
         m_current_frame = (m_current_frame + case_delta - 2) % 4;
-        return decode(in_stream, true);
+        return decode(in_stream);
       }
       if (case_delta == 0) {
         case_delta = 511;
@@ -95,9 +94,8 @@ class GPSTime11Encoder {
     } else {
       case_delta = m_case_encoder.decode_symbol(in_stream);
       if (case_delta >= 513) {
-        LASPP_ASSERT(!post_reference_frame, "Invalid case delta: ", case_delta);
         m_current_frame = (m_current_frame + case_delta - 512) % 4;
-        return decode(in_stream, true);
+        return decode(in_stream);
       }
     }
     if (case_delta <= 510) {
@@ -160,7 +158,6 @@ class GPSTime11Encoder {
       return m_reference_frames[m_current_frame].prev_gps_time;
     }
     LASPP_ASSERT_EQ(case_delta, 512, "The final one");
-    LASPP_ASSERT(!post_reference_frame, "Cannot encode reference frame after reference frame");
     int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(8, in_stream);
     uint32_t dgps_time = static_cast<uint32_t>(raw_decode(in_stream, 32));
     uint64_t tmp = (static_cast<uint64_t>(
@@ -176,7 +173,7 @@ class GPSTime11Encoder {
     return m_reference_frames[m_current_frame].prev_gps_time;
   }
 
-  void encode(OutStream& out_stream, GPSTime gps_time, bool post_reference_frame = false) {
+  void encode(OutStream& out_stream, GPSTime gps_time) {
     ReferenceFrame& rf = m_reference_frames[m_current_frame];
     if (rf.delta == 0) {
       if (rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
@@ -191,13 +188,12 @@ class GPSTime11Encoder {
         rf.delta = diff_32;
         rf.counter = 0;
       } else {
-        LASPP_ASSERT(!post_reference_frame, "Cannot encode reference frame after reference frame");
         for (size_t i = 0; i < 4; i++) {
           int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
           if (static_cast<int32_t>(rf_diff) == rf_diff) {
             m_case_0delta_encoder.encode_symbol(out_stream, 2 + (4 + i - m_current_frame) % 4);
             m_current_frame = static_cast<uint_fast8_t>(i);
-            return encode(out_stream, gps_time, true);
+            return encode(out_stream, gps_time);
           }
         }
 
@@ -265,13 +261,12 @@ class GPSTime11Encoder {
         }
         rf.prev_gps_time = gps_time;
       } else {
-        LASPP_ASSERT(!post_reference_frame, "Cannot encode reference frame after reference frame");
         for (size_t i = 0; i < 4; i++) {
           int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
           if (rf_diff == static_cast<int32_t>(rf_diff)) {
             m_case_encoder.encode_symbol(out_stream, 512 + (4 + i - m_current_frame) % 4);
             m_current_frame = static_cast<uint_fast8_t>(i);
-            return encode(out_stream, gps_time, true);
+            return encode(out_stream, gps_time);
           }
         }
 

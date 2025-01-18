@@ -28,10 +28,6 @@ project(
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 add_compile_definitions(LASPP_VERSION="${PROJECT_VERSION}")
-if(LASPP_DEBUG_ASSERTS)
-  message(WARNING "Enabling LAS++ debugging asserts. May be slow.")
-  add_compile_definitions(LASPP_DEBUG_ASSERTS)
-endif()
 
 if(LASPP_BUILD_TESTS)
   # include(FetchContent) FetchContent_Declare( laszip GIT_REPOSITORY
@@ -120,6 +116,11 @@ set(LIBRARY_NAME las++)
 include_directories(src)
 
 add_library(${LIBRARY_NAME} INTERFACE)
+
+if(LASPP_DEBUG_ASSERTS)
+  message(WARNING "Enabling LAS++ debugging asserts. May be slow.")
+  target_compile_definitions(${LIBRARY_NAME} INTERFACE LASPP_DEBUG_ASSERTS)
+endif()
 
 find_package(OpenMP REQUIRED)
 

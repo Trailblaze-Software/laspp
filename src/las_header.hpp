@@ -23,7 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <sstream>
