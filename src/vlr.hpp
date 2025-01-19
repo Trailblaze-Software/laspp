@@ -77,7 +77,7 @@ struct LASPP_PACKED sGeoKeys {
     TIFFTagLocation wTIFFTagLocation;
     uint16_t wCount;
     uint16_t wValue_Offset;
-  } pKey[1];
+  };
 };
 
 struct GeoKeys : sGeoKeys {
