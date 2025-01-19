@@ -33,7 +33,7 @@ namespace laspp {
 
 enum class WritingStage { VLRS, POINTS, CHUNKTABLE, EVLRS, HEADER };
 
-std::ostream& operator<<(std::ostream& os, WritingStage stage) {
+inline std::ostream& operator<<(std::ostream& os, WritingStage stage) {
   switch (stage) {
     case WritingStage::VLRS:
       os << "WritingStage::VLRS";

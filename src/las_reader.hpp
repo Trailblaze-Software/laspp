@@ -62,7 +62,6 @@ class LASReader {
           m_laz_reader.emplace(LAZReader(laz_vlr));
         }
         if (record.is_projection()) {
-          std::cout << record << std::endl;
           if (record.is_ogc_math_transform_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
             LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
