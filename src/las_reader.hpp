@@ -36,6 +36,8 @@ class LASReader {
   std::istream& m_input_stream;
   LASHeader m_header;
   std::optional<LAZReader> m_laz_reader;
+  std::optional<std::string> m_math_wkt;
+  std::optional<std::string> m_coordinate_wkt;
   std::vector<LASVLRWithGlobalOffset> m_vlr_headers;
   std::vector<LASEVLRWithGlobalOffset> m_evlr_headers;
 
@@ -53,14 +55,44 @@ class LASReader {
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&record),
                                            static_cast<int64_t>(sizeof(typename T::record_type))));
       record_headers.emplace_back(record, m_input_stream.tellg());
-      auto end_of_header_offset = std::ios_base::cur;
+      int64_t end_of_header_offset = m_input_stream.tellg();
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
         if (record.is_laz_vlr()) {
           LAZSpecialVLRContent laz_vlr(m_input_stream);
           m_laz_reader.emplace(LAZReader(laz_vlr));
         }
+        if (record.is_projection()) {
+          std::cout << record << std::endl;
+          if (record.is_ogc_math_transform_wkt()) {
+            std::vector<char> wkt(record.record_length_after_header);
+            LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
+            std::string wkt_string(wkt.begin(), wkt.end());
+            m_math_wkt.emplace(wkt_string);
+          }
+          if (record.is_ogc_coordinate_system_wkt()) {
+            std::vector<char> wkt(record.record_length_after_header);
+            LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
+            std::string wkt_string(wkt.begin(), wkt.end());
+            m_coordinate_wkt.emplace(wkt_string);
+          }
+          if (record.is_geo_key_directory()) {
+            GeoKeys keys(m_input_stream);
+            LASPP_ASSERT_EQ(m_input_stream.tellg(),
+                            end_of_header_offset + record.record_length_after_header);
+          }
+          if (record.is_geo_double_params()) {
+            LASPP_ASSERT_EQ(record.record_length_after_header % sizeof(double), 0);
+            std::vector<double> params(record.record_length_after_header / sizeof(double));
+            LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(params.data()),
+                                                 record.record_length_after_header));
+          }
+          if (record.is_geo_ascii_params()) {
+            std::vector<char> params(record.record_length_after_header);
+            LASPP_CHECK_READ(m_input_stream.read(params.data(), record.record_length_after_header));
+          }
+        }
       }
-      m_input_stream.seekg(static_cast<int64_t>(record.record_length_after_header),
+      m_input_stream.seekg(static_cast<int64_t>(record.record_length_after_header) +
                            end_of_header_offset);
       LASPP_ASSERT_NE(m_input_stream.tellg(), -1);
     }
@@ -151,6 +183,12 @@ class LASReader {
   }
 
  public:
+  std::optional<std::string> math_wkt() const { return m_math_wkt; }
+  std::optional<std::string> coordinate_wkt() const { return m_coordinate_wkt; }
+  std::optional<std::string> wkt() const {
+    return m_coordinate_wkt.has_value() ? m_coordinate_wkt : m_math_wkt;
+  }
+
   template <typename T>
   std::span<T> read_chunk(std::span<T> output_location, size_t chunk_index) {
     if (header().is_laz_compressed()) {

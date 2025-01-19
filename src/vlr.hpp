@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 #include "utilities/macros.hpp"
 
@@ -27,11 +28,29 @@ namespace laspp {
 
 #pragma pack(push, 1)
 
-enum class TIFFTagLocation : unsigned short {
+enum class TIFFTagLocation : uint16_t {
   UnsignedShort = 0,
   GeoDoubleParams = 34736,
   GeoAsciiParams = 34737,
 };
+
+inline std::ostream& operator<<(std::ostream& os, const TIFFTagLocation& tag_location) {
+  switch (tag_location) {
+    case TIFFTagLocation::UnsignedShort:
+      os << "Unsigned Short";
+      break;
+    case TIFFTagLocation::GeoDoubleParams:
+      os << "Geo Double Params";
+      break;
+    case TIFFTagLocation::GeoAsciiParams:
+      os << "Geo ASCII Params";
+      break;
+    default:
+      os << "Unknown " << static_cast<uint16_t>(tag_location);
+      break;
+  }
+  return os;
+}
 
 enum class ExtraBytesDataType : uint8_t {
   Undocumented = 0,
@@ -48,16 +67,41 @@ enum class ExtraBytesDataType : uint8_t {
 };
 
 struct LASPP_PACKED sGeoKeys {
-  unsigned short wKeyDirectoryVersion;
-  unsigned short wKeyRevision;
-  unsigned short wMinorRevision;
-  unsigned short wNumberOfKeys;
-  struct sKeyEntry {
-    unsigned short wKeyID;
+  uint16_t wKeyDirectoryVersion;
+  uint16_t wKeyRevision;
+  uint16_t wMinorRevision;
+  uint16_t wNumberOfKeys;
+
+  struct LASPP_PACKED sKeyEntry {
+    uint16_t wKeyID;
     TIFFTagLocation wTIFFTagLocation;
-    unsigned short wCount;
-    unsigned short wValue_Offset;
+    uint16_t wCount;
+    uint16_t wValue_Offset;
   } pKey[1];
+};
+
+struct GeoKeys : sGeoKeys {
+  std::vector<sKeyEntry> keys;
+
+  GeoKeys(std::istream& in_stream) {
+    in_stream.read(reinterpret_cast<char*>(this), sizeof(sGeoKeys));
+    keys.resize(wNumberOfKeys);
+    in_stream.read(reinterpret_cast<char*>(keys.data()), sizeof(sKeyEntry) * wNumberOfKeys);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const GeoKeys& geo_keys) {
+    os << "Key Directory Version: " << geo_keys.wKeyDirectoryVersion << std::endl;
+    os << "Key Revision: " << geo_keys.wKeyRevision << std::endl;
+    os << "Minor Revision: " << geo_keys.wMinorRevision << std::endl;
+    os << "Number of Keys: " << geo_keys.wNumberOfKeys << std::endl;
+    for (const auto& key : geo_keys.keys) {
+      os << "Key ID: " << key.wKeyID << std::endl;
+      os << "TIFF Tag Location: " << key.wTIFFTagLocation << std::endl;
+      os << "Count: " << key.wCount << std::endl;
+      os << "Value Offset: " << key.wValue_Offset << std::endl;
+    }
+    return os;
+  }
 };
 
 struct LASPP_PACKED ExtraBytesInfo {
@@ -120,9 +164,9 @@ struct LASPP_PACKED LASVariableLengthRecord {
 
   bool is_geo_key_directory() const { return is_projection() && record_id == 34735; }
 
-  bool geo_double_params() const { return is_projection() && record_id == 34736; }
+  bool is_geo_double_params() const { return is_projection() && record_id == 34736; }
 
-  bool geo_ascii_params() const { return is_projection() && record_id == 34737; }
+  bool is_geo_ascii_params() const { return is_projection() && record_id == 34737; }
 
   bool is_spec() const { return std::string(user_id) == "LASF_Spec"; }
 
