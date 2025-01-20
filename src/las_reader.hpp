@@ -71,7 +71,7 @@ class LASReader {
           if (record.is_ogc_coordinate_system_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
             LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
-            std::string wkt_string(wkt.begin(), wkt.end());
+            std::string wkt_string(wkt.data(), wkt.size() - 1);
             m_coordinate_wkt.emplace(wkt_string);
           }
           if (record.is_geo_key_directory()) {

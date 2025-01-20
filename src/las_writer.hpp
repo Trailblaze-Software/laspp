@@ -93,6 +93,16 @@ class LASWriter {
         static_cast<uint32_t>(sizeof(LASVLR) + vlr.record_length_after_header);
   }
 
+  void write_wkt(const std::string& wkt, bool math_transform_wkt = false) {
+    LASVLR wkt_vlr;
+    wkt_vlr.reserved = 0;
+    string_to_arr("LASF_Projection", wkt_vlr.user_id);
+    wkt_vlr.record_id = math_transform_wkt ? 2111 : 2112;
+    wkt_vlr.record_length_after_header = static_cast<uint16_t>(wkt.size() + 1);
+    string_to_arr("OGC WKT", wkt_vlr.description);
+    write_vlr(wkt_vlr, std::span(reinterpret_cast<const std::byte*>(wkt.c_str()), wkt.size() + 1));
+  }
+
  private:
   template <typename CopyType, typename PointType, typename T>
   static void copy_if_possible(PointType& dest, const T& src) {

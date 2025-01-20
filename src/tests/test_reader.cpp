@@ -37,6 +37,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       }
 
       writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
+      writer.write_wkt("TEST WKT");
 
       writer.header().transform() = Transform({1, 1, 1}, {0, 0, 0});
 
@@ -58,10 +59,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPP_ASSERT_EQ(reader.header().bounds().max_z(), 0);
 
       const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
-      LASPP_ASSERT_EQ(vlrs.size(), 1);
+      LASPP_ASSERT_EQ(vlrs.size(), 2);
       LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
 
-      LASPP_ASSERT_EQ(reader.header().offset_to_point_data(), 375 + sizeof(LASVLR));
+      LASPP_ASSERT_EQ(reader.coordinate_wkt().value(), "TEST WKT");
+      LASPP_ASSERT(!reader.math_wkt().has_value());
+
+      LASPP_ASSERT_EQ(reader.header().offset_to_point_data(), 375 + 2 * sizeof(LASVLR) + 9);
 
       std::vector<LASPointFormat0> points(100);
       reader.read_chunk(std::span<LASPointFormat0>(points), 0);
