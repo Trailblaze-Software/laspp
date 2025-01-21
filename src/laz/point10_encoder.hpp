@@ -38,7 +38,6 @@ constexpr std::array<T, N> create_array(const T& val) {
   arr.fill(val);
   return arr;
 }
-
 class LASPointFormat0Encoder {
   LASPointFormat0 m_last_las_point;
 

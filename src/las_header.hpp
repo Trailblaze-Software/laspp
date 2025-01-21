@@ -79,8 +79,8 @@ class Vector3D {
 };
 
 struct Transform {
-  Vector3D m_scale_factors;
-  Vector3D m_offsets;
+  Vector3D m_scale_factors = {0.001, 0.001, 0.001};
+  Vector3D m_offsets = {0, 0, 0};
 
   explicit Transform(std::istream& in_stream) : m_scale_factors(in_stream), m_offsets(in_stream) {}
 

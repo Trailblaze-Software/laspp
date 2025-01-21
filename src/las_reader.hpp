@@ -171,7 +171,8 @@ class LASReader {
       static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
       static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
       static_assert(is_copy_fromable<ExampleFullLASPoint, GPSTime>());
-      static_assert(is_convertable<T, LASPointFormat0>() || is_convertable<T, GPSTime>(),
+      static_assert(is_convertable<T, LASPointFormat0>() || is_convertable<T, LASPointFormat6>() ||
+                        is_convertable<T, GPSTime>(),
                     "PointType should use data from LAS file");
       copy_if_possible<LASPointFormat0>(las_point, points[i]);
       copy_if_possible<GPSTime>(las_point, points[i]);

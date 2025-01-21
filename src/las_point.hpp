@@ -23,6 +23,7 @@
 #include <iomanip>
 #include <iostream>
 #include <ostream>
+#include <type_traits>
 
 #include "utilities/macros.hpp"
 
@@ -217,7 +218,8 @@ struct LASPP_PACKED GPSTime {
 
   int64_t& as_int64() { return gps_time.int64; }
 
-  explicit GPSTime(double time = 0) { gps_time.f64 = time; }
+  explicit GPSTime(double time) { gps_time.f64 = time; }
+  GPSTime() = default;
 
   operator double() const { return gps_time.f64; }
 
@@ -392,6 +394,18 @@ struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
       f<laspp::LASPointFormat10>(__VA_ARGS__);       \
       break;                                         \
   }
+
+static_assert(std::is_trivial_v<LASPointFormat0>);
+static_assert(std::is_trivial_v<LASPointFormat1>);
+static_assert(std::is_trivial_v<LASPointFormat2>);
+static_assert(std::is_trivial_v<LASPointFormat3>);
+static_assert(std::is_trivial_v<LASPointFormat4>);
+static_assert(std::is_trivial_v<LASPointFormat5>);
+static_assert(std::is_trivial_v<LASPointFormat6>);
+static_assert(std::is_trivial_v<LASPointFormat7>);
+static_assert(std::is_trivial_v<LASPointFormat8>);
+static_assert(std::is_trivial_v<LASPointFormat9>);
+static_assert(std::is_trivial_v<LASPointFormat10>);
 
 constexpr std::array<uint16_t, 11> LASPointFormatSize = {
     {sizeof(LASPointFormat0), sizeof(LASPointFormat1), sizeof(LASPointFormat2),

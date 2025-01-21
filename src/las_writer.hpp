@@ -152,7 +152,7 @@ class LASWriter {
 
         LASVLR laz_vlr;
         laz_vlr.reserved = 0xAABB;
-        string_to_arr("LAZ encoded", laz_vlr.user_id);
+        string_to_arr("laszip encoded", laz_vlr.user_id);
         laz_vlr.record_id = 22204;
         laz_vlr.record_length_after_header = static_cast<uint16_t>(laz_vlr_content_bytes.size());
         string_to_arr("LAZ VLR", laz_vlr.description);
@@ -170,6 +170,7 @@ class LASWriter {
     m_stage = WritingStage::POINTS;
 
     std::vector<PointType> points_to_write(points.size());
+    memset(points_to_write.data(), 0, points_to_write.size() * sizeof(PointType));
 
     size_t points_by_return[15] = {0};
     int32_t min_pos[3] = {std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max(),
@@ -226,7 +227,8 @@ class LASWriter {
       header().m_number_of_points_by_return[i] += points_by_return[i];
     }
     if (header().m_number_of_point_records < std::numeric_limits<uint32_t>::max() &&
-        header().point_format() < 6) {
+        (header().point_format() < 6 ||
+         (header().point_format() >= 128 && header().point_format() < 128 + 6))) {
       header().m_legacy_number_of_point_records =
           static_cast<uint32_t>(header().m_number_of_point_records);
       for (int i = 0; i < 5; i++) {

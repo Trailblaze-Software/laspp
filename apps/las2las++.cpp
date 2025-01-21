@@ -134,9 +134,9 @@ int main(int argc, char* argv[]) {
       std::cout << points[1000] << std::endl;
       std::cout << points[points.size() - 1] << std::endl;
 
-      writer.write_points<LASPoint>(points);
-      // SWITCH_OVER_POINT_TYPE(reader.header().point_format(), read_and_write_points, reader,
-      // writer);
+      // writer.write_points<LASPoint>(points);
+      LASPP_SWITCH_OVER_POINT_TYPE(reader.header().point_format(), read_and_write_points, reader,
+                                   writer);
     }
   }
 

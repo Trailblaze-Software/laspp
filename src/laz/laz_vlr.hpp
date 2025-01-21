@@ -229,6 +229,31 @@ enum class LAZItemVersion : uint16_t {
   ArithmeticCoding = 3,  // Point 14, RGB 14, RGBNIR 14, Wavepacket 14, Byte 14
 };
 
+static constexpr LAZItemVersion laz_item_version_from_type(LAZItemType type) {
+  switch (type) {
+    case LAZItemType::Short:
+    case LAZItemType::Integer:
+    case LAZItemType::Long:
+    case LAZItemType::Float:
+    case LAZItemType::Double:
+      return LAZItemVersion::NoCompression;
+    case LAZItemType::Wavepacket13:
+      return LAZItemVersion::Version1;
+    case LAZItemType::Point10:
+    case LAZItemType::GPSTime11:
+    case LAZItemType::RGB12:
+    case LAZItemType::Byte:
+      return LAZItemVersion::Version2;
+    case LAZItemType::Point14:
+    case LAZItemType::RGB14:
+    case LAZItemType::RGBNIR14:
+    case LAZItemType::Wavepacket14:
+    case LAZItemType::Byte14:
+      return LAZItemVersion::ArithmeticCoding;
+  }
+  LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
+}
+
 inline std::ostream& operator<<(std::ostream& os, const LAZItemVersion& version) {
   switch (version) {
     case LAZItemVersion::NoCompression:
@@ -258,10 +283,12 @@ struct LASPP_PACKED LAZItemRecord {
   explicit LAZItemRecord(LAZItemType laz_item_type)
       : item_type(laz_item_type),
         item_size(default_size(laz_item_type)),
-        item_version(LAZItemVersion::Version1) {}
+        item_version(laz_item_version_from_type(laz_item_type)) {}
 
   LAZItemRecord(LAZItemType laz_item_type, uint16_t laz_item_size)
-      : item_type(laz_item_type), item_size(laz_item_size), item_version(LAZItemVersion::Version1) {
+      : item_type(laz_item_type),
+        item_size(laz_item_size),
+        item_version(laz_item_version_from_type(laz_item_type)) {
     LASPP_ASSERT(check_size_from_type(laz_item_type, laz_item_size));
   }
 
@@ -285,6 +312,7 @@ struct LAZSpecialVLRContent : LAZSpecialVLRPt1 {
     for (auto& item : items_records) {
       LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
       LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
+      LASPP_ASSERT(item.item_version == laz_item_version_from_type(item.item_type));
     }
   }
 
