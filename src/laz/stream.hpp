@@ -36,7 +36,7 @@ class PointerStreamBuffer : public std::streambuf {
   }
 };
 
-// #define BORING_VERSION
+#define BORING_VERSION
 
 struct StreamVariables {
   uint32_t m_base = 0;
@@ -53,7 +53,10 @@ class InStream : StreamVariables {
 
   std::byte read_byte() {
     if (buffer_idx == BUFFER_SIZE) {
-      LASPP_CHECK_READ(m_stream.read(reinterpret_cast<char*>(m_buffer.data()), BUFFER_SIZE));
+      m_stream.read(reinterpret_cast<char*>(m_buffer.data()), BUFFER_SIZE);
+      if (!m_stream) {
+        m_stream.clear();
+      }
       buffer_idx = 0;
     }
     return m_buffer[buffer_idx++];
@@ -111,14 +114,14 @@ class InStream : StreamVariables {
       m_length <<= 24;
       uint32_t new_3_bytes;
       std::array<std::byte, 3>& bla = *reinterpret_cast<std::array<std::byte, 3>*>(&new_3_bytes);
-      read_bytes((std::span<std::byte, 3>)bla);
+      read_bytes(std::span<std::byte, 3>(bla));
       std::swap(bla[0], bla[2]);
       m_value |= new_3_bytes;
     } else if (length() < (1 << 16)) {
       m_value <<= 16;
       m_length <<= 16;
       uint16_t new_2_bytes;
-      read_bytes((std::span<std::byte, 2>)reinterpret_cast<std::array<std::byte, 2>&>(new_2_bytes));
+      read_bytes(std::span<std::byte, 2>(reinterpret_cast<std::array<std::byte, 2>&>(new_2_bytes)));
       m_value |= std::rotl(new_2_bytes, 8);
     } else if (length() < (1 << 24)) {
       m_value <<= 8;
