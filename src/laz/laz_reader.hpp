@@ -89,8 +89,8 @@ class LAZReader {
           break;
         }
         default:
-          LASPP_FAIL("Currently unsupported LAZ item type: ",
-                     static_cast<uint16_t>(record.item_type));
+          LASPP_FAIL("Currently unsupported LAZ item type: ", LAZItemType(record.item_type), " (",
+                     static_cast<uint16_t>(record.item_type), ")");
       }
     }
 

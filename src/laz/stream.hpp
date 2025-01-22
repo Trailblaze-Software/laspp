@@ -68,7 +68,7 @@ class InStream : StreamVariables {
       bytes[0] = read_byte();
       return;
     } else if constexpr (Extent == 2) {
-      if (buffer_idx < BUFFER_SIZE - 2) {
+      if (buffer_idx + 2 < BUFFER_SIZE) {
         bytes[0] = m_buffer[buffer_idx++];
         bytes[1] = m_buffer[buffer_idx++];
       } else {
@@ -77,7 +77,7 @@ class InStream : StreamVariables {
       }
       return;
     } else if constexpr (Extent == 3) {
-      if (buffer_idx < BUFFER_SIZE - 3) {
+      if (buffer_idx + 3 < BUFFER_SIZE) {
         bytes[0] = m_buffer[buffer_idx++];
         bytes[1] = m_buffer[buffer_idx++];
         bytes[2] = m_buffer[buffer_idx++];
@@ -112,7 +112,7 @@ class InStream : StreamVariables {
     if (length() < (1 << 8)) {
       m_value <<= 24;
       m_length <<= 24;
-      uint32_t new_3_bytes;
+      uint32_t new_3_bytes = 0;
       std::array<std::byte, 3>& bla = *reinterpret_cast<std::array<std::byte, 3>*>(&new_3_bytes);
       read_bytes(std::span<std::byte, 3>(bla));
       std::swap(bla[0], bla[2]);
