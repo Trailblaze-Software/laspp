@@ -38,6 +38,7 @@ class LASReader {
   std::optional<LAZReader> m_laz_reader;
   std::optional<std::string> m_math_wkt;
   std::optional<std::string> m_coordinate_wkt;
+  std::optional<LASGeoKeys> m_las_geo_keys;
   std::vector<LASVLRWithGlobalOffset> m_vlr_headers;
   std::vector<LASEVLRWithGlobalOffset> m_evlr_headers;
 
@@ -50,6 +51,9 @@ class LASReader {
   std::vector<T> read_record_headers(int64_t initial_offset, size_t n_records) {
     std::vector<T> record_headers;
     m_input_stream.seekg(initial_offset);
+    std::optional<GeoKeys> geo_keys;
+    std::optional<std::vector<double>> geo_doubles;
+    std::optional<std::vector<char>> geo_ascii;
     for (unsigned int i = 0; i < n_records; ++i) {
       typename T::record_type record;
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&record),
@@ -66,28 +70,31 @@ class LASReader {
             std::vector<char> wkt(record.record_length_after_header);
             LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
             std::string wkt_string(wkt.begin(), wkt.end());
+            LASPP_ASSERT(!m_math_wkt.has_value(), "Multiple math WKTs found in header");
             m_math_wkt.emplace(wkt_string);
           }
           if (record.is_ogc_coordinate_system_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
             LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
             std::string wkt_string(wkt.data(), wkt.size() - 1);
+            LASPP_ASSERT(!m_coordinate_wkt.has_value(), "Multiple coordinate WKTs found in header");
             m_coordinate_wkt.emplace(wkt_string);
           }
           if (record.is_geo_key_directory()) {
-            GeoKeys keys(m_input_stream);
+            geo_keys.emplace(m_input_stream);
             LASPP_ASSERT_EQ(m_input_stream.tellg(),
                             end_of_header_offset + record.record_length_after_header);
           }
           if (record.is_geo_double_params()) {
             LASPP_ASSERT_EQ(record.record_length_after_header % sizeof(double), 0);
-            std::vector<double> params(record.record_length_after_header / sizeof(double));
-            LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(params.data()),
+            geo_doubles.emplace(record.record_length_after_header / sizeof(double));
+            LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(geo_doubles->data()),
                                                  record.record_length_after_header));
           }
           if (record.is_geo_ascii_params()) {
-            std::vector<char> params(record.record_length_after_header);
-            LASPP_CHECK_READ(m_input_stream.read(params.data(), record.record_length_after_header));
+            geo_ascii.emplace(uint64_t(record.record_length_after_header));
+            LASPP_CHECK_READ(
+                m_input_stream.read(geo_ascii->data(), record.record_length_after_header));
           }
         }
       }
@@ -95,6 +102,29 @@ class LASReader {
                            end_of_header_offset);
       LASPP_ASSERT_NE(m_input_stream.tellg(), -1);
     }
+
+    if (geo_keys.has_value()) {
+      m_las_geo_keys.emplace(uint16_t(geo_keys->wKeyDirectoryVersion),
+                             uint16_t(geo_keys->wKeyRevision), uint16_t(geo_keys->wMinorRevision));
+      for (const auto& key : geo_keys->keys) {
+        if (key.wTIFFTagLocation == TIFFTagLocation::UnsignedShort) {
+          m_las_geo_keys->add_key(key.wKeyID, key.wValue_Offset);
+        } else if (key.wTIFFTagLocation == TIFFTagLocation::GeoDoubleParams) {
+          LASPP_ASSERT(geo_doubles.has_value(), "GeoDoubleParams not found");
+          m_las_geo_keys->add_key(
+              key.wKeyID,
+              std::vector<double>(geo_doubles->begin() + key.wValue_Offset,
+                                  geo_doubles->begin() + key.wValue_Offset + key.wCount));
+        } else {
+          LASPP_ASSERT_EQ(key.wTIFFTagLocation, TIFFTagLocation::GeoAsciiParams);
+          LASPP_ASSERT(geo_ascii.has_value(), "GeoAsciiParams not found");
+          std::string value(geo_ascii->data() + key.wValue_Offset,
+                            geo_ascii->data() + key.wValue_Offset + key.wCount);
+          m_las_geo_keys->add_key(key.wKeyID, value);
+        }
+      }
+    }
+
     return record_headers;
   }
 
@@ -188,6 +218,7 @@ class LASReader {
   std::optional<std::string> wkt() const {
     return m_coordinate_wkt.has_value() ? m_coordinate_wkt : m_math_wkt;
   }
+  std::optional<LASGeoKeys> geo_keys() const { return m_las_geo_keys; }
 
   template <typename T>
   std::span<T> read_chunk(std::span<T> output_location, size_t chunk_index) {

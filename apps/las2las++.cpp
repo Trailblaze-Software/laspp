@@ -82,6 +82,11 @@ int main(int argc, char* argv[]) {
   laspp::LASReader reader(ifs);
   std::cout << reader.header() << std::endl;
 
+  if (reader.geo_keys()) {
+    std::cout << "GeoTIFF Projection Info:" << std::endl;
+    std::cout << *reader.geo_keys() << std::endl;
+  }
+
   auto vlrs = reader.vlr_headers();
   for (const auto& vlr : vlrs) {
     std::cout << vlr << std::endl;

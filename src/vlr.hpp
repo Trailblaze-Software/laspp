@@ -20,9 +20,13 @@
 #include <cassert>
 #include <cstdint>
 #include <iostream>
+#include <map>
+#include <string>
+#include <variant>
 #include <vector>
 
 #include "utilities/macros.hpp"
+#include "utilities/printing.hpp"
 
 namespace laspp {
 
@@ -77,6 +81,14 @@ struct LASPP_PACKED sGeoKeys {
     TIFFTagLocation wTIFFTagLocation;
     uint16_t wCount;
     uint16_t wValue_Offset;
+
+    friend std::ostream& operator<<(std::ostream& os, const sKeyEntry& key_entry) {
+      os << "Key ID: " << key_entry.wKeyID << std::endl;
+      os << "TIFF Tag Location: " << key_entry.wTIFFTagLocation << std::endl;
+      os << "Count: " << key_entry.wCount << std::endl;
+      os << "Value Offset: " << key_entry.wValue_Offset;
+      return os;
+    }
   };
 };
 
@@ -95,12 +107,47 @@ struct GeoKeys : sGeoKeys {
     os << "Minor Revision: " << geo_keys.wMinorRevision << std::endl;
     os << "Number of Keys: " << geo_keys.wNumberOfKeys << std::endl;
     for (const auto& key : geo_keys.keys) {
-      os << "Key ID: " << key.wKeyID << std::endl;
-      os << "TIFF Tag Location: " << key.wTIFFTagLocation << std::endl;
-      os << "Count: " << key.wCount << std::endl;
-      os << "Value Offset: " << key.wValue_Offset << std::endl;
+      os << key << std::endl;
     }
     return os;
+  }
+};
+
+class LASGeoKeys {
+  uint16_t m_key_directory_version;
+  uint16_t m_key_revision;
+  uint16_t m_minor_revision;
+
+  std::map<uint16_t, std::variant<uint16_t, std::vector<double>, std::string>> keys;
+
+ public:
+  LASGeoKeys(uint16_t key_directory_version, uint16_t key_revision, uint16_t minor_revision)
+      : m_key_directory_version(key_directory_version),
+        m_key_revision(key_revision),
+        m_minor_revision(minor_revision) {}
+
+  void add_key(uint16_t key_id, std::variant<uint16_t, std::vector<double>, std::string> value) {
+    keys[key_id] = value;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const LASGeoKeys& geo_keys) {
+    os << "Key Directory Version: " << geo_keys.m_key_directory_version << std::endl;
+    os << "Key Revision: " << geo_keys.m_key_revision << std::endl;
+    os << "Minor Revision: " << geo_keys.m_minor_revision << std::endl;
+    for (const auto& [key_id, value] : geo_keys.keys) {
+      os << "Key ID: " << key_id << std::endl;
+      std::visit([&os](const auto& value_t) { os << "Value: " << value_t << std::endl; }, value);
+    }
+    return os;
+  }
+
+  const std::variant<uint16_t, std::vector<double>, std::string>& get_key(uint16_t key_id) const {
+    return keys.at(key_id);
+  }
+
+  const std::map<uint16_t, std::variant<uint16_t, std::vector<double>, std::string>>& get_keys()
+      const {
+    return keys;
   }
 };
 
