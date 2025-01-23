@@ -22,8 +22,10 @@
 #include "laz/byte_encoder.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
+#include "laz/rgb12_encoder.hpp"
 
 namespace laspp {
 
-typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, BytesEncoder> LAZEncoder;
+typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, RGB12Encoder, BytesEncoder>
+    LAZEncoder;
 }

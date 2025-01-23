@@ -28,6 +28,7 @@
 #include "laz/encoders.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
+#include "laz/rgb12_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz_vlr.hpp"
 
@@ -79,6 +80,11 @@ class LAZReader {
         case LAZItemType::GPSTime11: {
           encoders.push_back(GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(GPSTime));
+          break;
+        }
+        case LAZItemType::RGB12: {
+          encoders.push_back(RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
+          compressed_data = compressed_data.subspan(sizeof(ColorData));
           break;
         }
         case LAZItemType::Byte: {

@@ -24,6 +24,7 @@
 #include "laz/chunktable.hpp"
 #include "laz/encoders.hpp"
 #include "laz/point10_encoder.hpp"
+#include "laz/rgb12_encoder.hpp"
 #include "laz_vlr.hpp"
 
 namespace laspp {
@@ -70,6 +71,15 @@ class LAZWriter {
           }
           encoders.emplace_back(GPSTime11Encoder(gps_time));
           compressed_data.write(reinterpret_cast<const char*>(&gps_time), sizeof(GPSTime));
+          break;
+        }
+        case LAZItemType::RGB12: {
+          ColorData color_data;
+          if constexpr (is_copy_assignable<decltype(color_data), T>()) {
+            color_data = points[0];
+          }
+          encoders.emplace_back(RGB12Encoder(color_data));
+          compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
           break;
         }
         case LAZItemType::Byte: {
@@ -127,8 +137,6 @@ class LAZWriter {
   ~LAZWriter() {
     int64_t chunk_table_offset = m_stream.tellp();
     m_chunk_table.write(m_stream);
-    std::cout << "Wrote chunktable: " << m_chunk_table << " at offset " << chunk_table_offset
-              << std::endl;
     m_stream.seekp(m_initial_stream_offset);
     m_stream.write(reinterpret_cast<const char*>(&chunk_table_offset), sizeof(chunk_table_offset));
     m_stream.seekp(0, std::ios::end);

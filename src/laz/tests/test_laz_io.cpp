@@ -126,10 +126,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
 
       std::mt19937 gen(0);
       gen.seed(42);
-      std::vector<LASPointFormat1> points;
+      std::vector<LASPointFormat3> points;
       points.reserve(200);
       for (size_t i = 0; i < 200; i++) {
-        LASPointFormat1 point;
+        LASPointFormat3 point;
         point.x = static_cast<int32_t>(gen());
         point.y = static_cast<int32_t>(gen());
         point.z = static_cast<int32_t>(gen());
@@ -140,30 +140,34 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         point.user_data = static_cast<uint8_t>(gen());
         point.point_source_id = static_cast<uint16_t>(gen());
         point.gps_time.f64 = static_cast<double>(gen());
+        point.red = static_cast<uint16_t>(gen());
+        point.green = static_cast<uint16_t>(gen());
+        point.blue = static_cast<uint16_t>(gen());
         points.push_back(point);
       }
 
       {
         LAZWriter writer(stream, LAZCompressor::PointwiseChunked);
         writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::GPSTime11));
+        writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::RGB12));
         writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::Point10));
 
-        writer.write_chunk(std::span<LASPointFormat1>(points).subspan(0, 10));
-        writer.write_chunk(std::span<LASPointFormat1>(points).subspan(10, 20));
-        writer.write_chunk(std::span<LASPointFormat1>(points).subspan(30, 120));
-        writer.write_chunk(std::span<LASPointFormat1>(points).subspan(150, 1));
-        writer.write_chunk(std::span<LASPointFormat1>(points).subspan(151, 49));
+        writer.write_chunk(std::span<LASPointFormat3>(points).subspan(0, 10));
+        writer.write_chunk(std::span<LASPointFormat3>(points).subspan(10, 20));
+        writer.write_chunk(std::span<LASPointFormat3>(points).subspan(30, 120));
+        writer.write_chunk(std::span<LASPointFormat3>(points).subspan(150, 1));
+        writer.write_chunk(std::span<LASPointFormat3>(points).subspan(151, 49));
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      LASPP_ASSERT_EQ(stream.str().size(), 5740);
+      LASPP_ASSERT_EQ(stream.str().size(), 7083);
 
       {
         LAZReader reader(*laz_special_vlr);
         reader.read_chunk_table(stream, points.size());
         LASPP_ASSERT_EQ(reader.chunk_table().num_chunks(), 5);
 
-        std::vector<LASPointFormat1> decompressed_points(200);
+        std::vector<LASPointFormat3> decompressed_points(200);
 
         for (size_t i = 0; i < reader.chunk_table().num_chunks(); i++) {
           size_t compressed_size = reader.chunk_table().compressed_chunk_size(i);
@@ -172,7 +176,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
           stream.read(reinterpret_cast<char *>(compressed_chunk.data()),
                       static_cast<int64_t>(compressed_size));
           reader.decompress_chunk(compressed_chunk,
-                                  std::span<LASPointFormat1>(decompressed_points)
+                                  std::span<LASPointFormat3>(decompressed_points)
                                       .subspan(reader.chunk_table().decompressed_chunk_offsets()[i],
                                                reader.chunk_table().points_per_chunk()[i]));
         }

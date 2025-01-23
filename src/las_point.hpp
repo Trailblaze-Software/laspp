@@ -244,14 +244,29 @@ struct LASPP_PACKED ColorData {
   uint16_t blue;
 
   bool operator==(const ColorData& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const ColorData& color) {
+    os << "RGB: (" << color.red << ", " << color.green << ", " << color.blue << ")" << std::endl;
+    return os;
+  }
 };
 
 struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {
   bool operator==(const LASPointFormat2& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat2& lpf2) {
+    return os << static_cast<const LASPointFormat0&>(lpf2) << static_cast<const ColorData&>(lpf2)
+              << std::endl;
+  }
 };
 
 struct LASPP_PACKED LASPointFormat3 : LASPointFormat1, ColorData {
   bool operator==(const LASPointFormat3& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat3& lpf3) {
+    return os << static_cast<const LASPointFormat1&>(lpf3) << static_cast<const ColorData&>(lpf3)
+              << std::endl;
+  }
 };
 
 struct LASPP_PACKED WavePacketData {
@@ -264,14 +279,37 @@ struct LASPP_PACKED WavePacketData {
   float z_t;
 
   bool operator==(const WavePacketData& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const WavePacketData& wave_packet) {
+    os << "Wave packet descriptor index: "
+       << static_cast<int>(wave_packet.wave_packet_descriptor_index) << std::endl;
+    os << "Byte offset to waveform data: " << wave_packet.byte_offset_to_waveform_data << std::endl;
+    os << "Wave packet size: " << wave_packet.wave_packet_size << std::endl;
+    os << "Return point waveform location: " << wave_packet.return_point_waveform_location
+       << std::endl;
+    os << "X_t: " << wave_packet.x_t << std::endl;
+    os << "Y_t: " << wave_packet.y_t << std::endl;
+    os << "Z_t: " << wave_packet.z_t << std::endl;
+    return os;
+  }
 };
 
 struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {
   bool operator==(const LASPointFormat4& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat4& lpf4) {
+    return os << static_cast<const LASPointFormat1&>(lpf4)
+              << static_cast<const WavePacketData&>(lpf4) << std::endl;
+  }
 };
 
 struct LASPP_PACKED LASPointFormat5 : LASPointFormat3, WavePacketData {
   bool operator==(const LASPointFormat5& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat5& lpf5) {
+    return os << static_cast<const LASPointFormat3&>(lpf5)
+              << static_cast<const WavePacketData&>(lpf5) << std::endl;
+  }
 };
 
 struct LASPP_PACKED LASPointFormat6 {
@@ -314,21 +352,48 @@ struct LASPP_PACKED LASPointFormat6 {
 
 struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
   bool operator==(const LASPointFormat7& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat7& lpf7) {
+    return os << static_cast<const LASPointFormat6&>(lpf7) << static_cast<const ColorData&>(lpf7)
+              << std::endl;
+  }
 };
 
 struct LASPP_PACKED NIRData {
   bool operator==(const NIRData& other) const = default;
   uint16_t NIR;
+
+  friend std::ostream& operator<<(std::ostream& os, const NIRData& nir) {
+    os << "NIR: " << nir.NIR << std::endl;
+    return os;
+  }
 };
 
-struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {};
+struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
+  bool operator==(const LASPointFormat8& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat8& lpf8) {
+    return os << static_cast<const LASPointFormat7&>(lpf8) << static_cast<const NIRData&>(lpf8)
+              << std::endl;
+  }
+};
 
 struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
   bool operator==(const LASPointFormat9& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat9& lpf9) {
+    return os << static_cast<const LASPointFormat6&>(lpf9)
+              << static_cast<const WavePacketData&>(lpf9) << std::endl;
+  }
 };
 
 struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
   bool operator==(const LASPointFormat10& other) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LASPointFormat10& lpf10) {
+    return os << static_cast<const LASPointFormat9&>(lpf10) << static_cast<const ColorData&>(lpf10)
+              << static_cast<const NIRData&>(lpf10) << std::endl;
+  }
 };
 
 #define LASPP_SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \
