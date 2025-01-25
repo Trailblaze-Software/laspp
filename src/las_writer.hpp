@@ -116,7 +116,7 @@ class LASWriter {
   }
 
   template <typename PointType, typename T>
-  void t_write_points(const std::span<T>& points) {
+  void t_write_points(const std::span<T>& points, std::optional<size_t> chunk_size) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
     LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
     if (m_header.is_laz_compressed()) {
@@ -246,7 +246,17 @@ class LASWriter {
     header().update_bounds({max_pos[0], max_pos[1], max_pos[2]});
 
     if (m_header.is_laz_compressed()) {
-      m_laz_writer->write_chunk(std::span<PointType>(points_to_write));
+      if (chunk_size.has_value()) {
+        std::vector<std::span<PointType>> chunks;
+        chunks.reserve(points.size() / chunk_size.value() + 1);
+        for (size_t i = 0; i < points.size(); i += chunk_size.value()) {
+          size_t num_points = std::min(chunk_size.value(), points.size() - i);
+          chunks.push_back(std::span<PointType>(points_to_write).subspan(i, num_points));
+        }
+        m_laz_writer->write_chunks(std::span<std::span<PointType>>(chunks));
+      } else {
+        m_laz_writer->write_chunk(std::span<PointType>(points_to_write));
+      }
     } else {
       m_output_stream.write(reinterpret_cast<const char*>(points_to_write.data()),
                             static_cast<int64_t>(points_to_write.size() * sizeof(PointType)));
@@ -255,11 +265,11 @@ class LASWriter {
 
  public:
   template <typename T>
-  void write_points(const std::span<T>& points) {
+  void write_points(const std::span<T>& points, std::optional<size_t> chunk_size = std::nullopt) {
     if constexpr (std::is_base_of_v<LASPointFormat0, T> || std::is_base_of_v<LASPointFormat6, T>) {
-      t_write_points<T>(points);
+      t_write_points<T>(points, chunk_size);
     } else {
-      LASPP_SWITCH_OVER_POINT_TYPE(header().point_format(), t_write_points, points)
+      LASPP_SWITCH_OVER_POINT_TYPE(header().point_format(), t_write_points, points, chunk_size);
     }
   }
 

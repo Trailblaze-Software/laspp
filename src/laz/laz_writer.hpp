@@ -121,17 +121,32 @@ class LAZWriter {
   }
 
   template <typename T>
-  void write_chunk(const std::span<T>& points) {
+  void write_chunk(const std::span<T>& points, std::optional<uint32_t> index = std::nullopt) {
     std::stringstream compressed_chunk = compress_chunk(points);
     int64_t compressed_chunk_size = compressed_chunk.tellp();
     LASPP_ASSERT_LT(points.size(), std::numeric_limits<uint32_t>::max());
     LASPP_ASSERT_LT(compressed_chunk_size, std::numeric_limits<uint32_t>::max());
-    m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
-                            static_cast<uint32_t>(compressed_chunk_size));
-    m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
-    m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
-                                   ? m_chunk_table.constant_chunk_size().value()
-                                   : std::numeric_limits<uint32_t>::max();
+    if (index.has_value()) {
+      while (index.value() > m_chunk_table.num_chunks()) {
+      }
+    }
+#pragma omp critical
+    {
+      m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
+                              static_cast<uint32_t>(compressed_chunk_size));
+      m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
+      m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
+                                     ? m_chunk_table.constant_chunk_size().value()
+                                     : std::numeric_limits<uint32_t>::max();
+    }
+  }
+
+  template <typename T>
+  void write_chunks(const std::span<std::span<T>> chunks) {
+    // #pragma omp parallel for
+    for (size_t i = 0; i < chunks.size(); i++) {
+      write_chunk(chunks[i], i);
+    }
   }
 
   ~LAZWriter() {

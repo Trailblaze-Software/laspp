@@ -274,15 +274,15 @@ class OutStream : StreamVariables {
     const int64_t current_p = m_stream.tellp();
     int64_t updated_p = current_p - 1;
     m_stream.seekg(updated_p);
-    m_stream.seekp(updated_p);
     uint8_t carry = static_cast<uint8_t>(m_stream.get());
+    m_stream.seekp(updated_p);
     while (carry == 0xff) {
       m_stream.put(0);
       LASPP_ASSERT_GT(updated_p, 0);
       updated_p--;
       m_stream.seekg(updated_p);
-      m_stream.seekp(updated_p);
       carry = static_cast<uint8_t>(m_stream.get());
+      m_stream.seekp(updated_p);
     }
     m_stream.put(static_cast<char>(carry + 1));
     m_stream.seekp(current_p);

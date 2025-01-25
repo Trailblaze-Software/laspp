@@ -144,7 +144,7 @@ class LAZChunkTable : LAZChunkTableHeader {
   std::optional<uint32_t> constant_chunk_size() const { return m_constant_chunk_size; }
 
   friend std::ostream& operator<<(std::ostream& os, const LAZChunkTable& chunk_table) {
-    os << static_cast<const LAZChunkTableHeader>(chunk_table) << std::endl;
+    os << static_cast<const LAZChunkTableHeader>(chunk_table);
     os << "Compressed chunk sizes: " << chunk_table.m_compressed_chunk_size << std::endl;
     os << "Constant chunk size: " << chunk_table.m_constant_chunk_size << std::endl;
     os << "Compressed chunk offsets: " << chunk_table.m_compressed_chunk_offsets << std::endl;

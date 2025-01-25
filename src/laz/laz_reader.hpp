@@ -31,6 +31,7 @@
 #include "laz/rgb12_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz_vlr.hpp"
+#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -98,6 +99,14 @@ class LAZReader {
           LASPP_FAIL("Currently unsupported LAZ item type: ", LAZItemType(record.item_type), " (",
                      static_cast<uint16_t>(record.item_type), ")");
       }
+    }
+
+    if (m_special_vlr.compressor == LAZCompressor::LayeredChunked) {
+      uint32_t num_points;
+      std::copy(compressed_data.begin(), compressed_data.begin() + sizeof(uint32_t),
+                reinterpret_cast<std::byte*>(&num_points));
+      compressed_data = compressed_data.subspan(sizeof(uint32_t));
+      LASPP_ASSERT_EQ(num_points, decompressed_data.size());
     }
 
     PointerStreamBuffer compressed_buffer(compressed_data.data(), compressed_data.size());
