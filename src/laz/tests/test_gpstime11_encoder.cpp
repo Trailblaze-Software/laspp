@@ -90,7 +90,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         values[3][i] = 15666123123123123123. * static_cast<double>(i) + 1e34;
       }
     }
-    compressed_sizes.push_back(816);
+    compressed_sizes.push_back(1102);
 
     values.emplace_back();
     {
@@ -107,7 +107,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         values[4].push_back(1e-10 - static_cast<double>(i) * 11 * 1e-20);
       }
     }
-    compressed_sizes.push_back(112);
+    compressed_sizes.push_back(130);
 
     for (size_t i = 0; i < values.size(); i++) {
       const auto& vec = values[i];

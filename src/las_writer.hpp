@@ -197,8 +197,10 @@ class LASWriter {
         copy_if_possible<ColorData>(points_to_write[i], points[i]);
         copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
         if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
-          if (points_to_write[i].bit_byte.return_number < 15)
-            local_points_by_return[points_to_write[i].bit_byte.return_number]++;
+          if (points_to_write[i].bit_byte.return_number < 16 &&
+              points_to_write[i].bit_byte.return_number > 0) {
+            local_points_by_return[points_to_write[i].bit_byte.return_number-1]++;
+          }
           PointType point = points_to_write[i];
           local_min_pos[0] = std::min(local_min_pos[0], point.x);
           local_min_pos[1] = std::min(local_min_pos[1], point.y);

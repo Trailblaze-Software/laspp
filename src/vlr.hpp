@@ -113,6 +113,8 @@ struct GeoKeys : sGeoKeys {
   }
 };
 
+#pragma pack(pop)
+
 class LASGeoKeys {
   uint16_t m_key_directory_version;
   uint16_t m_key_revision;
@@ -150,6 +152,8 @@ class LASGeoKeys {
     return keys;
   }
 };
+
+#pragma pack(push, 1)
 
 struct LASPP_PACKED ExtraBytesInfo {
   uint8_t reserved[2];
