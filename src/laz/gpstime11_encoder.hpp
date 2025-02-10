@@ -222,10 +222,12 @@ class GPSTime11Encoder {
       int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
       if (diff == static_cast<int32_t>(diff)) {
         uint32_t diff_32 = static_cast<uint32_t>(diff);
-        int32_t multiplier = static_cast<int32_t>(diff_32 + static_cast<uint32_t>(rf.delta) / 2) / rf.delta;
+        int32_t multiplier =
+            static_cast<int32_t>(diff_32 + static_cast<uint32_t>(rf.delta) / 2) / rf.delta;
         if (multiplier == 1) {
           m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(multiplier));
-          m_dgps_time_low_encoder.encode_int(1, out_stream, static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta)));
+          m_dgps_time_low_encoder.encode_int(
+              1, out_stream, static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta)));
           rf.counter = 0;
         } else if (multiplier == 0) {
           m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(multiplier));
@@ -238,12 +240,17 @@ class GPSTime11Encoder {
         } else if (multiplier > 0) {
           if (multiplier < 500) {
             m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(multiplier));
-            m_dgps_time_low_encoder.encode_int(multiplier < 10 ? 2 : 3, out_stream,
-                                               static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) * static_cast<uint32_t>(multiplier)));
+            m_dgps_time_low_encoder.encode_int(
+                multiplier < 10 ? 2 : 3, out_stream,
+                static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) *
+                                                   static_cast<uint32_t>(multiplier)));
           } else {
             multiplier = 500;
             m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(multiplier));
-            m_dgps_time_low_encoder.encode_int(4, out_stream, static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) * static_cast<uint32_t>(multiplier)));
+            m_dgps_time_low_encoder.encode_int(
+                4, out_stream,
+                static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) *
+                                                   static_cast<uint32_t>(multiplier)));
             rf.counter++;
             if (rf.counter > 3) {
               rf.delta = static_cast<int32_t>(diff_32);
@@ -255,8 +262,10 @@ class GPSTime11Encoder {
             multiplier = -10;
           }
           m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(500 - multiplier));
-          m_dgps_time_low_encoder.encode_int(multiplier == -10 ? 6 : 5, out_stream,
-                                             static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) * static_cast<uint32_t>(multiplier)));
+          m_dgps_time_low_encoder.encode_int(
+              multiplier == -10 ? 6 : 5, out_stream,
+              static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) *
+                                                 static_cast<uint32_t>(multiplier)));
           if (multiplier == -10) {
             rf.counter++;
             if (rf.counter > 3) {
