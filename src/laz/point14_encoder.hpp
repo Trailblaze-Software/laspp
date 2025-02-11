@@ -74,7 +74,7 @@ struct LASPointFormat6Context : LASPointFormat6 {
         cpr = 0;
       }
     }
-    cprgps = cpr * 2 + gps_changed;
+    cprgps = static_cast<uint_fast8_t>(cpr * 2 + gps_changed);
   }
 
   void initialize(const LASPointFormat6& las_point) {
@@ -151,8 +151,10 @@ class LASPointFormat6Encoder {
 
     if (changed_values) {
       if (changed_values & (1 << 2)) {
-        context.number_of_returns = static_cast<uint8_t>(
-            context.n_returns_encoders[context.number_of_returns].decode_symbol(stream));
+        context.number_of_returns =
+            static_cast<uint8_t>(
+                context.n_returns_encoders[context.number_of_returns].decode_symbol(stream)) &
+            0xf;
       }
 
       if (changed_values & (0b11)) {
@@ -171,7 +173,7 @@ class LASPointFormat6Encoder {
       context.l = number_return_level_8ctx[context.number_of_returns][context.return_number];
     }
 
-    uint32_t mgps = context.m * 2 + bool(changed_values & (1 << 4));
+    uint32_t mgps = context.m * 2u + static_cast<uint32_t>(bool(changed_values & (1 << 4)));
     int32_t decoded_int = context.dx_encoders[context.number_of_returns == 1].decode_int(stream);
 
     int32_t dx = wrapping_int32_add(decoded_int, context.dx_streamed_median[mgps].get_median());
@@ -195,7 +197,7 @@ class LASPointFormat6Encoder {
 
   void encode(OutStream& stream, const LASPointFormat6& point) {
     uint_fast16_t d_scanner_channel =
-        ((point.scanner_channel - m_contexts[m_context].scanner_channel) + 4) % 4;
+        ((point.scanner_channel - m_contexts[m_context].scanner_channel) + 4u) % 4u;
 
     uint_fast8_t old_cprgps = m_contexts[m_context].cprgps;
     uint_fast16_t changed_values = 0;
@@ -220,7 +222,7 @@ class LASPointFormat6Encoder {
       changed_values |= (1 << 2);
     }
     if (point.return_number != context.return_number) {
-      uint_fast16_t d_return_number = (point.return_number - context.return_number + 16) % 16;
+      uint_fast16_t d_return_number = (point.return_number - context.return_number + 16u) % 16u;
       if (d_return_number == 1) {
         changed_values |= 0b1;
       } else if (d_return_number == 15) {
@@ -241,7 +243,7 @@ class LASPointFormat6Encoder {
         context.number_of_returns = point.number_of_returns;
       }
       if (changed_values & 0b1 && changed_values & 0b10) {
-        uint_fast16_t d_return_number = (point.return_number - context.return_number + 16) % 16;
+        uint_fast16_t d_return_number = (point.return_number - context.return_number + 16u) % 16u;
         context.d_return_number_same_time_encoder.encode_symbol(stream, d_return_number - 2);
         context.return_number = point.return_number;
       }
@@ -250,7 +252,7 @@ class LASPointFormat6Encoder {
       context.l = number_return_level_8ctx[context.number_of_returns][context.return_number];
     }
 
-    uint32_t mgps = context.m * 2 + bool(changed_values & (1 << 4));
+    uint32_t mgps = context.m * 2u + static_cast<uint32_t>(bool(changed_values & (1 << 4)));
 
     // X
     int32_t dx = wrapping_int32_sub(point.x, context.x);
