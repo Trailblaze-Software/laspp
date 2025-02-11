@@ -50,6 +50,7 @@ class LAZWriter {
 
   template <typename T>
   std::stringstream compress_chunk(const std::span<T>& points) {
+    LASPP_ASSERT_GT(points.size(), 0);
     std::stringstream compressed_data;
 
     std::vector<LAZEncoder> encoders;
