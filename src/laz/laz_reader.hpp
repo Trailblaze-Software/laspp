@@ -78,11 +78,11 @@ class LAZReader {
           compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
           break;
         }
-        case LAZItemType::Point14: {
-          encoders.push_back(
-              LASPointFormat6Encoder(*reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
-          compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
-        }
+          // case LAZItemType::Point14: {
+          // encoders.push_back(
+          // LASPointFormat6Encoder(*reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
+          // compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
+        //}
         case LAZItemType::GPSTime11: {
           encoders.push_back(GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(GPSTime));
