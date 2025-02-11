@@ -29,6 +29,21 @@ using namespace laspp;
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
     std::vector<LASPointFormat6> points;
+    LASPointFormat6 first_point;
+    first_point.x = 0;
+    first_point.y = 0;
+    first_point.z = 0;
+    first_point.intensity = 0;
+    first_point.return_number = 0;
+    first_point.number_of_returns = 0;
+    first_point.scan_direction_flag = 0;
+    first_point.edge_of_flight_line = 0;
+    first_point.classification = LASClassification::OverlapPoints;
+    first_point.scan_angle = 0;
+    first_point.user_data = 0;
+    first_point.point_source_id = 0;
+    first_point.gps_time = 0;
+    points.push_back(first_point);
     points.reserve(1000);
     std::mt19937 gen(0);
     gen.seed(0);
