@@ -29,6 +29,7 @@ using namespace laspp;
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
     std::vector<LASPointFormat6> points;
+    points.reserve(1000);
     LASPointFormat6 first_point;
     first_point.x = 0;
     first_point.y = 0;
@@ -44,7 +45,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     first_point.point_source_id = 0;
     first_point.gps_time = 0;
     points.push_back(first_point);
-    points.reserve(1000);
     std::mt19937 gen(0);
     gen.seed(0);
     for (size_t i = points.size(); i < 1000; i++) {
@@ -60,7 +60,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::stringstream encoded_stream;
     {
       laspp::OutStream ostream(encoded_stream);
-      LASPointFormat6Encoder encoder(points.back());
+      LASPointFormat6Encoder encoder(points.front());
       for (LASPointFormat6& point : points) {
         encoder.encode(ostream, point);
       }

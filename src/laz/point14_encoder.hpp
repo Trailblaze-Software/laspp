@@ -60,34 +60,6 @@ struct LASPointFormat6Context : LASPointFormat6 {
 
   LASPointFormat6Context() : initialized(false) {}
 
-  void set_cpr(bool gps_changed = false) {
-    if (return_number == 1) {
-      if (number_of_returns < 2) {
-        cpr = 3;
-      } else {
-        cpr = 2;
-      }
-    } else {
-      if (return_number >= number_of_returns) {
-        cpr = 1;
-      } else {
-        cpr = 0;
-      }
-    }
-    cprgps = static_cast<uint_fast8_t>(cpr * 2 + gps_changed);
-  }
-
-  void initialize(const LASPointFormat6& las_point) {
-    static_cast<LASPointFormat6&>(*this) = las_point;
-    set_cpr();
-    initialized = true;
-  }
-};
-
-class LASPointFormat6Encoder {
-  std::array<LASPointFormat6Context, 4> m_contexts;
-  uint_fast8_t m_context;
-
   static constexpr uint8_t number_return_map_6ctx[16][16] = {
       {0, 1, 2, 3, 4, 5, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5},
       {1, 0, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
@@ -123,6 +95,40 @@ class LASPointFormat6Encoder {
       {7, 7, 7, 7, 7, 7, 7, 6, 5, 4, 3, 2, 1, 0, 1, 2},
       {7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 4, 3, 2, 1, 0, 1},
       {7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 4, 3, 2, 1, 0}};
+
+  void set_cpr(bool gps_changed = false) {
+    if (return_number == 1) {
+      if (number_of_returns < 2) {
+        cpr = 3;
+      } else {
+        cpr = 2;
+      }
+    } else {
+      if (return_number >= number_of_returns) {
+        cpr = 1;
+      } else {
+        cpr = 0;
+      }
+    }
+    cprgps = static_cast<uint_fast8_t>(cpr * 2 + gps_changed);
+  }
+
+  void set_m_l() {
+    m = number_return_map_6ctx[number_of_returns][return_number];
+    l = number_return_level_8ctx[number_of_returns][return_number];
+  }
+
+  void initialize(const LASPointFormat6& las_point) {
+    static_cast<LASPointFormat6&>(*this) = las_point;
+    set_cpr();
+    set_m_l();
+    initialized = true;
+  }
+};
+
+class LASPointFormat6Encoder {
+  std::array<LASPointFormat6Context, 4> m_contexts;
+  uint_fast8_t m_context;
 
  public:
   using EncodedType = LASPointFormat6;
@@ -169,8 +175,7 @@ class LASPointFormat6Encoder {
         context.return_number = (context.return_number + d_return_number) % 16;
       }
 
-      context.m = number_return_map_6ctx[context.number_of_returns][context.return_number];
-      context.l = number_return_level_8ctx[context.number_of_returns][context.return_number];
+      context.set_m_l();
     }
 
     uint32_t mgps = context.m * 2u + static_cast<uint32_t>(bool(changed_values & (1 << 4)));
@@ -248,8 +253,7 @@ class LASPointFormat6Encoder {
         context.return_number = point.return_number;
       }
 
-      context.m = number_return_map_6ctx[context.number_of_returns][context.return_number];
-      context.l = number_return_level_8ctx[context.number_of_returns][context.return_number];
+      context.set_m_l();
     }
 
     uint32_t mgps = context.m * 2u + static_cast<uint32_t>(bool(changed_values & (1 << 4)));
