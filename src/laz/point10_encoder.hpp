@@ -23,14 +23,9 @@
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz/streaming_median.hpp"
+#include "utilities/arithmetic.hpp"
 
 namespace laspp {
-
-inline int32_t wrapping_int32_add(int32_t a, int32_t b) {
-  return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
-}
-
-inline int32_t wrapping_int32_sub(int32_t a, int32_t b) { return wrapping_int32_add(a, -b); }
 
 template <size_t N, typename T>
 constexpr std::array<T, N> create_array(const T& val) {

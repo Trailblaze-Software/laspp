@@ -17,18 +17,13 @@
 
 #pragma once
 
-#include <variant>
-
-#include "laz/byte_encoder.hpp"
-#include "laz/gpstime11_encoder.hpp"
-#include "laz/point10_encoder.hpp"
-#include "laz/point14_encoder.hpp"
-#include "laz/rgb12_encoder.hpp"
-#include "laz/rgb14_encoder.hpp"
+#include <cstdint>
 
 namespace laspp {
 
-typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, RGB12Encoder, RGB14Encoder,
-                     BytesEncoder, LASPointFormat6Encoder>
-    LAZEncoder;
+inline int32_t wrapping_int32_add(int32_t a, int32_t b) {
+  return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
 }
+
+inline int32_t wrapping_int32_sub(int32_t a, int32_t b) { return wrapping_int32_add(a, -b); }
+}  // namespace laspp

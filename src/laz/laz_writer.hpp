@@ -25,6 +25,7 @@
 #include "laz/encoders.hpp"
 #include "laz/point10_encoder.hpp"
 #include "laz/rgb12_encoder.hpp"
+#include "laz/rgb14_encoder.hpp"
 #include "laz_vlr.hpp"
 
 namespace laspp {
@@ -65,6 +66,15 @@ class LAZWriter {
           compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat0));
           break;
         }
+        case LAZItemType::Point14: {
+          LASPointFormat6 point;
+          if constexpr (is_copy_assignable<decltype(point), T>()) {
+            point = points[0];
+          }
+          encoders.emplace_back(LASPointFormat6Encoder(point));
+          compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat6));
+          break;
+        }
         case LAZItemType::GPSTime11: {
           GPSTime gps_time;
           if constexpr (is_copy_assignable<decltype(gps_time), T>()) {
@@ -80,6 +90,15 @@ class LAZWriter {
             color_data = points[0];
           }
           encoders.emplace_back(RGB12Encoder(color_data));
+          compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
+          break;
+        }
+        case LAZItemType::RGB14: {
+          ColorData color_data;
+          if constexpr (is_copy_assignable<decltype(color_data), T>()) {
+            color_data = points[0];
+          }
+          encoders.emplace_back(RGB14Encoder(color_data));
           compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
           break;
         }

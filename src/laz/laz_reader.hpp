@@ -28,7 +28,9 @@
 #include "laz/encoders.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
+#include "laz/point14_encoder.hpp"
 #include "laz/rgb12_encoder.hpp"
+#include "laz/rgb14_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz_vlr.hpp"
 #include "utilities/assert.hpp"
@@ -78,11 +80,12 @@ class LAZReader {
           compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
           break;
         }
-          // case LAZItemType::Point14: {
-          // encoders.push_back(
-          // LASPointFormat6Encoder(*reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
-          // compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
-        //}
+        case LAZItemType::Point14: {
+          encoders.push_back(
+              LASPointFormat6Encoder(*reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
+          compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
+          break;
+        }
         case LAZItemType::GPSTime11: {
           encoders.push_back(GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(GPSTime));
@@ -90,6 +93,11 @@ class LAZReader {
         }
         case LAZItemType::RGB12: {
           encoders.push_back(RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
+          compressed_data = compressed_data.subspan(sizeof(ColorData));
+          break;
+        }
+        case LAZItemType::RGB14: {
+          encoders.push_back(RGB14Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(ColorData));
           break;
         }
