@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <span>
 #include <type_traits>
 
@@ -38,6 +39,17 @@
 #include "utilities/assert.hpp"
 
 namespace laspp {
+
+struct LayeredInStreamsBase {
+  virtual ~LayeredInStreamsBase() = default;
+};
+
+template <size_t NumLayers>
+struct LayeredInStreamsHolder final : LayeredInStreamsBase {
+  LayeredInStreams<NumLayers> streams;
+  LayeredInStreamsHolder(std::span<std::byte>& size_bytes, std::span<std::byte>& data_bytes)
+      : streams(size_bytes, data_bytes) {}
+};
 
 template <typename, typename = void>
 struct has_num_layers : std::false_type {};
@@ -153,27 +165,43 @@ class LAZReader {
             },
             encoder);
       }
-      std::span<std::byte> compressed_layer_data =
+      std::span<std::byte> layer_size_bytes =
+          compressed_data.subspan(0, total_n_layers * sizeof(uint32_t));
+      std::span<std::byte> layer_payload_bytes =
           compressed_data.subspan(total_n_layers * sizeof(uint32_t));
+
+      std::vector<std::unique_ptr<LayeredInStreamsBase>> layered_streams;
+      layered_streams.reserve(encoders.size());
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
-            [&compressed_data, &compressed_layer_data](auto&& enc) {
+            [&layered_streams, &layer_size_bytes, &layer_payload_bytes](auto&& enc) {
               if constexpr (has_num_layers_v<decltype(enc)>) {
-                LayeredInStreams<std::remove_reference_t<decltype(enc)>::NUM_LAYERS>
-                    layered_in_streams(compressed_data, compressed_layer_data);
+                using EncoderType = std::remove_reference_t<decltype(enc)>;
+                layered_streams.emplace_back(
+                    std::make_unique<LayeredInStreamsHolder<EncoderType::NUM_LAYERS>>(
+                        layer_size_bytes, layer_payload_bytes));
               } else {
                 LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
               }
             },
             encoder);
       }
-      LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
+      LASPP_ASSERT_EQ(layer_size_bytes.size(), 0);
+      LASPP_ASSERT_EQ(layer_payload_bytes.size(), 0);
       for (size_t i = 0; i < decompressed_data.size(); i++) {
-        for (LAZEncoder& laz_encoder : encoders) {
+        for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
+          LAZEncoder& laz_encoder = encoders[encoder_index];
           std::visit(
-              [&decompressed_data, &i](auto&& encoder) {
+              [&decompressed_data, &i, &layered_streams, encoder_index](auto&& encoder) {
                 if constexpr (has_num_layers_v<decltype(encoder)>) {
-                  // if (i > 0) encoder.decode();
+                  using EncoderType = std::remove_reference_t<decltype(encoder)>;
+                  auto* layered_holder =
+                      static_cast<LayeredInStreamsHolder<EncoderType::NUM_LAYERS>*>(
+                          layered_streams[encoder_index].get());
+                  LASPP_ASSERT(layered_holder != nullptr);
+                  if (i > 0) {
+                    encoder.decode(layered_holder->streams);
+                  }
                   if constexpr (is_copy_fromable<T, decltype(encoder.last_value())>()) {
                     copy_from(decompressed_data[i], encoder.last_value());
                   } else if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {

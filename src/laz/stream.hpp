@@ -234,6 +234,7 @@ class InStream : StreamVariables {
 
 class OutStream : StreamVariables {
   std::iostream& m_stream;
+  bool m_finalized;
 
   void finalize_stream() {
     bool write_two_bytes;
@@ -260,12 +261,19 @@ class OutStream : StreamVariables {
   }
 
  public:
-  explicit OutStream(std::iostream& stream) : m_stream(stream) {
+  explicit OutStream(std::iostream& stream) : m_stream(stream), m_finalized(false) {
     m_base = 0;
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  ~OutStream() { finalize_stream(); }
+  ~OutStream() { finalize(); }
+
+  void finalize() {
+    if (!m_finalized) {
+      finalize_stream();
+      m_finalized = true;
+    }
+  }
 
   uint32_t length() const { return m_length; }
 
@@ -290,6 +298,7 @@ class OutStream : StreamVariables {
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
+    LASPP_ASSERT(!m_finalized);
     if ((static_cast<uint64_t>(m_base) + static_cast<uint64_t>(lower)) >=
         (static_cast<uint64_t>(1) << 32)) {
       propogate_carry();

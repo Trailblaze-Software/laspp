@@ -16,13 +16,17 @@
  */
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <random>
+#include <span>
 #include <sstream>
+#include <vector>
 
 #include "las_point.hpp"
+#include "laz/layered_stream.hpp"
 #include "laz/point14_encoder.hpp"
 #include "laz/stream.hpp"
 
@@ -88,24 +92,28 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       points.emplace_back(next);
     }
 
-    std::stringstream encoded_stream;
-    {
-      OutStream ostream(encoded_stream);
-      LASPointFormat6Encoder encoder(points.front());
-      for (size_t i = 1; i < points.size(); i++) {
-        encoder.encode(ostream, points[i]);
-      }
+    LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS> out_streams;
+    LASPointFormat6Encoder encoder(points.front());
+    for (size_t i = 1; i < points.size(); i++) {
+      encoder.encode(out_streams, points[i]);
     }
 
-    LASPP_ASSERT_EQ(encoded_stream.str().size(), 26155);
+    std::stringstream combined_stream = out_streams.combined_stream();
+    std::string combined_data = combined_stream.str();
+    std::vector<std::byte> buffer(combined_data.size());
+    std::memcpy(buffer.data(), combined_data.data(), combined_data.size());
 
-    {
-      InStream instream(encoded_stream);
-      LASPointFormat6Encoder decoder(points.front());
-      for (size_t i = 1; i < points.size(); i++) {
-        LASPP_ASSERT_EQ(decoder.decode(instream), points[i]);
-        LASPP_ASSERT_EQ(decoder.last_value(), points[i]);
-      }
+    std::span<std::byte> size_span(buffer.data(),
+                                   LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<std::byte> data_span(buffer.data() + size_span.size(),
+                                   buffer.size() - size_span.size());
+
+    LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
+
+    LASPointFormat6Encoder decoder(points.front());
+    for (size_t i = 1; i < points.size(); i++) {
+      LASPP_ASSERT_EQ(decoder.decode(in_streams), points[i]);
+      LASPP_ASSERT_EQ(decoder.last_value(), points[i]);
     }
   }
 

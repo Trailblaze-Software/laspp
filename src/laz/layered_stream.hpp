@@ -91,13 +91,14 @@ class LayeredOutStreams {
   std::stringstream combined_stream() {
     std::stringstream combined;
     for (size_t i = 0; i < N_STREAMS; i++) {
+      m_streams[i].finalize();
       std::string layer_data = m_layer_stringstreams[i].str();
       uint32_t layer_size = static_cast<uint32_t>(layer_data.size());
       combined.write(reinterpret_cast<const char*>(&layer_size), sizeof(layer_size));
     }
     for (size_t i = 0; i < N_STREAMS; i++) {
       std::string layer_data = m_layer_stringstreams[i].str();  // TODO: avoid copy
-      combined.write(layer_data.data(), layer_data.size());
+      combined.write(layer_data.data(), static_cast<long>(layer_data.size()));
     }
     return combined;
   }

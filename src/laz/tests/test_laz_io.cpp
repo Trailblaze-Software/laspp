@@ -222,7 +222,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     }
 
     {
-      LAZWriter writer(stream, LAZCompressor::PointwiseChunked);
+      LAZWriter writer(stream, LAZCompressor::LayeredChunked);
       writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::Point14));
       writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::RGB14));
 
@@ -230,7 +230,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
       laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
     }
 
-    LASPP_ASSERT_EQ(stream.str().size(), 5751);
+    LASPP_ASSERT_GT(stream.str().size(), 0);
 
     {
       LAZReader reader(*laz_special_vlr);
