@@ -69,6 +69,8 @@ class RGB14Encoder {
   }
 
  public:
+  static constexpr int NUM_LAYERS = 1;
+
   using EncodedType = ColorData;
 
   const EncodedType& last_value() const { return m_contexts[m_active_context].last_value; }
@@ -80,7 +82,8 @@ class RGB14Encoder {
     m_active_context = ctx;
   }
 
-  ColorData decode(InStream& in_stream) {
+  ColorData decode(LayeredInStreams<NUM_LAYERS>& in_streams) {
+    InStream& in_stream = in_streams[0];
     uint8_t context_idx = resolve_context_index(m_active_context);
     Context& context = ensure_context(context_idx);
 
@@ -150,7 +153,8 @@ class RGB14Encoder {
     return context.last_value;
   }
 
-  void encode(OutStream& out_stream, ColorData color_data) {
+  void encode(LayeredOutStreams<NUM_LAYERS>& out_streams, ColorData color_data) {
+    OutStream& out_stream = out_streams[0];
     uint8_t context_idx = resolve_context_index(m_active_context);
     Context& context = ensure_context(context_idx);
 

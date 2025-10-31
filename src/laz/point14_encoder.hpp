@@ -24,6 +24,7 @@
 #include "las_point.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/integer_encoder.hpp"
+#include "laz/layered_stream.hpp"
 #include "laz/stream.hpp"
 #include "laz/streaming_median.hpp"
 #include "utilities/arithmetic.hpp"
@@ -152,6 +153,8 @@ class LASPointFormat6Encoder {
   static inline thread_local std::optional<uint8_t> s_current_context = std::nullopt;
 
  public:
+  static constexpr int NUM_LAYERS = 9;
+
   using EncodedType = LASPointFormat6;
   const LASPointFormat6& last_value() const { return m_contexts[m_context]; }
 
@@ -171,7 +174,7 @@ class LASPointFormat6Encoder {
     set_current_scanner_channel(m_context);
   }
 
-  LASPointFormat6 decode(InStream& stream) {
+  LASPointFormat6 decode(LayeredInStreams<NUM_LAYERS>& streams) {
     LASPointFormat6Context& prev_context = m_contexts[m_context];
     uint_fast16_t changed_values =
         prev_context.changed_values_encoders[prev_context.cprgps].decode_symbol(stream);
@@ -303,7 +306,7 @@ class LASPointFormat6Encoder {
     return context;
   }
 
-  void encode(OutStream& stream, const LASPointFormat6& point) {
+  void encode(LayeredOutStreams<NUM_LAYERS>& streams, const LASPointFormat6& point) {
     LASPointFormat6Context& prev_context = m_contexts[m_context];
 
     uint_fast8_t target_context_idx = point.scanner_channel;

@@ -75,7 +75,9 @@ if(WIN32)
       "/wd4711"
       "/wd4625"
       "/wd5026"
-      "/wd5246")
+      "/wd5246"
+      "/wd4127"
+      "/wd4061")
   endif()
 elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
