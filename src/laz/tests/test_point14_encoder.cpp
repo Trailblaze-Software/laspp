@@ -82,7 +82,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       next.edge_of_flight_line = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       next.classification = static_cast<LASClassification>(classification_dist(gen));
       next.user_data = user_dist(gen);
-      next.scan_angle = static_cast<uint16_t>(angle_dist(gen));
+      next.scan_angle = angle_dist(gen);
       next.point_source_id = point_source_dist(gen);
       next.intensity = intensity_dist(gen);
       next.gps_time = gps_dist(gen);

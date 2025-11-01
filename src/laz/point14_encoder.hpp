@@ -52,7 +52,7 @@ struct LASPointFormat6Context : LASPointFormat6 {
   std::array<uint16_t, 8> last_intensity;
   MultiInstanceIntegerEncoder<16, 2> scan_angle_encoder;
   IntegerEncoder<16> point_source_id_encoder;
-  std::optional<GPSTime11Encoder> gps_time_encoder;
+  GeneralGPSTimeEncoder<true> gps_time_encoder;
 
   uint_fast8_t m;
   uint_fast8_t l;
@@ -60,7 +60,8 @@ struct LASPointFormat6Context : LASPointFormat6 {
   uint_fast8_t cpr;
   uint_fast8_t cprgps;
 
-  LASPointFormat6Context() : initialized(false), last_z{}, last_intensity{} {}
+  LASPointFormat6Context()
+      : initialized(false), last_z{}, last_intensity{}, gps_time_encoder(GPSTime(0)) {}
 
   static constexpr uint8_t number_return_map_6ctx[16][16] = {
       {0, 1, 2, 3, 4, 5, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5},
@@ -98,12 +99,6 @@ struct LASPointFormat6Context : LASPointFormat6 {
       {7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 4, 3, 2, 1, 0, 1},
       {7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 5, 4, 3, 2, 1, 0}};
 
-  void ensure_gps_encoder_initialized() {
-    if (!gps_time_encoder.has_value()) {
-      gps_time_encoder.emplace(GPSTime(gps_time));
-    }
-  }
-
   void set_cpr(bool gps_changed = false) {
     if (return_number == 1) {
       if (number_of_returns < 2) {
@@ -126,7 +121,7 @@ struct LASPointFormat6Context : LASPointFormat6 {
     l = number_return_level_8ctx[number_of_returns][return_number];
   }
 
-  void reset_state(const LASPointFormat6& las_point) {
+  void reset_state(const LASPointFormat6& las_point, bool init_gps_encoder = true) {
     for (auto& median : dx_streamed_median) {
       median = StreamingMedian<int32_t>();
     }
@@ -135,14 +130,17 @@ struct LASPointFormat6Context : LASPointFormat6 {
     }
     last_z.fill(las_point.z);
     last_intensity.fill(las_point.intensity);
-    gps_time_encoder.emplace(GPSTime(las_point.gps_time));
+    if (init_gps_encoder) {
+      // gps_time_encoder = GPSTime11Encoder(GPSTime(static_cast<int64_t>(las_point.gps_time *
+      // 1000.0)));
+    }
   }
 
-  void initialize(const LASPointFormat6& las_point) {
+  void initialize(const LASPointFormat6& las_point, bool init_gps_encoder = true) {
     static_cast<LASPointFormat6&>(*this) = las_point;
     set_cpr();
     set_m_l();
-    reset_state(las_point);
+    reset_state(las_point, init_gps_encoder);
     initialized = true;
   }
 };
@@ -200,7 +198,9 @@ class LASPointFormat6Encoder {
       uint_fast8_t new_scanner_channel =
           static_cast<uint_fast8_t>((m_context + d_scanner_channel + 1) % 4);
       if (!m_contexts[new_scanner_channel].initialized) {
-        m_contexts[new_scanner_channel].initialize(prev_context);
+        // Initialize from previous context, but don't copy GPS encoder state
+        // Each scanner channel needs its own independent GPS time tracking
+        m_contexts[new_scanner_channel].initialize(prev_context, false);
         m_contexts[new_scanner_channel].scanner_channel =
             static_cast<uint8_t>(new_scanner_channel & 0x3);
       }
@@ -208,7 +208,6 @@ class LASPointFormat6Encoder {
     }
 
     LASPointFormat6Context& context = m_contexts[m_context];
-    context.ensure_gps_encoder_initialized();
 
     uint8_t last_number_of_returns = context.number_of_returns;
     uint8_t last_return_number = context.return_number;
@@ -247,15 +246,16 @@ class LASPointFormat6Encoder {
     }
 
     if (gps_time_change) {
-      GPSTime new_time = context.gps_time_encoder->decode(gps_time_stream);
+      GPSTime new_time = context.gps_time_encoder.decode(gps_time_stream);
       context.gps_time = static_cast<double>(new_time);
     }
 
     if (scan_angle_change) {
-      int16_t prev_scan_angle = static_cast<int16_t>(context.scan_angle);
-      int32_t diff = context.scan_angle_encoder[gps_time_change].decode_int(scan_angle_stream);
-      int16_t updated_scan_angle = static_cast<int16_t>(prev_scan_angle + diff);
-      context.scan_angle = static_cast<uint16_t>(updated_scan_angle);
+      int16_t prev_scan_angle = context.scan_angle;
+      int16_t diff = static_cast<int16_t>(
+          context.scan_angle_encoder[gps_time_change].decode_int(scan_angle_stream));
+      int16_t updated_scan_angle = prev_scan_angle + diff;
+      context.scan_angle = updated_scan_angle;
     }
 
     uint8_t last_classification = static_cast<uint8_t>(context.classification);
@@ -349,7 +349,7 @@ class LASPointFormat6Encoder {
     uint8_t last_return_number = reference_context->return_number;
     uint16_t prev_point_source_id = reference_context->point_source_id;
     double prev_gps_time = reference_context->gps_time;
-    uint16_t prev_scan_angle = reference_context->scan_angle;
+    int16_t prev_scan_angle = reference_context->scan_angle;
     uint8_t prev_user_data = reference_context->user_data;
     uint8_t last_classification = static_cast<uint8_t>(reference_context->classification);
     uint8_t last_flags = static_cast<uint8_t>((reference_context->edge_of_flight_line << 5) |
@@ -394,7 +394,9 @@ class LASPointFormat6Encoder {
       uint_fast16_t delta = (point.scanner_channel - prev_context.scanner_channel + 4u) % 4u;
       prev_context.d_scanner_channel_encoder.encode_symbol(channel_returns_stream, delta - 1);
       if (!m_contexts[target_context_idx].initialized) {
-        m_contexts[target_context_idx].initialize(prev_context);
+        // Initialize from previous context, but don't copy GPS encoder state
+        // Each scanner channel needs its own independent GPS time tracking
+        m_contexts[target_context_idx].initialize(prev_context, false);
         m_contexts[target_context_idx].scanner_channel =
             static_cast<uint8_t>(target_context_idx & 0x3);
       }
@@ -402,7 +404,6 @@ class LASPointFormat6Encoder {
     }
 
     LASPointFormat6Context& context = m_contexts[m_context];
-    context.ensure_gps_encoder_initialized();
 
     if (changed_values & (1 << 2)) {
       context.n_returns_encoders[last_number_of_returns].encode_symbol(channel_returns_stream,
@@ -443,13 +444,13 @@ class LASPointFormat6Encoder {
     context.point_source_id = point.point_source_id;
 
     if (gps_time_change) {
-      context.gps_time_encoder->encode(gps_time_stream, GPSTime(point.gps_time));
+      context.gps_time_encoder.encode(gps_time_stream, GPSTime(point.gps_time));
     }
     context.gps_time = point.gps_time;
 
     if (scan_angle_change) {
-      int16_t prev_angle = static_cast<int16_t>(prev_scan_angle);
-      int16_t next_angle = static_cast<int16_t>(point.scan_angle);
+      int16_t prev_angle = prev_scan_angle;
+      int16_t next_angle = point.scan_angle;
       int32_t diff = static_cast<int32_t>(next_angle) - static_cast<int32_t>(prev_angle);
       context.scan_angle_encoder[gps_changed].encode_int(scan_angle_stream, diff);
     }

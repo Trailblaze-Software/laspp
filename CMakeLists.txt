@@ -28,9 +28,12 @@ project(
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 if(LASPP_BUILD_TESTS)
-  # include(FetchContent) FetchContent_Declare( laszip GIT_REPOSITORY
-  # https://github.com/LASzip/LASzip.git GIT_TAG 3.4.4)
-  # FetchContent_MakeAvailable(laszip)
+  include(FetchContent)
+  FetchContent_Declare(
+    laszip
+    GIT_REPOSITORY https://github.com/LASzip/LASzip.git
+    GIT_TAG 3.4.4)
+  FetchContent_MakeAvailable(laszip)
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
@@ -147,6 +150,25 @@ if(LASPP_BUILD_TESTS)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     target_compile_definitions(${TEST_NAME} PRIVATE LASPP_DEBUG_ASSERTS)
   endforeach()
+
+  if(TARGET test_laszip_interop)
+    target_link_libraries(test_laszip_interop PRIVATE laszip)
+    # Use SYSTEM include directories to suppress warnings from laszip headers
+    target_include_directories(
+      test_laszip_interop SYSTEM PRIVATE ${laszip_SOURCE_DIR}/src
+                                         ${laszip_BINARY_DIR}/include)
+    target_sources(
+      test_laszip_interop PRIVATE ${laszip_SOURCE_DIR}/src/laszipper.cpp
+                                  ${laszip_SOURCE_DIR}/src/lasunzipper.cpp)
+    # Suppress warnings from external laszip library
+    set_source_files_properties(
+      ${laszip_SOURCE_DIR}/src/laszipper.cpp
+      ${laszip_SOURCE_DIR}/src/lasunzipper.cpp
+      PROPERTIES
+        COMPILE_FLAGS
+        "-Wno-old-style-cast -Wno-shadow -Wno-useless-cast -Wno-sign-conversion -Wno-conversion"
+    )
+  endif()
 
 endif()
 

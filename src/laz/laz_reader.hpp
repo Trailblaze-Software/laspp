@@ -40,17 +40,6 @@
 
 namespace laspp {
 
-struct LayeredInStreamsBase {
-  virtual ~LayeredInStreamsBase() = default;
-};
-
-template <size_t NumLayers>
-struct LayeredInStreamsHolder final : LayeredInStreamsBase {
-  LayeredInStreams<NumLayers> streams;
-  LayeredInStreamsHolder(std::span<std::byte>& size_bytes, std::span<std::byte>& data_bytes)
-      : streams(size_bytes, data_bytes) {}
-};
-
 template <typename, typename = void>
 struct has_num_layers : std::false_type {};
 
@@ -94,42 +83,43 @@ class LAZReader {
   template <typename T>
   std::span<T> decompress_chunk(std::span<std::byte> compressed_data,
                                 std::span<T> decompressed_data) {
-    LASPP_ASSERT(m_chunk_table.has_value());
-
     std::vector<LAZEncoder> encoders;
     for (LAZItemRecord record : m_special_vlr.items_records) {
       switch (record.item_type) {
         case LAZItemType::Point14: {
-          encoders.push_back(
+          encoders.emplace_back(
               LASPointFormat6Encoder(*reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
           break;
         }
         case LAZItemType::RGB14: {
-          encoders.push_back(RGB14Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
+          encoders.emplace_back(
+              RGB14Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(ColorData));
           break;
         }
         case LAZItemType::Point10: {
-          encoders.push_back(
+          encoders.emplace_back(
               LASPointFormat0Encoder(*reinterpret_cast<LASPointFormat0*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
           break;
         }
         case LAZItemType::GPSTime11: {
-          encoders.push_back(GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
+          encoders.emplace_back(
+              GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(GPSTime));
           break;
         }
         case LAZItemType::RGB12: {
-          encoders.push_back(RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
+          encoders.emplace_back(
+              RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
           compressed_data = compressed_data.subspan(sizeof(ColorData));
           break;
         }
         case LAZItemType::Byte: {
           std::vector<std::byte> last_bytes(record.item_size);
           std::copy_n(compressed_data.data(), record.item_size, last_bytes.begin());
-          encoders.push_back(BytesEncoder(last_bytes));
+          encoders.emplace_back(BytesEncoder(last_bytes));
           compressed_data = compressed_data.subspan(record.item_size);
           break;
         }
@@ -165,43 +155,40 @@ class LAZReader {
             },
             encoder);
       }
-      std::span<std::byte> layer_size_bytes =
-          compressed_data.subspan(0, total_n_layers * sizeof(uint32_t));
-      std::span<std::byte> layer_payload_bytes =
+      std::span<std::byte> compressed_layer_data =
           compressed_data.subspan(total_n_layers * sizeof(uint32_t));
 
-      std::vector<std::unique_ptr<LayeredInStreamsBase>> layered_streams;
-      layered_streams.reserve(encoders.size());
+      std::vector<
+          std::variant<std::unique_ptr<LayeredInStreams<1>>, std::unique_ptr<LayeredInStreams<9>>>>
+          layered_in_streams_for_encoders;
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
-            [&layered_streams, &layer_size_bytes, &layer_payload_bytes](auto&& enc) {
+            [&compressed_data, &compressed_layer_data,
+             &layered_in_streams_for_encoders](auto&& enc) {
               if constexpr (has_num_layers_v<decltype(enc)>) {
-                using EncoderType = std::remove_reference_t<decltype(enc)>;
-                layered_streams.emplace_back(
-                    std::make_unique<LayeredInStreamsHolder<EncoderType::NUM_LAYERS>>(
-                        layer_size_bytes, layer_payload_bytes));
+                layered_in_streams_for_encoders.emplace_back(
+                    std::make_unique<
+                        LayeredInStreams<std::remove_reference_t<decltype(enc)>::NUM_LAYERS>>(
+                        compressed_data, compressed_layer_data));
               } else {
                 LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
               }
             },
             encoder);
       }
-      LASPP_ASSERT_EQ(layer_size_bytes.size(), 0);
-      LASPP_ASSERT_EQ(layer_payload_bytes.size(), 0);
+      LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
       for (size_t i = 0; i < decompressed_data.size(); i++) {
-        for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
-          LAZEncoder& laz_encoder = encoders[encoder_index];
+        for (size_t encoder_idx = 0; encoder_idx < encoders.size(); encoder_idx++) {
+          LAZEncoder& laz_encoder = encoders[encoder_idx];
           std::visit(
-              [&decompressed_data, &i, &layered_streams, encoder_index](auto&& encoder) {
+              [&decompressed_data, &i, &layered_in_streams_for_encoders,
+               &encoder_idx](auto&& encoder) {
                 if constexpr (has_num_layers_v<decltype(encoder)>) {
-                  using EncoderType = std::remove_reference_t<decltype(encoder)>;
-                  auto* layered_holder =
-                      static_cast<LayeredInStreamsHolder<EncoderType::NUM_LAYERS>*>(
-                          layered_streams[encoder_index].get());
-                  LASPP_ASSERT(layered_holder != nullptr);
-                  if (i > 0) {
-                    encoder.decode(layered_holder->streams);
-                  }
+                  LayeredInStreams<std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>&
+                      layered_in_stream = *std::get<std::unique_ptr<LayeredInStreams<
+                          std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>>>(
+                          layered_in_streams_for_encoders[encoder_idx]);
+                  if (i > 0) encoder.decode(layered_in_stream);
                   if constexpr (is_copy_fromable<T, decltype(encoder.last_value())>()) {
                     copy_from(decompressed_data[i], encoder.last_value());
                   } else if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {

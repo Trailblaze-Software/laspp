@@ -26,7 +26,8 @@
 #include "utilities/assert.hpp"
 namespace laspp {
 
-class GPSTime11Encoder {
+template <bool Point14 = false>
+class GeneralGPSTimeEncoder {
   struct ReferenceFrame {
     int32_t delta;
     int32_t counter;
@@ -53,7 +54,8 @@ class GPSTime11Encoder {
     return m_reference_frames[m_current_frame].prev_gps_time;
   }
 
-  explicit GPSTime11Encoder(GPSTime last_gps_time) : m_current_frame(0), m_next_unused_frame(0) {
+  explicit GeneralGPSTimeEncoder(GPSTime last_gps_time)
+      : m_current_frame(0), m_next_unused_frame(0) {
     m_reference_frames[0].prev_gps_time = last_gps_time;
   }
 
@@ -162,10 +164,11 @@ class GPSTime11Encoder {
       return m_reference_frames[m_current_frame].prev_gps_time;
     }
     LASPP_ASSERT_EQ(case_delta, 512, "The final one");
-    int32_t dgps_time_low = m_dgps_time_low_encoder.decode_int(8, in_stream);
+    uint32_t dgps_time_low =
+        static_cast<uint32_t>(m_dgps_time_low_encoder.decode_int(8, in_stream));
     uint32_t dgps_time = static_cast<uint32_t>(raw_decode(in_stream, 32));
     uint64_t tmp = (static_cast<uint64_t>(
-                        static_cast<int32_t>(
+                        static_cast<uint32_t>(
                             m_reference_frames[m_current_frame].prev_gps_time.as_uint64() >> 32) +
                         dgps_time_low)
                     << 32) +
@@ -185,7 +188,7 @@ class GPSTime11Encoder {
         m_case_0delta_encoder.encode_symbol(out_stream, 0);
         return;
       }
-      int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
+      int64_t diff = static_cast<int64_t>(gps_time.as_uint64() - rf.prev_gps_time.as_uint64());
       if (diff == static_cast<int32_t>(diff)) {
         int32_t diff_32 = static_cast<int32_t>(diff);
         m_case_0delta_encoder.encode_symbol(out_stream, 1);
@@ -194,7 +197,8 @@ class GPSTime11Encoder {
         rf.counter = 0;
       } else {
         for (size_t i = 0; i < 4; i++) {
-          int64_t rf_diff = gps_time.as_int64() - m_reference_frames[i].prev_gps_time.as_int64();
+          int64_t rf_diff = static_cast<int64_t>(gps_time.as_uint64() -
+                                                 m_reference_frames[i].prev_gps_time.as_uint64());
           if (static_cast<int32_t>(rf_diff) == rf_diff) {
             m_case_0delta_encoder.encode_symbol(out_stream, 2 + (4 + i - m_current_frame) % 4);
             m_current_frame = static_cast<uint_fast8_t>(i);
@@ -205,8 +209,8 @@ class GPSTime11Encoder {
         m_case_0delta_encoder.encode_symbol(out_stream, 2);
         m_dgps_time_low_encoder.encode_int(
             8, out_stream,
-            static_cast<int32_t>(gps_time.as_uint64() >> 32) -
-                static_cast<int32_t>(rf.prev_gps_time.as_uint64() >> 32));
+            static_cast<int32_t>(static_cast<uint32_t>(gps_time.as_uint64() >> 32) -
+                                 static_cast<uint32_t>(rf.prev_gps_time.as_uint64() >> 32)));
         raw_encode(out_stream, static_cast<uint32_t>(gps_time.as_uint64()), 32);
         m_next_unused_frame = (m_next_unused_frame + 1u) % 4;
         m_current_frame = m_next_unused_frame;
@@ -300,5 +304,7 @@ class GPSTime11Encoder {
     }
   }
 };
+
+using GPSTime11Encoder = GeneralGPSTimeEncoder<>;
 
 }  // namespace laspp

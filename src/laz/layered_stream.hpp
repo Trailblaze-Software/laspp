@@ -20,7 +20,6 @@
 #include <cstring>
 
 #include "stream.hpp"
-#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -88,17 +87,32 @@ class LayeredOutStreams {
 
   OutStream& operator[](size_t i) noexcept { return m_streams[i]; }
 
-  std::stringstream combined_stream() {
-    std::stringstream combined;
+  std::array<uint32_t, N_STREAMS> layer_sizes() {
+    std::array<uint32_t, N_STREAMS> sizes;
     for (size_t i = 0; i < N_STREAMS; i++) {
       m_streams[i].finalize();
-      std::string layer_data = m_layer_stringstreams[i].str();
-      uint32_t layer_size = static_cast<uint32_t>(layer_data.size());
+      sizes[i] = static_cast<uint32_t>(m_layer_stringstreams[i].str().size());
+    }
+    return sizes;
+  }
+
+  std::stringstream cb() {
+    std::stringstream combined;
+    for (size_t i = 0; i < N_STREAMS; i++) {
+      combined << std::move(m_layer_stringstreams[i]).rdbuf();
+    }
+    return combined;
+  }
+
+  std::stringstream combined_stream() {
+    std::stringstream combined;
+    auto sizes = layer_sizes();
+    for (size_t i = 0; i < N_STREAMS; i++) {
+      uint32_t layer_size = sizes[i];
       combined.write(reinterpret_cast<const char*>(&layer_size), sizeof(layer_size));
     }
     for (size_t i = 0; i < N_STREAMS; i++) {
-      std::string layer_data = m_layer_stringstreams[i].str();  // TODO: avoid copy
-      combined.write(layer_data.data(), static_cast<long>(layer_data.size()));
+      combined << std::move(m_layer_stringstreams[i]).rdbuf();
     }
     return combined;
   }

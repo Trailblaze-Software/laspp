@@ -325,7 +325,7 @@ struct LASPP_PACKED LASPointFormat6 {
   uint8_t edge_of_flight_line : 1;
   LASClassification classification;
   uint8_t user_data;
-  uint16_t scan_angle;
+  int16_t scan_angle;
   uint16_t point_source_id;
   double gps_time;
 
@@ -344,6 +344,7 @@ struct LASPP_PACKED LASPointFormat6 {
     os << "User data: " << static_cast<int>(point.user_data) << std::endl;
     os << "Scan angle: " << point.scan_angle << std::endl;
     os << "Point source ID: " << point.point_source_id << std::endl;
+    os << "GPS time: " << point.gps_time << std::endl;
     return os;
   }
 

@@ -40,7 +40,7 @@ jobs:
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Coverage -j 2
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        run: ctest --build-config Coverage
+        run: ctest --build-config Coverage --output-on-failure
       - name: Coverage
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config Coverage -T Coverage

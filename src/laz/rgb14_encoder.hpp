@@ -137,13 +137,15 @@ class RGB14Encoder {
         blue_high = static_cast<uint8_t>(base + delta);
       }
 
-      decoded_value.red = static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8);
-      decoded_value.green =
-          static_cast<uint16_t>(green_low) | (static_cast<uint16_t>(green_high) << 8);
-      decoded_value.blue =
-          static_cast<uint16_t>(blue_low) | (static_cast<uint16_t>(blue_high) << 8);
+      decoded_value.red = static_cast<uint16_t>(
+          (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
+      decoded_value.green = static_cast<uint16_t>(
+          (static_cast<uint16_t>(green_low) | (static_cast<uint16_t>(green_high) << 8)));
+      decoded_value.blue = static_cast<uint16_t>(
+          (static_cast<uint16_t>(blue_low) | (static_cast<uint16_t>(blue_high) << 8)));
     } else {
-      decoded_value.red = static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8);
+      decoded_value.red = static_cast<uint16_t>(
+          (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
       decoded_value.green = decoded_value.red;
       decoded_value.blue = decoded_value.red;
     }
