@@ -121,26 +121,13 @@ struct LASPointFormat6Context : LASPointFormat6 {
     l = number_return_level_8ctx[number_of_returns][return_number];
   }
 
-  void reset_state(const LASPointFormat6& las_point, bool init_gps_encoder = true) {
-    for (auto& median : dx_streamed_median) {
-      median = StreamingMedian<int32_t>();
-    }
-    for (auto& median : dy_streamed_median) {
-      median = StreamingMedian<int32_t>();
-    }
-    last_z.fill(las_point.z);
-    last_intensity.fill(las_point.intensity);
-    if (init_gps_encoder) {
-      // gps_time_encoder = GPSTime11Encoder(GPSTime(static_cast<int64_t>(las_point.gps_time *
-      // 1000.0)));
-    }
-  }
-
-  void initialize(const LASPointFormat6& las_point, bool init_gps_encoder = true) {
+  void initialize(const LASPointFormat6& las_point) {
     static_cast<LASPointFormat6&>(*this) = las_point;
     set_cpr();
     set_m_l();
-    reset_state(las_point, init_gps_encoder);
+    last_z.fill(las_point.z);
+    last_intensity.fill(las_point.intensity);
+    gps_time_encoder.set_previous_value(GPSTime(las_point.gps_time));
     initialized = true;
   }
 };
@@ -200,7 +187,7 @@ class LASPointFormat6Encoder {
       if (!m_contexts[new_scanner_channel].initialized) {
         // Initialize from previous context, but don't copy GPS encoder state
         // Each scanner channel needs its own independent GPS time tracking
-        m_contexts[new_scanner_channel].initialize(prev_context, false);
+        m_contexts[new_scanner_channel].initialize(prev_context);
         m_contexts[new_scanner_channel].scanner_channel =
             static_cast<uint8_t>(new_scanner_channel & 0x3);
       }
@@ -394,9 +381,7 @@ class LASPointFormat6Encoder {
       uint_fast16_t delta = (point.scanner_channel - prev_context.scanner_channel + 4u) % 4u;
       prev_context.d_scanner_channel_encoder.encode_symbol(channel_returns_stream, delta - 1);
       if (!m_contexts[target_context_idx].initialized) {
-        // Initialize from previous context, but don't copy GPS encoder state
-        // Each scanner channel needs its own independent GPS time tracking
-        m_contexts[target_context_idx].initialize(prev_context, false);
+        m_contexts[target_context_idx].initialize(prev_context);
         m_contexts[target_context_idx].scanner_channel =
             static_cast<uint8_t>(target_context_idx & 0x3);
       }

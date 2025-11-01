@@ -82,6 +82,10 @@ class GeneralGPSTimeEncoder {
     LASPP_FAIL("Unknown case delta: ", case_delta);
   }
 
+  void set_previous_value(const GPSTime& gps_time) {
+    m_reference_frames[m_current_frame].prev_gps_time = gps_time;
+  }
+
   GPSTime decode(InStream& in_stream) {
     uint_fast16_t case_delta;
     if (m_reference_frames[m_current_frame].delta == 0) {

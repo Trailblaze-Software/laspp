@@ -640,6 +640,6 @@ int main() {
   run_laszip_roundtrip<LASPointFormat1>(256);
   run_laszip_file_roundtrip<LASPointFormat1>(128, false);
   run_laszip_file_roundtrip<LASPointFormat6>(128, true);
-  //  run_laszip_file_roundtrip<LASPointFormat7>(128, true);
+  run_laszip_file_roundtrip<LASPointFormat7>(128, true);
   return 0;
 }
