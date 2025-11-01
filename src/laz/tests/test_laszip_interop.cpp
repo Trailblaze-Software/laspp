@@ -130,21 +130,22 @@ std::vector<PointT> generate_points(size_t n_points) {
       if (return_number > number_of_returns) {
         return_number = number_of_returns;
       }
-      point.return_number = return_number;
-      point.number_of_returns = number_of_returns;
+      point.return_number = return_number & 0x0F;
+      point.number_of_returns = number_of_returns & 0x0F;
       uint8_t synthetic = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       uint8_t keypoint = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       uint8_t withheld = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       uint8_t overlap = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.classification_flags =
-          static_cast<uint8_t>((overlap << 3) | (withheld << 2) | (keypoint << 1) | synthetic);
+          static_cast<uint8_t>((overlap << 3) | (withheld << 2) | (keypoint << 1) | synthetic) &
+          0x0F;
       point.classification_flags &= 0x07;
       point.scanner_channel = static_cast<uint8_t>(bool_dist(gen) & 0x3);
       point.scan_direction_flag = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.edge_of_flight_line = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.classification = static_cast<LASClassification>(classification_dist(gen));
       point.user_data = user_dist(gen);
-      point.scan_angle = angle_dist(gen);
+      point.scan_angle = static_cast<int16_t>(angle_dist(gen));
       point.point_source_id = point_source_dist(gen);
       point.gps_time = gps_dist(gen);
     }
@@ -280,8 +281,9 @@ void populate_laszip_point(const PointT& point, laszip_point& las_point) {
   }
 
   if constexpr (std::is_base_of_v<LASPointFormat6, PointT>) {
-    las_point.return_number = static_cast<laszip_U8>(std::min<int>(point.return_number, 7));
-    las_point.number_of_returns = static_cast<laszip_U8>(std::min<int>(point.number_of_returns, 7));
+    las_point.return_number = static_cast<laszip_U8>(std::min<int>(point.return_number, 7)) & 0x7;
+    las_point.number_of_returns =
+        static_cast<laszip_U8>(std::min<int>(point.number_of_returns, 7)) & 0x7;
     las_point.scan_direction_flag = point.scan_direction_flag;
     las_point.edge_of_flight_line = point.edge_of_flight_line;
     las_point.synthetic_flag = point.classification_flags & 0x1;
@@ -486,9 +488,8 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
               << " (uint64=" << *reinterpret_cast<uint64_t*>(&las_point->gps_time) << ")"
               << std::endl;
     std::cerr << "[Test Debug] Expected first point GPS time=" << std::setprecision(20)
-              << static_cast<double>(points[0]) << " (uint64="
-              << *reinterpret_cast<const uint64_t*>(&static_cast<const GPSTime&>(points[0])) << ")"
-              << std::endl;
+              << static_cast<double>(points[0])
+              << " (uint64=" << (static_cast<GPSTime>(points[0]).as_uint64()) << ")" << std::endl;
     LASPP_ASSERT_EQ(laszip_close_reader(reader), 0);
     LASPP_ASSERT_EQ(laszip_destroy(reader), 0);
   }
@@ -636,9 +637,9 @@ void test_gps_encoder_large_delta() {
 int main() {
   run_laszip_roundtrip<LASPointFormat0>(256);
   run_laszip_file_roundtrip<LASPointFormat0>(128, false);
-  // run_laszip_roundtrip<LASPointFormat1>(256);
-  // run_laszip_file_roundtrip<LASPointFormat1>(128, false);
-  //  run_laszip_file_roundtrip<LASPointFormat6>(128, true);
+  run_laszip_roundtrip<LASPointFormat1>(256);
+  run_laszip_file_roundtrip<LASPointFormat1>(128, false);
+  run_laszip_file_roundtrip<LASPointFormat6>(128, true);
   //  run_laszip_file_roundtrip<LASPointFormat7>(128, true);
   return 0;
 }
