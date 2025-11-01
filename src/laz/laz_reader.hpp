@@ -84,48 +84,52 @@ class LAZReader {
   std::span<T> decompress_chunk(std::span<std::byte> compressed_data,
                                 std::span<T> decompressed_data) {
     std::vector<LAZEncoder> encoders;
-    for (LAZItemRecord record : m_special_vlr.items_records) {
-      switch (record.item_type) {
-        case LAZItemType::Point14: {
-          encoders.emplace_back(
-              LASPointFormat6Encoder(*reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
-          compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
-          break;
+    {
+      std::optional<uint8_t> context;
+      for (LAZItemRecord record : m_special_vlr.items_records) {
+        switch (record.item_type) {
+          case LAZItemType::Point14: {
+            encoders.emplace_back(LASPointFormat6Encoder(
+                *reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
+            context = std::get<LASPointFormat6Encoder>(encoders.back()).get_active_context();
+            compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
+            break;
+          }
+          case LAZItemType::RGB14: {
+            encoders.emplace_back(RGB14Encoder(
+                *reinterpret_cast<ColorData*>(compressed_data.data()), context.value()));
+            compressed_data = compressed_data.subspan(sizeof(ColorData));
+            break;
+          }
+          case LAZItemType::Point10: {
+            encoders.emplace_back(LASPointFormat0Encoder(
+                *reinterpret_cast<LASPointFormat0*>(compressed_data.data())));
+            compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
+            break;
+          }
+          case LAZItemType::GPSTime11: {
+            encoders.emplace_back(
+                GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
+            compressed_data = compressed_data.subspan(sizeof(GPSTime));
+            break;
+          }
+          case LAZItemType::RGB12: {
+            encoders.emplace_back(
+                RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
+            compressed_data = compressed_data.subspan(sizeof(ColorData));
+            break;
+          }
+          case LAZItemType::Byte: {
+            std::vector<std::byte> last_bytes(record.item_size);
+            std::copy_n(compressed_data.data(), record.item_size, last_bytes.begin());
+            encoders.emplace_back(BytesEncoder(last_bytes));
+            compressed_data = compressed_data.subspan(record.item_size);
+            break;
+          }
+          default:
+            LASPP_FAIL("Currently unsupported LAZ item type: ", LAZItemType(record.item_type), " (",
+                       static_cast<uint16_t>(record.item_type), ")");
         }
-        case LAZItemType::RGB14: {
-          encoders.emplace_back(
-              RGB14Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
-          compressed_data = compressed_data.subspan(sizeof(ColorData));
-          break;
-        }
-        case LAZItemType::Point10: {
-          encoders.emplace_back(
-              LASPointFormat0Encoder(*reinterpret_cast<LASPointFormat0*>(compressed_data.data())));
-          compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
-          break;
-        }
-        case LAZItemType::GPSTime11: {
-          encoders.emplace_back(
-              GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
-          compressed_data = compressed_data.subspan(sizeof(GPSTime));
-          break;
-        }
-        case LAZItemType::RGB12: {
-          encoders.emplace_back(
-              RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
-          compressed_data = compressed_data.subspan(sizeof(ColorData));
-          break;
-        }
-        case LAZItemType::Byte: {
-          std::vector<std::byte> last_bytes(record.item_size);
-          std::copy_n(compressed_data.data(), record.item_size, last_bytes.begin());
-          encoders.emplace_back(BytesEncoder(last_bytes));
-          compressed_data = compressed_data.subspan(record.item_size);
-          break;
-        }
-        default:
-          LASPP_FAIL("Currently unsupported LAZ item type: ", LAZItemType(record.item_type), " (",
-                     static_cast<uint16_t>(record.item_type), ")");
       }
     }
 
@@ -178,17 +182,26 @@ class LAZReader {
       }
       LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
       for (size_t i = 0; i < decompressed_data.size(); i++) {
+        std::optional<uint8_t> context;
         for (size_t encoder_idx = 0; encoder_idx < encoders.size(); encoder_idx++) {
           LAZEncoder& laz_encoder = encoders[encoder_idx];
           std::visit(
-              [&decompressed_data, &i, &layered_in_streams_for_encoders,
-               &encoder_idx](auto&& encoder) {
+              [&decompressed_data, &i, &layered_in_streams_for_encoders, &encoder_idx,
+               &context](auto&& encoder) {
                 if constexpr (has_num_layers_v<decltype(encoder)>) {
                   LayeredInStreams<std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>&
                       layered_in_stream = *std::get<std::unique_ptr<LayeredInStreams<
                           std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>>>(
                           layered_in_streams_for_encoders[encoder_idx]);
-                  if (i > 0) encoder.decode(layered_in_stream);
+                  if (i > 0) {
+                    if constexpr (std::is_same_v<std::remove_reference_t<decltype(encoder)>,
+                                                 LASPointFormat6Encoder>) {
+                      encoder.decode(layered_in_stream);
+                      context = encoder.get_active_context();
+                    } else {
+                      encoder.decode(layered_in_stream, context.value());
+                    }
+                  }
                   if constexpr (is_copy_fromable<T, decltype(encoder.last_value())>()) {
                     copy_from(decompressed_data[i], encoder.last_value());
                   } else if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {

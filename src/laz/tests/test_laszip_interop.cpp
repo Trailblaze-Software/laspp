@@ -514,7 +514,7 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
         std::cerr << "  Delta:    " << (decoded_span[i].gps_time - points[i].gps_time) << std::endl;
       }
     }
-    LASPP_ASSERT_EQ(decoded_span[i], points[i]);
+    LASPP_ASSERT_EQ(decoded_span[i], points[i], "Point " + std::to_string(i) + " mismatch");
   }
 }
 

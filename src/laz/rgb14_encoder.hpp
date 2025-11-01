@@ -21,7 +21,7 @@
 #include <cstdint>
 
 #include "las_point.hpp"
-#include "laz/point14_encoder.hpp"
+#include "laz/layered_stream.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
 
@@ -54,10 +54,6 @@ class RGB14Encoder {
     return static_cast<uint8_t>(value + delta);
   }
 
-  static uint8_t resolve_context_index(uint8_t fallback) {
-    return static_cast<uint8_t>(LASPointFormat6Encoder::current_scanner_channel_or(fallback) & 0x3);
-  }
-
   Context& ensure_context(uint8_t idx) {
     if (!m_contexts[idx].initialized) {
       if (m_contexts[m_active_context].initialized) {
@@ -75,16 +71,15 @@ class RGB14Encoder {
 
   const EncodedType& last_value() const { return m_contexts[m_active_context].last_value; }
 
-  explicit RGB14Encoder(ColorData initial_color_data) : m_contexts(), m_active_context(0) {
-    uint8_t ctx = resolve_context_index(0);
-    m_contexts[ctx].last_value = initial_color_data;
-    m_contexts[ctx].initialized = true;
-    m_active_context = ctx;
+  explicit RGB14Encoder(ColorData initial_color_data, uint8_t context)
+      : m_contexts(), m_active_context(0) {
+    m_contexts[context].last_value = initial_color_data;
+    m_contexts[context].initialized = true;
+    m_active_context = context;
   }
 
-  ColorData decode(LayeredInStreams<NUM_LAYERS>& in_streams) {
+  ColorData decode(LayeredInStreams<NUM_LAYERS>& in_streams, uint8_t context_idx) {
     InStream& in_stream = in_streams[0];
-    uint8_t context_idx = resolve_context_index(m_active_context);
     Context& context = ensure_context(context_idx);
 
     uint_fast16_t changed_values = context.changed_values_encoder.decode_symbol(in_stream);
@@ -155,9 +150,9 @@ class RGB14Encoder {
     return context.last_value;
   }
 
-  void encode(LayeredOutStreams<NUM_LAYERS>& out_streams, ColorData color_data) {
+  void encode(LayeredOutStreams<NUM_LAYERS>& out_streams, ColorData color_data,
+              uint8_t context_idx) {
     OutStream& out_stream = out_streams[0];
-    uint8_t context_idx = resolve_context_index(m_active_context);
     Context& context = ensure_context(context_idx);
 
     uint8_t red_low = static_cast<uint8_t>(color_data.red);

@@ -28,7 +28,8 @@
 
 namespace laspp {
 
+// FIXME: Inefficient use of memory
 typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, RGB12Encoder, RGB14Encoder,
                      BytesEncoder, LASPointFormat6Encoder>
     LAZEncoder;
-}
+}  // namespace laspp

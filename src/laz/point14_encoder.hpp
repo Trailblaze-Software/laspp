@@ -135,7 +135,6 @@ struct LASPointFormat6Context : LASPointFormat6 {
 class LASPointFormat6Encoder {
   std::array<LASPointFormat6Context, 4> m_contexts;
   uint_fast8_t m_context;
-  static inline thread_local std::optional<uint8_t> s_current_context = std::nullopt;
 
  public:
   static constexpr int NUM_LAYERS = 9;
@@ -143,21 +142,12 @@ class LASPointFormat6Encoder {
   using EncodedType = LASPointFormat6;
   const LASPointFormat6& last_value() const { return m_contexts[m_context]; }
 
-  static void set_current_scanner_channel(uint8_t ctx) {
-    s_current_context = static_cast<uint8_t>(ctx & 0x3);
-  }
-
-  static std::optional<uint8_t> current_scanner_channel_optional() { return s_current_context; }
-
-  static uint8_t current_scanner_channel_or(uint8_t fallback = 0) {
-    return s_current_context.has_value() ? s_current_context.value() : fallback;
-  }
-
   explicit LASPointFormat6Encoder(const LASPointFormat6& initial_las_point) {
     m_context = initial_las_point.scanner_channel;
     m_contexts[m_context].initialize(initial_las_point);
-    set_current_scanner_channel(m_context);
   }
+
+  uint8_t get_active_context() const { return m_context; }
 
   LASPointFormat6 decode(LayeredInStreams<NUM_LAYERS>& streams) {
     auto& channel_returns_stream = streams[0];
@@ -304,8 +294,6 @@ class LASPointFormat6Encoder {
     context.last_z[context.l] = context.z;
 
     context.scanner_channel = static_cast<uint8_t>(m_context & 0x3);
-    set_current_scanner_channel(context.scanner_channel);
-
     return context;
   }
 
@@ -506,7 +494,6 @@ class LASPointFormat6Encoder {
     context.set_cpr(gps_changed);
     context.set_m_l();
     context.scanner_channel = static_cast<uint8_t>(point.scanner_channel & 0x3);
-    set_current_scanner_channel(context.scanner_channel);
   }
 };
 
