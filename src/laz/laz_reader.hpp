@@ -141,9 +141,6 @@ class LAZReader {
       LASPP_ASSERT_EQ(num_points, decompressed_data.size());
     }
 
-    std::cout << "Decompressing chunk with " << decompressed_data.size() << " points and "
-              << compressed_data.size() << " bytes of compressed data." << std::endl;
-
     if (m_special_vlr.compressor == LAZCompressor::LayeredChunked) {
       static_assert(has_num_layers<laspp::LASPointFormat6Encoder>::value,
                     "LAZPointFormat6Encoder must have NUM_LAYERS");

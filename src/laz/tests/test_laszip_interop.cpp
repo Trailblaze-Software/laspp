@@ -505,15 +505,7 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
   LASPP_ASSERT_EQ(decoded_span.size(), points.size());
 
   for (size_t i = 0; i < points.size(); ++i) {
-    if constexpr (std::is_base_of_v<LASPointFormat6, PointT>) {
-      if (decoded_span[i].gps_time != points[i].gps_time) {
-        std::cerr << "[Test] Point " << i << " GPS time mismatch:" << std::endl;
-        std::cerr << "  Expected: " << std::setprecision(20) << points[i].gps_time << std::endl;
-        std::cerr << "  Decoded:  " << std::setprecision(20) << decoded_span[i].gps_time
-                  << std::endl;
-        std::cerr << "  Delta:    " << (decoded_span[i].gps_time - points[i].gps_time) << std::endl;
-      }
-    }
+    std::cout << "[Test] Comparing point " << i << std::endl;
     LASPP_ASSERT_EQ(decoded_span[i], points[i], "Point " + std::to_string(i) + " mismatch");
   }
 }
@@ -640,6 +632,8 @@ int main() {
   run_laszip_roundtrip<LASPointFormat1>(256);
   run_laszip_file_roundtrip<LASPointFormat1>(128, false);
   run_laszip_file_roundtrip<LASPointFormat6>(128, true);
+  // run_laszip_file_roundtrip<LASPointFormat6>(128, false);
   run_laszip_file_roundtrip<LASPointFormat7>(128, true);
+  // run_laszip_file_roundtrip<LASPointFormat7>(128, false);
   return 0;
 }

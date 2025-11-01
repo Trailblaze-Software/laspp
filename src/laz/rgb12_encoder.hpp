@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <bitset>
-
 #include "las_point.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
@@ -36,12 +34,12 @@ class RGB12Encoder {
   SymbolEncoder<256> m_blue_high_encoder;
 
   static uint8_t clamp(uint8_t value, int delta) {
-    if (delta + value > 255) {
+    if (delta > 255 - value) {
       return 255;
-    } else if (delta + value < 0) {
+    } else if (value < -delta) {
       return 0;
     }
-    return static_cast<uint8_t>(value + delta);
+    return static_cast<uint8_t>(value + static_cast<uint32_t>(delta));
   }
 
  public:
