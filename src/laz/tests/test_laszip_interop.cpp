@@ -42,6 +42,13 @@ using namespace laspp;
 
 namespace {
 
+// Test configuration constants
+constexpr size_t kSmallPointCount = 128;
+constexpr size_t kMediumPointCount = 500;
+constexpr size_t kLargePointCount = 5000;
+constexpr size_t kVeryLargePointCount = 50000;
+constexpr laszip_U32 kChunkSize = 5000;
+
 template <typename PointT>
 struct PointFormatTraits;
 
@@ -63,22 +70,22 @@ template <>
 struct PointFormatTraits<LASPointFormat6> {
   static constexpr unsigned char kPointFormat = 6;
   static constexpr unsigned short kCompressor = LASZIP_COMPRESSOR_LAYERED_CHUNKED;
-  static constexpr unsigned char kVersionMinor = 4;
+  static constexpr unsigned char kVersionMinor = 4;  // Formats 6-10 require version 1.4
 };
 
 template <>
 struct PointFormatTraits<LASPointFormat7> {
   static constexpr unsigned char kPointFormat = 7;
   static constexpr unsigned short kCompressor = LASZIP_COMPRESSOR_LAYERED_CHUNKED;
-  static constexpr unsigned char kVersionMinor = 4;
+  static constexpr unsigned char kVersionMinor = 4;  // Formats 6-10 require version 1.4
 };
 
 template <typename PointT>
-std::vector<PointT> generate_points(size_t n_points) {
+std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 0) {
   std::vector<PointT> points;
   points.reserve(n_points);
 
-  std::mt19937 gen(0);
+  std::mt19937 gen(seed);
   std::uniform_int_distribution<int32_t> coord_dist(-500000, 500000);
   std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
   std::uniform_int_distribution<uint16_t> point_source_dist(0,
@@ -86,7 +93,6 @@ std::vector<PointT> generate_points(size_t n_points) {
   std::uniform_int_distribution<uint8_t> returns_dist(1, 15);
   std::uniform_int_distribution<uint8_t> bool_dist(0, 1);
   std::uniform_int_distribution<uint8_t> classification_dist(0, 22);
-  std::uniform_int_distribution<uint8_t> flags_dist(0, 15);
   std::uniform_int_distribution<uint8_t> user_dist(0, std::numeric_limits<uint8_t>::max());
   std::uniform_int_distribution<uint16_t> angle_dist(0, 65535);
   std::uniform_int_distribution<uint16_t> color_dist(0, std::numeric_limits<uint16_t>::max());
@@ -163,76 +169,8 @@ std::vector<PointT> generate_points(size_t n_points) {
 }
 
 template <typename PointT>
-void run_laszip_roundtrip(size_t n_points) {
-  auto points = generate_points<PointT>(n_points);
-
-  LASzip laszip;
-  LASPP_ASSERT(laszip.setup(PointFormatTraits<PointT>::kPointFormat, sizeof(PointT),
-                            PointFormatTraits<PointT>::kCompressor));
-
-  unsigned char* vlr_bytes = nullptr;
-  int vlr_size = 0;
-  LASPP_ASSERT(laszip.pack(vlr_bytes, vlr_size));
-
-  std::stringstream compressed_stream(std::ios::in | std::ios::out | std::ios::binary);
-  LASzipper zipper;
-  LASPP_ASSERT(zipper.open(compressed_stream, &laszip));
-
-  std::vector<unsigned char> point_buffer(sizeof(PointT));
-  std::vector<unsigned char*> point_items(laszip.num_items);
-  size_t offset = 0;
-  for (unsigned int i = 0; i < laszip.num_items; i++) {
-    point_items[i] = point_buffer.data() + offset;
-    offset += laszip.items[i].size;
-  }
-  LASPP_ASSERT_EQ(offset, point_buffer.size());
-
-  for (const PointT& point : points) {
-    std::memcpy(point_buffer.data(), &point, sizeof(PointT));
-    LASPP_ASSERT(zipper.write(point_items.data()));
-  }
-  LASPP_ASSERT(zipper.close());
-
-  std::string compressed = compressed_stream.str();
-  LASPP_ASSERT_GE(compressed.size(), sizeof(uint64_t));
-
-  uint64_t chunk_table_offset = 0;
-  std::memcpy(&chunk_table_offset, compressed.data(), sizeof(uint64_t));
-  LASPP_ASSERT(chunk_table_offset >= sizeof(uint64_t));
-  LASPP_ASSERT_LE(chunk_table_offset, compressed.size());
-
-  std::vector<std::byte> chunk_data(chunk_table_offset - sizeof(uint64_t));
-  std::memcpy(chunk_data.data(), compressed.data() + sizeof(uint64_t), chunk_data.size());
-
-  std::string vlr_string(reinterpret_cast<char*>(vlr_bytes), static_cast<size_t>(vlr_size));
-
-  std::stringstream vlr_stream(vlr_string);
-  LAZSpecialVLRContent laz_vlr(vlr_stream);
-
-  std::vector<PointT> decoded(points.size());
-  LAZReader reader(laz_vlr);
-  reader.decompress_chunk(std::span<std::byte>(chunk_data), std::span<PointT>(decoded));
-
-  for (size_t i = 0; i < points.size(); i++) {
-    LASPP_ASSERT_EQ(decoded[i], points[i]);
-  }
-}
-
-template <typename PointT>
-constexpr laszip_U8 extended_point_type() {
-  if constexpr (PointFormatTraits<PointT>::kPointFormat >= 6) {
-    // IMPORTANT: extended_point_type is a FLAG, not the actual point format!
-    // For LAS 1.4 point formats (6+), this should be non-zero to indicate
-    // that the point has extended fields (scanner_channel, etc.).
-    // LASzip uses this to decide whether to copy extended fields or set them to 0.
-    // We use (format - 5) so format 6 -> 1, format 7 -> 2, etc.
-    return static_cast<laszip_U8>(PointFormatTraits<PointT>::kPointFormat - 5);
-  }
-  return 0;
-}
-
-template <typename PointT>
 void populate_laszip_point(const PointT& point, laszip_point& las_point) {
+  // Initialize all fields to zero
   las_point.X = point.x;
   las_point.Y = point.y;
   las_point.Z = point.z;
@@ -320,7 +258,7 @@ void populate_header(const std::vector<PointT>& points, laszip_header& header) {
   header.point_data_format = PointFormatTraits<PointT>::kPointFormat;
   header.point_data_record_length = static_cast<laszip_U16>(sizeof(PointT));
 
-  // Set point counts to the actual values
+  // Set point counts
   laszip_U64 total_points = static_cast<laszip_U64>(points.size());
   header.number_of_point_records = static_cast<laszip_U32>(
       std::min<laszip_U64>(total_points, std::numeric_limits<laszip_U32>::max()));
@@ -409,6 +347,9 @@ void write_points_with_laszip(const std::vector<PointT>& points, const std::file
   laszip_POINTER writer;
   LASPP_ASSERT_EQ(laszip_create(&writer), 0);
 
+  // Configure native extension or compatibility mode
+  // Note: compatibility mode (format 6+ stored as format 0-5 + extra bytes) is not
+  // currently supported by the LAS++ reader, which only supports native extension mode
   if (request_native_extension) {
     LASPP_ASSERT_EQ(laszip_request_native_extension(writer, 1), 0);
   } else if constexpr (PointFormatTraits<PointT>::kPointFormat > 5) {
@@ -420,7 +361,7 @@ void write_points_with_laszip(const std::vector<PointT>& points, const std::file
   populate_header(points, *header);
   LASPP_ASSERT_EQ(laszip_set_header(writer, header), 0);
 
-  LASPP_ASSERT_EQ(laszip_set_chunk_size(writer, 5000), 0);
+  LASPP_ASSERT_EQ(laszip_set_chunk_size(writer, kChunkSize), 0);
 
   LASPP_ASSERT_EQ(laszip_open_writer(writer, path.string().c_str(), 1), 0);
 
@@ -431,12 +372,14 @@ void write_points_with_laszip(const std::vector<PointT>& points, const std::file
     const PointT& point = points[idx];
     populate_laszip_point(point, *las_point);
     LASPP_ASSERT_EQ(laszip_set_point(writer, las_point), 0);
-    LASPP_ASSERT_EQ(laszip_write_point(writer), 0);
+    LASPP_ASSERT_EQ(laszip_write_point(writer), 0, "Failed to write point ", idx);
   }
+
   LASPP_ASSERT_EQ(laszip_close_writer(writer), 0);
   LASPP_ASSERT_EQ(laszip_destroy(writer), 0);
 }
 
+// Test roundtrip: write with LASzip, read with LAS++ reader
 template <typename PointT>
 void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
   auto points = generate_points<PointT>(n_points);
@@ -444,162 +387,110 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
 
   write_points_with_laszip(points, temp_file.path(), request_native_extension);
 
-  // First, verify what LASzip actually wrote by reading back with LASzip
-  if constexpr (std::is_base_of_v<LASPointFormat6, PointT>) {
-    laszip_POINTER reader;
-    LASPP_ASSERT_EQ(laszip_create(&reader), 0);
-    laszip_BOOL is_compressed = 0;
-    LASPP_ASSERT_EQ(laszip_open_reader(reader, temp_file.path().string().c_str(), &is_compressed),
-                    0);
-
-    laszip_header* header;
-    LASPP_ASSERT_EQ(laszip_get_header_pointer(reader, &header), 0);
-
-    laszip_point* las_point;
-    LASPP_ASSERT_EQ(laszip_get_point_pointer(reader, &las_point), 0);
-
-    for (size_t i = 0; i < std::min<size_t>(3, points.size()); i++) {
-      LASPP_ASSERT_EQ(laszip_read_point(reader), 0);
-    }
-
-    LASPP_ASSERT_EQ(laszip_close_reader(reader), 0);
-    LASPP_ASSERT_EQ(laszip_destroy(reader), 0);
-  }
-
-  // Debug: Read first point with LASzip to verify what was written
-  if constexpr (std::is_base_of_v<GPSTime, PointT>) {
-    laszip_POINTER reader;
-    LASPP_ASSERT_EQ(laszip_create(&reader), 0);
-    laszip_BOOL is_compressed = 0;
-    LASPP_ASSERT_EQ(laszip_open_reader(reader, temp_file.path().string().c_str(), &is_compressed),
-                    0);
-    laszip_point* las_point;
-    LASPP_ASSERT_EQ(laszip_get_point_pointer(reader, &las_point), 0);
-    LASPP_ASSERT_EQ(laszip_read_point(reader), 0);  // Read first point
-    LASPP_ASSERT_EQ(laszip_close_reader(reader), 0);
-    LASPP_ASSERT_EQ(laszip_destroy(reader), 0);
-  }
-
+  // Read with LAS++ reader
   std::ifstream laz_file(temp_file.path(), std::ios::binary);
-  LASPP_ASSERT(laz_file.is_open());
+  LASPP_ASSERT(laz_file.is_open(), "Failed to open file for reading");
   LASReader reader(laz_file);
 
-  LASPP_ASSERT_EQ(reader.header().num_points(), points.size());
+  LASPP_ASSERT_EQ(reader.header().num_points(), points.size(),
+                  "Point count mismatch in LAS++ reader header");
 
   std::vector<PointT> decoded(points.size());
   auto decoded_span = reader.read_chunks(std::span<PointT>(decoded), {0, reader.num_chunks()});
-  LASPP_ASSERT_EQ(decoded_span.size(), points.size());
+  LASPP_ASSERT_EQ(decoded_span.size(), points.size(), "Decoded point count mismatch");
 
+  // Verify all points match
   for (size_t i = 0; i < points.size(); ++i) {
-    LASPP_ASSERT_EQ(decoded_span[i], points[i], "Point " + std::to_string(i) + " mismatch");
+    LASPP_ASSERT_EQ(decoded_span[i], points[i], "Point ", i, " mismatch in roundtrip test");
+  }
+}
+
+// Test roundtrip using LAS++ internal compression (no file I/O)
+template <typename PointT>
+void run_laszip_internal_roundtrip(size_t n_points) {
+  auto points = generate_points<PointT>(n_points);
+
+  LASzip laszip;
+  LASPP_ASSERT(laszip.setup(PointFormatTraits<PointT>::kPointFormat, sizeof(PointT),
+                            PointFormatTraits<PointT>::kCompressor));
+
+  unsigned char* vlr_bytes = nullptr;
+  int vlr_size = 0;
+  LASPP_ASSERT(laszip.pack(vlr_bytes, vlr_size));
+
+  std::stringstream compressed_stream(std::ios::in | std::ios::out | std::ios::binary);
+  LASzipper zipper;
+  LASPP_ASSERT(zipper.open(compressed_stream, &laszip));
+
+  std::vector<unsigned char> point_buffer(sizeof(PointT));
+  std::vector<unsigned char*> point_items(laszip.num_items);
+  size_t offset = 0;
+  for (unsigned int i = 0; i < laszip.num_items; i++) {
+    point_items[i] = point_buffer.data() + offset;
+    offset += laszip.items[i].size;
+  }
+  LASPP_ASSERT_EQ(offset, point_buffer.size());
+
+  for (const PointT& point : points) {
+    std::memcpy(point_buffer.data(), &point, sizeof(PointT));
+    LASPP_ASSERT(zipper.write(point_items.data()));
+  }
+  LASPP_ASSERT(zipper.close());
+
+  std::string compressed = compressed_stream.str();
+  LASPP_ASSERT_GE(compressed.size(), sizeof(uint64_t));
+
+  uint64_t chunk_table_offset = 0;
+  std::memcpy(&chunk_table_offset, compressed.data(), sizeof(uint64_t));
+  LASPP_ASSERT(chunk_table_offset >= sizeof(uint64_t));
+  LASPP_ASSERT_LE(chunk_table_offset, compressed.size());
+
+  std::vector<std::byte> chunk_data(chunk_table_offset - sizeof(uint64_t));
+  std::memcpy(chunk_data.data(), compressed.data() + sizeof(uint64_t), chunk_data.size());
+
+  std::string vlr_string(reinterpret_cast<char*>(vlr_bytes), static_cast<size_t>(vlr_size));
+  std::stringstream vlr_stream(vlr_string);
+  LAZSpecialVLRContent laz_vlr(vlr_stream);
+
+  std::vector<PointT> decoded(points.size());
+  LAZReader laz_reader(laz_vlr);
+  laz_reader.decompress_chunk(std::span<std::byte>(chunk_data), std::span<PointT>(decoded));
+
+  for (size_t i = 0; i < points.size(); i++) {
+    LASPP_ASSERT_EQ(decoded[i], points[i], "Point ", i, " mismatch in internal roundtrip");
   }
 }
 
 }  // namespace
 
-void test_laszip_scanner_channel() {
-  // Write a single point with LASzip and read it back with LASzip to verify it preserves
-  // scanner_channel
-  TempFile temp_file("scanner_channel_test");
-
-  laszip_POINTER writer;
-  LASPP_ASSERT_EQ(laszip_create(&writer), 0);
-  LASPP_ASSERT_EQ(laszip_request_native_extension(writer, 1), 0);
-
-  laszip_header* header;
-  LASPP_ASSERT_EQ(laszip_get_header_pointer(writer, &header), 0);
-  header->version_major = 1;
-  header->version_minor = 4;
-  header->header_size = 375;
-  header->offset_to_point_data = 375;
-  header->point_data_format = 6;
-  header->point_data_record_length = 30;
-  header->number_of_point_records = 2;
-  LASPP_ASSERT_EQ(laszip_set_header(writer, header), 0);
-
-  LASPP_ASSERT_EQ(laszip_open_writer(writer, temp_file.path().string().c_str(), 1), 0);
-
-  laszip_point* point;
-  LASPP_ASSERT_EQ(laszip_get_point_pointer(writer, &point), 0);
-
-  // First point with scanner_channel = 1
-  point->X = 0;
-  point->Y = 0;
-  point->Z = 0;
-  point->extended_scanner_channel = 1;
-  point->extended_scan_angle = 100;
-  LASPP_ASSERT_EQ(laszip_set_point(writer, point), 0);
-  LASPP_ASSERT_EQ(laszip_write_point(writer), 0);
-
-  // Second point with scanner_channel = 1
-  point->X = 100;
-  point->Y = 100;
-  point->Z = 100;
-  point->extended_scanner_channel = 1;
-  point->extended_scan_angle = 200;
-  LASPP_ASSERT_EQ(laszip_set_point(writer, point), 0);
-  LASPP_ASSERT_EQ(laszip_write_point(writer), 0);
-
-  LASPP_ASSERT_EQ(laszip_close_writer(writer), 0);
-  LASPP_ASSERT_EQ(laszip_destroy(writer), 0);
-
-  // Now read it back with LASzip
-  laszip_POINTER reader;
-  LASPP_ASSERT_EQ(laszip_create(&reader), 0);
-  laszip_BOOL is_compressed;
-  LASPP_ASSERT_EQ(laszip_open_reader(reader, temp_file.path().string().c_str(), &is_compressed), 0);
-
-  laszip_point* read_point;
-  LASPP_ASSERT_EQ(laszip_get_point_pointer(reader, &read_point), 0);
-
-  LASPP_ASSERT_EQ(laszip_read_point(reader), 0);  // First point
-  LASPP_ASSERT_EQ(read_point->extended_scanner_channel, 1);
-  LASPP_ASSERT_EQ(read_point->extended_scan_angle, 100);
-
-  LASPP_ASSERT_EQ(laszip_read_point(reader), 0);  // Second point
-  LASPP_ASSERT_EQ(read_point->extended_scanner_channel, 1);
-  LASPP_ASSERT_EQ(read_point->extended_scan_angle, 200);
-
-  LASPP_ASSERT_EQ(laszip_close_reader(reader), 0);
-  LASPP_ASSERT_EQ(laszip_destroy(reader), 0);
-}
-
-void test_gps_encoder_large_delta() {
-  LASPointFormat6 point0{};
-  point0.gps_time = -233116.95723205048125;
-
-  LASPointFormat6 point1{};
-  point1.x = point0.x;
-  point1.y = point0.y;
-  point1.z = point0.z;
-  point1.intensity = point0.intensity;
-  point1.gps_time = -719298.44479162397329;
-
-  std::stringstream ss;
-  OutStream out_stream(ss);
-
-  GPSTime11Encoder encoder(GPSTime(point0.gps_time));
-  encoder.encode(out_stream, GPSTime(point1.gps_time));
-
-  std::string data = ss.str();
-
-  std::istringstream iss(data);
-  InStream in_stream(iss);
-
-  GPSTime11Encoder decoder(GPSTime(point0.gps_time));
-  GPSTime decoded = decoder.decode(in_stream);
-
-  LASPP_ASSERT_EQ(static_cast<double>(decoded), point1.gps_time);
-}
-
 int main() {
-  run_laszip_roundtrip<LASPointFormat0>(256);
-  run_laszip_file_roundtrip<LASPointFormat0>(128, false);
-  run_laszip_roundtrip<LASPointFormat1>(1000);
-  run_laszip_file_roundtrip<LASPointFormat1>(237, false);
-  run_laszip_file_roundtrip<LASPointFormat6>(500, true);
-  // run_laszip_file_roundtrip<LASPointFormat6>(128, false);
-  run_laszip_file_roundtrip<LASPointFormat7>(1025, true);
-  // run_laszip_file_roundtrip<LASPointFormat7>(128, false);
+  // Format 0 tests - basic point format
+  run_laszip_internal_roundtrip<LASPointFormat0>(256);
+  run_laszip_file_roundtrip<LASPointFormat0>(1, false);  // Single point edge case
+  run_laszip_file_roundtrip<LASPointFormat0>(kSmallPointCount, false);
+  run_laszip_file_roundtrip<LASPointFormat0>(kMediumPointCount, false);
+
+  // Format 1 tests - with GPS time
+  run_laszip_internal_roundtrip<LASPointFormat1>(1000);
+  run_laszip_file_roundtrip<LASPointFormat1>(1, false);  // Single point edge case
+  run_laszip_file_roundtrip<LASPointFormat1>(kSmallPointCount, false);
+  run_laszip_file_roundtrip<LASPointFormat1>(kMediumPointCount, false);
+  run_laszip_file_roundtrip<LASPointFormat1>(kLargePointCount, false);
+
+  // Format 6 tests - extended point format with native extension
+  // Note: compatibility mode (request_native_extension=false) is not supported
+  // by LAS++ reader - it only supports native extension mode (Point14 items)
+  run_laszip_file_roundtrip<LASPointFormat6>(1, true);  // Single point edge case
+  run_laszip_file_roundtrip<LASPointFormat6>(kSmallPointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat6>(kMediumPointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat6>(kLargePointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat6>(kVeryLargePointCount, true);
+
+  // Format 7 tests - extended point format with RGB colors and native extension
+  run_laszip_file_roundtrip<LASPointFormat7>(1, true);  // Single point edge case
+  run_laszip_file_roundtrip<LASPointFormat7>(kSmallPointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat7>(kMediumPointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat7>(kLargePointCount, true);
+
   return 0;
 }
