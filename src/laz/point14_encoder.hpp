@@ -132,9 +132,11 @@ struct LASPointFormat6Context : LASPointFormat6 {
   }
 };
 
-class LASPointFormat6Encoder {
+template <int Version = 3>
+class LASPointFormat6EncoderBase {
   std::array<LASPointFormat6Context, 4> m_contexts;
   uint_fast8_t m_context;
+  uint_fast8_t m_external_context;
 
  public:
   static constexpr int NUM_LAYERS = 9;
@@ -142,12 +144,13 @@ class LASPointFormat6Encoder {
   using EncodedType = LASPointFormat6;
   const LASPointFormat6& last_value() const { return m_contexts[m_context]; }
 
-  explicit LASPointFormat6Encoder(const LASPointFormat6& initial_las_point) {
+  explicit LASPointFormat6EncoderBase(const LASPointFormat6& initial_las_point) {
     m_context = initial_las_point.scanner_channel;
+    m_external_context = m_context;
     m_contexts[m_context].initialize(initial_las_point);
   }
 
-  uint8_t get_active_context() const { return m_context; }
+  uint8_t get_active_context() const { return m_external_context; }
 
   LASPointFormat6 decode(LayeredInStreams<NUM_LAYERS>& streams) {
     auto& channel_returns_stream = streams[0];
@@ -182,6 +185,10 @@ class LASPointFormat6Encoder {
             static_cast<uint8_t>(new_scanner_channel & 0x3);
       }
       m_context = new_scanner_channel;
+      m_external_context = m_context;
+    } else {
+      // Workaround for issue with context setting in V3: https://github.com/LASzip/LASzip/issues/74
+      m_external_context = 0;
     }
 
     LASPointFormat6Context& context = m_contexts[m_context];
@@ -374,6 +381,10 @@ class LASPointFormat6Encoder {
             static_cast<uint8_t>(target_context_idx & 0x3);
       }
       m_context = target_context_idx;
+      m_external_context = m_context;
+    } else {
+      // Workaround for issue with context setting in V3: https://github.com/LASzip/LASzip/issues/74
+      m_external_context = Version == 3 ? 0 : m_context;
     }
 
     LASPointFormat6Context& context = m_contexts[m_context];
@@ -496,5 +507,7 @@ class LASPointFormat6Encoder {
     context.scanner_channel = static_cast<uint8_t>(point.scanner_channel & 0x3);
   }
 };
+
+using LASPointFormat6Encoder = LASPointFormat6EncoderBase<>;
 
 }  // namespace laspp

@@ -458,15 +458,8 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
     laszip_point* las_point;
     LASPP_ASSERT_EQ(laszip_get_point_pointer(reader, &las_point), 0);
 
-    std::cerr << "[Test] Verifying LASzip roundtrip (first 3 points):" << std::endl;
     for (size_t i = 0; i < std::min<size_t>(3, points.size()); i++) {
       LASPP_ASSERT_EQ(laszip_read_point(reader), 0);
-      std::cerr << "[Test]   Point " << i
-                << ": scanner_channel=" << static_cast<int>(points[i].scanner_channel)
-                << " gps_time=" << std::setprecision(20) << points[i].gps_time
-                << " (LASzip read: scanner="
-                << static_cast<int>(las_point->extended_scanner_channel)
-                << " gps=" << las_point->gps_time << ")" << std::endl;
     }
 
     LASPP_ASSERT_EQ(laszip_close_reader(reader), 0);
@@ -483,13 +476,6 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
     laszip_point* las_point;
     LASPP_ASSERT_EQ(laszip_get_point_pointer(reader, &las_point), 0);
     LASPP_ASSERT_EQ(laszip_read_point(reader), 0);  // Read first point
-    std::cerr << "[Test Debug] LASzip first point GPS time=" << std::setprecision(20)
-              << las_point->gps_time
-              << " (uint64=" << *reinterpret_cast<uint64_t*>(&las_point->gps_time) << ")"
-              << std::endl;
-    std::cerr << "[Test Debug] Expected first point GPS time=" << std::setprecision(20)
-              << static_cast<double>(points[0])
-              << " (uint64=" << (static_cast<GPSTime>(points[0]).as_uint64()) << ")" << std::endl;
     LASPP_ASSERT_EQ(laszip_close_reader(reader), 0);
     LASPP_ASSERT_EQ(laszip_destroy(reader), 0);
   }
@@ -505,7 +491,6 @@ void run_laszip_file_roundtrip(size_t n_points, bool request_native_extension) {
   LASPP_ASSERT_EQ(decoded_span.size(), points.size());
 
   for (size_t i = 0; i < points.size(); ++i) {
-    std::cout << "[Test] Comparing point " << i << std::endl;
     LASPP_ASSERT_EQ(decoded_span[i], points[i], "Point " + std::to_string(i) + " mismatch");
   }
 }
@@ -543,8 +528,6 @@ void test_laszip_scanner_channel() {
   point->Z = 0;
   point->extended_scanner_channel = 1;
   point->extended_scan_angle = 100;
-  std::cerr << "Writing first point: scanner_channel="
-            << static_cast<int>(point->extended_scanner_channel) << std::endl;
   LASPP_ASSERT_EQ(laszip_set_point(writer, point), 0);
   LASPP_ASSERT_EQ(laszip_write_point(writer), 0);
 
@@ -554,8 +537,6 @@ void test_laszip_scanner_channel() {
   point->Z = 100;
   point->extended_scanner_channel = 1;
   point->extended_scan_angle = 200;
-  std::cerr << "Writing: scanner_channel=" << static_cast<int>(point->extended_scanner_channel)
-            << " scan_angle=" << point->extended_scan_angle << std::endl;
   LASPP_ASSERT_EQ(laszip_set_point(writer, point), 0);
   LASPP_ASSERT_EQ(laszip_write_point(writer), 0);
 
@@ -572,16 +553,10 @@ void test_laszip_scanner_channel() {
   LASPP_ASSERT_EQ(laszip_get_point_pointer(reader, &read_point), 0);
 
   LASPP_ASSERT_EQ(laszip_read_point(reader), 0);  // First point
-  std::cerr << "Read back first point: scanner_channel="
-            << static_cast<int>(read_point->extended_scanner_channel)
-            << " scan_angle=" << read_point->extended_scan_angle << std::endl;
   LASPP_ASSERT_EQ(read_point->extended_scanner_channel, 1);
   LASPP_ASSERT_EQ(read_point->extended_scan_angle, 100);
 
   LASPP_ASSERT_EQ(laszip_read_point(reader), 0);  // Second point
-  std::cerr << "Read back second point: scanner_channel="
-            << static_cast<int>(read_point->extended_scanner_channel)
-            << " scan_angle=" << read_point->extended_scan_angle << std::endl;
   LASPP_ASSERT_EQ(read_point->extended_scanner_channel, 1);
   LASPP_ASSERT_EQ(read_point->extended_scan_angle, 200);
 
@@ -590,9 +565,6 @@ void test_laszip_scanner_channel() {
 }
 
 void test_gps_encoder_large_delta() {
-  // Test if our GPS encoder can handle large deltas like -486k
-  std::cerr << "[Test] Testing GPS encoder with large delta..." << std::endl;
-
   LASPointFormat6 point0{};
   point0.gps_time = -233116.95723205048125;
 
@@ -610,7 +582,6 @@ void test_gps_encoder_large_delta() {
   encoder.encode(out_stream, GPSTime(point1.gps_time));
 
   std::string data = ss.str();
-  std::cerr << "[Test] Encoded " << data.size() << " bytes for GPS delta" << std::endl;
 
   std::istringstream iss(data);
   InStream in_stream(iss);
@@ -618,22 +589,17 @@ void test_gps_encoder_large_delta() {
   GPSTime11Encoder decoder(GPSTime(point0.gps_time));
   GPSTime decoded = decoder.decode(in_stream);
 
-  std::cerr << "[Test] Original: " << std::setprecision(20) << point1.gps_time << std::endl;
-  std::cerr << "[Test] Decoded:  " << std::setprecision(20) << static_cast<double>(decoded)
-            << std::endl;
-  std::cerr << "[Test] Delta:    " << (static_cast<double>(decoded) - point1.gps_time) << std::endl;
-
   LASPP_ASSERT_EQ(static_cast<double>(decoded), point1.gps_time);
 }
 
 int main() {
   run_laszip_roundtrip<LASPointFormat0>(256);
   run_laszip_file_roundtrip<LASPointFormat0>(128, false);
-  run_laszip_roundtrip<LASPointFormat1>(256);
-  run_laszip_file_roundtrip<LASPointFormat1>(128, false);
-  run_laszip_file_roundtrip<LASPointFormat6>(128, true);
+  run_laszip_roundtrip<LASPointFormat1>(1000);
+  run_laszip_file_roundtrip<LASPointFormat1>(237, false);
+  run_laszip_file_roundtrip<LASPointFormat6>(500, true);
   // run_laszip_file_roundtrip<LASPointFormat6>(128, false);
-  run_laszip_file_roundtrip<LASPointFormat7>(128, true);
+  run_laszip_file_roundtrip<LASPointFormat7>(1025, true);
   // run_laszip_file_roundtrip<LASPointFormat7>(128, false);
   return 0;
 }
