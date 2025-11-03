@@ -122,8 +122,12 @@ struct LASPointFormat6Context : LASPointFormat6 {
     static_cast<LASPointFormat6&>(*this) = las_point;
     set_cpr();
     set_m_l();
-    last_z.fill(las_point.z);
-    last_intensity.fill(las_point.intensity);
+    // Copy values to local variables to avoid misaligned reference issues
+    // with packed structures when passing to std::array::fill()
+    const int32_t z = las_point.z;
+    const uint16_t intensity = las_point.intensity;
+    last_z.fill(z);
+    last_intensity.fill(intensity);
     gps_time_encoder.set_previous_value(GPSTime(las_point.gps_time));
     initialized = true;
   }

@@ -152,7 +152,14 @@ if(LASPP_BUILD_TESTS)
   endforeach()
 
   if(TARGET test_laszip_interop)
-    target_link_libraries(test_laszip_interop PRIVATE laszip laszip_api)
+    # On Windows, laszip is built as laszip3, on Unix it's laszip
+    if(TARGET laszip3)
+      target_link_libraries(test_laszip_interop PRIVATE laszip3 laszip_api)
+    elseif(TARGET laszip)
+      target_link_libraries(test_laszip_interop PRIVATE laszip laszip_api)
+    else()
+      message(WARNING "Neither laszip nor laszip3 target found")
+    endif()
     target_include_directories(
       test_laszip_interop SYSTEM
       PRIVATE ${laszip_SOURCE_DIR}/src ${laszip_SOURCE_DIR}/dll
