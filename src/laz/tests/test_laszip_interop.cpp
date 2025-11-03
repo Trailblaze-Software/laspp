@@ -69,14 +69,12 @@ struct PointFormatTraits<LASPointFormat1> {
 template <>
 struct PointFormatTraits<LASPointFormat6> {
   static constexpr unsigned char kPointFormat = 6;
-  static constexpr unsigned short kCompressor = LASZIP_COMPRESSOR_LAYERED_CHUNKED;
   static constexpr unsigned char kVersionMinor = 4;  // Formats 6-10 require version 1.4
 };
 
 template <>
 struct PointFormatTraits<LASPointFormat7> {
   static constexpr unsigned char kPointFormat = 7;
-  static constexpr unsigned short kCompressor = LASZIP_COMPRESSOR_LAYERED_CHUNKED;
   static constexpr unsigned char kVersionMinor = 4;  // Formats 6-10 require version 1.4
 };
 

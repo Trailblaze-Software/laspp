@@ -162,16 +162,17 @@ if(LASPP_BUILD_TESTS)
     target_sources(
       test_laszip_interop PRIVATE ${laszip_SOURCE_DIR}/src/laszipper.cpp
                                   ${laszip_SOURCE_DIR}/src/lasunzipper.cpp)
-    # Suppress warnings from external laszip library
+    set(LASZIP_WARNING_SUPPRESSIONS "-Wno-old-style-cast" "-Wno-shadow"
+                                    "-Wno-sign-conversion" "-Wno-conversion")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      list(APPEND LASZIP_WARNING_SUPPRESSIONS "-Wno-useless-cast")
+    endif()
+    string(JOIN " " LASZIP_WARNING_FLAGS ${LASZIP_WARNING_SUPPRESSIONS})
     set_source_files_properties(
       ${laszip_SOURCE_DIR}/src/laszipper.cpp
       ${laszip_SOURCE_DIR}/src/lasunzipper.cpp
-      PROPERTIES
-        COMPILE_FLAGS
-        "-Wno-old-style-cast -Wno-shadow -Wno-useless-cast -Wno-sign-conversion -Wno-conversion"
-    )
+      PROPERTIES COMPILE_FLAGS "${LASZIP_WARNING_FLAGS}")
   endif()
-
 endif()
 
 include(GNUInstallDirs)
