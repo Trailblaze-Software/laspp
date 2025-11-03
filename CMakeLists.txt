@@ -33,6 +33,11 @@ if(LASPP_BUILD_TESTS)
     laszip
     GIT_REPOSITORY https://github.com/LASzip/LASzip.git
     GIT_TAG 3.4.4)
+  # Build laszip as static library so we can link against it for internal
+  # symbols
+  set(LASZIP_BUILD_STATIC
+      ON
+      CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(laszip)
 endif()
 
@@ -152,36 +157,57 @@ if(LASPP_BUILD_TESTS)
   endforeach()
 
   if(TARGET test_laszip_interop)
-    # On Windows, laszip is built as laszip3, on Unix it's laszip
-    if(TARGET laszip3)
-      target_link_libraries(test_laszip_interop PRIVATE laszip3 laszip_api)
-    elseif(TARGET laszip)
-      target_link_libraries(test_laszip_interop PRIVATE laszip laszip_api)
-    else()
-      message(WARNING "Neither laszip nor laszip3 target found")
-    endif()
+    # laszipper.cpp and lasunzipper.cpp are wrapper files that need internal
+    # laszip symbols Since we build laszip as a static library
+    # (LASZIP_BUILD_STATIC), we can link against it directly. Only the wrapper
+    # files need to be compiled separately.
+    file(GLOB LASZIP_WRAPPER_SOURCES "${laszip_SOURCE_DIR}/src/laszipper.cpp"
+         "${laszip_SOURCE_DIR}/src/lasunzipper.cpp")
+
+    # Add wrapper files as sources to the test
+    target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
+
+    # Include directories for laszip
     target_include_directories(
       test_laszip_interop SYSTEM
       PRIVATE ${laszip_SOURCE_DIR}/src ${laszip_SOURCE_DIR}/dll
               ${laszip_BINARY_DIR}/include)
-    target_sources(
-      test_laszip_interop PRIVATE ${laszip_SOURCE_DIR}/src/laszipper.cpp
-                                  ${laszip_SOURCE_DIR}/src/lasunzipper.cpp)
-    if(MSVC)
-      set(LASZIP_WARNING_FLAGS "")
-    else()
-      set(LASZIP_WARNING_SUPPRESSIONS "-Wno-old-style-cast" "-Wno-shadow"
-                                      "-Wno-sign-conversion" "-Wno-conversion")
-      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        list(APPEND LASZIP_WARNING_SUPPRESSIONS "-Wno-useless-cast")
+
+    # Link against laszip's static library and API
+    if(TARGET laszip3)
+      target_link_libraries(test_laszip_interop PRIVATE laszip3)
+      if(TARGET laszip_api3)
+        target_link_libraries(test_laszip_interop PRIVATE laszip_api3)
       endif()
-      string(JOIN " " LASZIP_WARNING_FLAGS ${LASZIP_WARNING_SUPPRESSIONS})
+    elseif(TARGET laszip)
+      target_link_libraries(test_laszip_interop PRIVATE laszip)
+      if(TARGET laszip_api)
+        target_link_libraries(test_laszip_interop PRIVATE laszip_api)
+      endif()
+    else()
+      message(WARNING "Neither laszip nor laszip3 target found")
     endif()
-    if(LASZIP_WARNING_FLAGS)
+
+    # Suppress warnings from laszip wrapper source files
+    if(MSVC)
       set_source_files_properties(
-        ${laszip_SOURCE_DIR}/src/laszipper.cpp
-        ${laszip_SOURCE_DIR}/src/lasunzipper.cpp
-        PROPERTIES COMPILE_FLAGS "${LASZIP_WARNING_FLAGS}")
+        ${LASZIP_WRAPPER_SOURCES} PROPERTIES COMPILE_FLAGS
+                                             "/wd4774 /wd4062 /wd4100")
+    else()
+      set_source_files_properties(
+        ${LASZIP_WRAPPER_SOURCES}
+        PROPERTIES
+          COMPILE_FLAGS
+          "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion"
+      )
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_source_files_properties(
+          ${LASZIP_WRAPPER_SOURCES}
+          PROPERTIES
+            COMPILE_FLAGS
+            "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion -Wno-useless-cast"
+        )
+      endif()
     endif()
   endif()
 endif()

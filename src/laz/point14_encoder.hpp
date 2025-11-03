@@ -124,10 +124,10 @@ struct LASPointFormat6Context : LASPointFormat6 {
     set_m_l();
     // Copy values to local variables to avoid misaligned reference issues
     // with packed structures when passing to std::array::fill()
-    const int32_t z = las_point.z;
-    const uint16_t intensity = las_point.intensity;
-    last_z.fill(z);
-    last_intensity.fill(intensity);
+    const int32_t z_local = las_point.z;
+    const uint16_t intensity_local = las_point.intensity;
+    last_z.fill(z_local);
+    last_intensity.fill(intensity_local);
     gps_time_encoder.set_previous_value(GPSTime(las_point.gps_time));
     initialized = true;
   }
@@ -279,25 +279,17 @@ class LASPointFormat6EncoderBase {
     context.z = wrapping_int32_add(context.last_z[context.l], decoded_dz);
     context.last_z[context.l] = context.z;
 
-    if (streams.non_empty(3)) {
-      bool debug = false;
-      if (context.x == 9282355 && context.y == 34405205) {
-        debug = true;
-      }
+    if (streams.non_empty(3)) {  // TODO: Rest of streams
       uint8_t last_flags =
           static_cast<uint8_t>((context.edge_of_flight_line << 5) |
                                (context.scan_direction_flag << 4) | context.classification_flags);
       uint_fast16_t decoded_flags = context.flag_encoders[last_flags].decode_symbol(flags_stream);
-      if (debug) {
-        std::cout << " decoded_flags: " << static_cast<int>(decoded_flags)
-                  << " from last_flags: " << static_cast<int>(last_flags) << std::endl;
-      }
       context.edge_of_flight_line = static_cast<uint8_t>((decoded_flags >> 5) & 0x1);
       context.scan_direction_flag = static_cast<uint8_t>((decoded_flags >> 4) & 0x1);
       context.classification_flags = static_cast<uint8_t>(decoded_flags & 0x0F);
     }
 
-    int32_t intensity_delta = context.intensity_encoder.decode_int(context.cpr, intensity_stream);
+    int32_t intensity_delta = context.intensity_encoder[context.cpr].decode_int(intensity_stream);
     int32_t new_intensity =
         static_cast<int32_t>(context.last_intensity[context.cprgps]) + intensity_delta;
     context.intensity = static_cast<uint16_t>(new_intensity);
@@ -464,7 +456,7 @@ class LASPointFormat6EncoderBase {
 
     int32_t intensity_base = static_cast<int32_t>(context.last_intensity[context.cprgps]);
     int32_t intensity_diff = static_cast<int32_t>(point.intensity) - intensity_base;
-    context.intensity_encoder.encode_int(context.cpr, intensity_stream, intensity_diff);
+    context.intensity_encoder[context.cpr].encode_int(intensity_stream, intensity_diff);
     context.last_intensity[context.cprgps] = point.intensity;
     context.intensity = point.intensity;
 
