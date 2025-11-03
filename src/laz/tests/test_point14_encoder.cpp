@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <random>
 #include <span>
 #include <sstream>
@@ -94,9 +95,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS> out_streams;
-    LASPointFormat6Encoder encoder(points.front());
-    for (size_t i = 1; i < points.size(); i++) {
-      encoder.encode(out_streams, points[i]);
+    {
+      std::unique_ptr<LASPointFormat6Encoder> encoder =
+          std::make_unique<LASPointFormat6Encoder>(points.front());
+      for (size_t i = 1; i < points.size(); i++) {
+        encoder->encode(out_streams, points[i]);
+      }
     }
 
     std::stringstream combined_stream = out_streams.combined_stream();
@@ -111,10 +115,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
 
-    LASPointFormat6Encoder decoder(points.front());
+    std::unique_ptr<LASPointFormat6Encoder> decoder =
+        std::make_unique<LASPointFormat6Encoder>(points.front());
     for (size_t i = 1; i < points.size(); i++) {
-      LASPP_ASSERT_EQ(decoder.decode(in_streams), points[i]);
-      LASPP_ASSERT_EQ(decoder.last_value(), points[i]);
+      LASPP_ASSERT_EQ(decoder->decode(in_streams), points[i]);
+      LASPP_ASSERT_EQ(decoder->last_value(), points[i]);
     }
   }
 

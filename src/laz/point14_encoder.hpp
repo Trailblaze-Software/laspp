@@ -58,7 +58,8 @@ struct LASPointFormat6Context : LASPointFormat6 {
   uint_fast8_t cpr;
   uint_fast8_t cprgps;
 
-  LASPointFormat6Context() : initialized(false), gps_time_encoder(GPSTime(0)) {}
+  LASPointFormat6Context()
+      : initialized(false), gps_time_encoder(GPSTime(0)), m(0), l(0), cpr(0), cprgps(0) {}
 
   static constexpr uint8_t number_return_map_6ctx[16][16] = {
       {0, 1, 2, 3, 4, 5, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5},
