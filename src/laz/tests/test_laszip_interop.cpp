@@ -15,7 +15,24 @@
  * trailblaze.software@gmail.com
  */
 
+// Windows compatibility: prevent min/max macros and byte typedef conflicts
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#endif
+
 #include <laszip_api.h>
+
+// Undefine Windows byte typedef if it exists to avoid conflicts with std::byte
+#ifdef _WIN32
+#ifdef byte
+#undef byte
+#endif
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -88,10 +105,11 @@ std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 0) {
   std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
   std::uniform_int_distribution<uint16_t> point_source_dist(0,
                                                             std::numeric_limits<uint16_t>::max());
-  std::uniform_int_distribution<uint8_t> returns_dist(1, 15);
-  std::uniform_int_distribution<uint8_t> bool_dist(0, 1);
-  std::uniform_int_distribution<uint8_t> classification_dist(0, 22);
-  std::uniform_int_distribution<uint8_t> user_dist(0, std::numeric_limits<uint8_t>::max());
+  // MSVC doesn't support uniform_int_distribution<uint8_t>, use uint16_t and cast
+  std::uniform_int_distribution<uint16_t> returns_dist(1, 15);
+  std::uniform_int_distribution<uint16_t> bool_dist(0, 1);
+  std::uniform_int_distribution<uint16_t> classification_dist(0, 22);
+  std::uniform_int_distribution<uint16_t> user_dist(0, std::numeric_limits<uint8_t>::max());
   std::uniform_int_distribution<uint16_t> angle_dist(0, 65535);
   std::uniform_int_distribution<uint16_t> color_dist(0, std::numeric_limits<uint16_t>::max());
   std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
@@ -106,10 +124,10 @@ std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 0) {
 
     if constexpr (std::is_base_of_v<LASPointFormat0, PointT>) {
       uint8_t number_of_returns = static_cast<uint8_t>(returns_dist(gen) & 0x0F);
-      number_of_returns = std::max<uint8_t>(number_of_returns, 1);
+      number_of_returns = (std::max)(number_of_returns, static_cast<uint8_t>(1));
       uint8_t return_number = static_cast<uint8_t>(returns_dist(gen) & 0x0F);
-      return_number = std::max<uint8_t>(return_number, 1);
-      return_number = std::min(return_number, number_of_returns);
+      return_number = (std::max)(return_number, static_cast<uint8_t>(1));
+      return_number = (std::min)(return_number, number_of_returns);
       point.bit_byte.number_of_returns = static_cast<uint8_t>(number_of_returns & 0x07);
       point.bit_byte.return_number = static_cast<uint8_t>(return_number & 0x07);
       point.bit_byte.scan_direction_flag = static_cast<uint8_t>(bool_dist(gen) & 0x1);
@@ -120,7 +138,7 @@ std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 0) {
       point.classification_byte.key_point = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.classification_byte.withheld = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.scan_angle_rank = static_cast<uint8_t>(angle_dist(gen) & 0xFF);
-      point.user_data = user_dist(gen);
+      point.user_data = static_cast<uint8_t>(user_dist(gen));
       point.point_source_id = point_source_dist(gen);
     }
 
@@ -148,7 +166,7 @@ std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 0) {
       point.scan_direction_flag = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.edge_of_flight_line = static_cast<uint8_t>(bool_dist(gen) & 0x1);
       point.classification = static_cast<LASClassification>(classification_dist(gen));
-      point.user_data = user_dist(gen);
+      point.user_data = static_cast<uint8_t>(user_dist(gen));
       point.scan_angle = static_cast<int16_t>(angle_dist(gen));
       point.point_source_id = point_source_dist(gen);
       point.gps_time = gps_dist(gen);
