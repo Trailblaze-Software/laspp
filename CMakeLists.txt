@@ -152,11 +152,13 @@ if(LASPP_BUILD_TESTS)
   endforeach()
 
   if(TARGET test_laszip_interop)
-    target_link_libraries(test_laszip_interop PRIVATE laszip)
+    target_link_libraries(test_laszip_interop PRIVATE laszip laszip_api)
     # Use SYSTEM include directories to suppress warnings from laszip headers
+    # laszip_api.h is in dll/ directory, so we add that to includes
     target_include_directories(
-      test_laszip_interop SYSTEM PRIVATE ${laszip_SOURCE_DIR}/src
-                                         ${laszip_BINARY_DIR}/include)
+      test_laszip_interop SYSTEM
+      PRIVATE ${laszip_SOURCE_DIR}/src ${laszip_SOURCE_DIR}/dll
+              ${laszip_BINARY_DIR}/include)
     target_sources(
       test_laszip_interop PRIVATE ${laszip_SOURCE_DIR}/src/laszipper.cpp
                                   ${laszip_SOURCE_DIR}/src/lasunzipper.cpp)
