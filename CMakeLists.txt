@@ -153,8 +153,6 @@ if(LASPP_BUILD_TESTS)
 
   if(TARGET test_laszip_interop)
     target_link_libraries(test_laszip_interop PRIVATE laszip laszip_api)
-    # Use SYSTEM include directories to suppress warnings from laszip headers
-    # laszip_api.h is in dll/ directory, so we add that to includes
     target_include_directories(
       test_laszip_interop SYSTEM
       PRIVATE ${laszip_SOURCE_DIR}/src ${laszip_SOURCE_DIR}/dll
@@ -162,16 +160,22 @@ if(LASPP_BUILD_TESTS)
     target_sources(
       test_laszip_interop PRIVATE ${laszip_SOURCE_DIR}/src/laszipper.cpp
                                   ${laszip_SOURCE_DIR}/src/lasunzipper.cpp)
-    set(LASZIP_WARNING_SUPPRESSIONS "-Wno-old-style-cast" "-Wno-shadow"
-                                    "-Wno-sign-conversion" "-Wno-conversion")
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-      list(APPEND LASZIP_WARNING_SUPPRESSIONS "-Wno-useless-cast")
+    if(MSVC)
+      set(LASZIP_WARNING_FLAGS "")
+    else()
+      set(LASZIP_WARNING_SUPPRESSIONS "-Wno-old-style-cast" "-Wno-shadow"
+                                      "-Wno-sign-conversion" "-Wno-conversion")
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        list(APPEND LASZIP_WARNING_SUPPRESSIONS "-Wno-useless-cast")
+      endif()
+      string(JOIN " " LASZIP_WARNING_FLAGS ${LASZIP_WARNING_SUPPRESSIONS})
     endif()
-    string(JOIN " " LASZIP_WARNING_FLAGS ${LASZIP_WARNING_SUPPRESSIONS})
-    set_source_files_properties(
-      ${laszip_SOURCE_DIR}/src/laszipper.cpp
-      ${laszip_SOURCE_DIR}/src/lasunzipper.cpp
-      PROPERTIES COMPILE_FLAGS "${LASZIP_WARNING_FLAGS}")
+    if(LASZIP_WARNING_FLAGS)
+      set_source_files_properties(
+        ${laszip_SOURCE_DIR}/src/laszipper.cpp
+        ${laszip_SOURCE_DIR}/src/lasunzipper.cpp
+        PROPERTIES COMPILE_FLAGS "${LASZIP_WARNING_FLAGS}")
+    endif()
   endif()
 endif()
 

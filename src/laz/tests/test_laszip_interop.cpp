@@ -297,12 +297,17 @@ void populate_header(const std::vector<PointT>& points, laszip_header& header) {
   int32_t max_z = max_x;
 
   for (const PointT& point : points) {
-    min_x = std::min(min_x, point.x);
-    min_y = std::min(min_y, point.y);
-    min_z = std::min(min_z, point.z);
-    max_x = std::max(max_x, point.x);
-    max_y = std::max(max_y, point.y);
-    max_z = std::max(max_z, point.z);
+    // Copy coordinates to local variables to avoid misaligned reference issues
+    // with packed structures when passing to std::min/std::max
+    const int32_t x = point.x;
+    const int32_t y = point.y;
+    const int32_t z = point.z;
+    min_x = std::min(min_x, x);
+    min_y = std::min(min_y, y);
+    min_z = std::min(min_z, z);
+    max_x = std::max(max_x, x);
+    max_y = std::max(max_y, y);
+    max_z = std::max(max_z, z);
 
     auto increment_return_counters = [&](uint8_t return_number, uint8_t number_of_returns) {
       if (return_number == 0 || number_of_returns == 0) {
