@@ -78,7 +78,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      // LASPP_ASSERT_EQ(stream.str().size(), 2136);
+      LASPP_ASSERT_EQ(stream.str().size(), 2136);
 
       {
         LAZReader reader(*laz_special_vlr);
@@ -160,7 +160,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      // LASPP_ASSERT_EQ(stream.str().size(), 7083);
+      LASPP_ASSERT_EQ(stream.str().size(), 7083);
 
       {
         LAZReader reader(*laz_special_vlr);

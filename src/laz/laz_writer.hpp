@@ -164,47 +164,49 @@ class LAZWriter {
       LASPP_ASSERT_EQ(encoder_num_layers.size(), 0);
     }
 
-    std::unique_ptr<OutStream> compressed_out_stream;
-    if (!layered_compression) {
-      compressed_out_stream = std::make_unique<OutStream>(compressed_data);
-    }
-
     std::vector<uint32_t> layer_sizes;
     std::string layer_payload;
 
     {
-      for (size_t i = 1; i < points.size(); i++) {
-        std::optional<uint8_t> context;
-        for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
-          LAZEncoder& laz_encoder = encoders[encoder_index];
-          std::visit(
-              [&](auto&& encoder) {
-                if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
-                                                     decltype(encoder.last_value())>>,
-                                                 T>()) {
-                  decltype(encoder.last_value()) value_to_encode = points[i];
-                  using EncoderType = std::decay_t<decltype(encoder)>;
-                  if constexpr (std::is_same_v<EncoderType, LASPointFormat6Encoder>) {
-                    LASPP_ASSERT(layered_compression);
-                    auto& streams = *std::get<
-                        std::unique_ptr<LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS>>>(
-                        layered_streams[encoder_index]);
-                    encoder.encode(streams, value_to_encode);
-                    context = encoder.get_active_context();
-                  } else if constexpr (std::is_same_v<EncoderType, RGB14Encoder>) {
-                    LASPP_ASSERT(layered_compression);
-                    auto& streams =
-                        *std::get<std::unique_ptr<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>>(
-                            layered_streams[encoder_index]);
-                    encoder.encode(streams, value_to_encode, context.value());
-                  } else {
-                    LASPP_ASSERT(!layered_compression);
-                    LASPP_ASSERT(compressed_out_stream != nullptr);
-                    encoder.encode(*compressed_out_stream, value_to_encode);
+      std::unique_ptr<OutStream> compressed_out_stream;
+      if (!layered_compression) {
+        compressed_out_stream = std::make_unique<OutStream>(compressed_data);
+      }
+
+      {
+        for (size_t i = 1; i < points.size(); i++) {
+          std::optional<uint8_t> context;
+          for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
+            LAZEncoder& laz_encoder = encoders[encoder_index];
+            std::visit(
+                [&](auto&& encoder) {
+                  if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
+                                                       decltype(encoder.last_value())>>,
+                                                   T>()) {
+                    decltype(encoder.last_value()) value_to_encode = points[i];
+                    using EncoderType = std::decay_t<decltype(encoder)>;
+                    if constexpr (std::is_same_v<EncoderType, LASPointFormat6Encoder>) {
+                      LASPP_ASSERT(layered_compression);
+                      auto& streams = *std::get<
+                          std::unique_ptr<LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS>>>(
+                          layered_streams[encoder_index]);
+                      encoder.encode(streams, value_to_encode);
+                      context = encoder.get_active_context();
+                    } else if constexpr (std::is_same_v<EncoderType, RGB14Encoder>) {
+                      LASPP_ASSERT(layered_compression);
+                      auto& streams =
+                          *std::get<std::unique_ptr<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>>(
+                              layered_streams[encoder_index]);
+                      encoder.encode(streams, value_to_encode, context.value());
+                    } else {
+                      LASPP_ASSERT(!layered_compression);
+                      LASPP_ASSERT(compressed_out_stream != nullptr);
+                      encoder.encode(*compressed_out_stream, value_to_encode);
+                    }
                   }
-                }
-              },
-              laz_encoder);
+                },
+                laz_encoder);
+          }
         }
       }
     }
