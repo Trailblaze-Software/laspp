@@ -56,12 +56,14 @@ class LayeredInStreams {
   AlwaysConstructedArray<PointerStreamBuffer, N_STREAMS> m_layer_stream_buffers;
   AlwaysConstructedArray<std::istream, N_STREAMS> m_layer_streams;
   AlwaysConstructedArray<InStream, N_STREAMS> m_streams;
+  std::array<bool, N_STREAMS> m_non_empty{};
 
  public:
   LayeredInStreams(std::span<std::byte>& layer_sizes, std::span<std::byte>& compressed_layer_data) {
     for (std::size_t i = 0; i < N_STREAMS; ++i) {
       std::uint32_t layer_size = 0;
       std::memcpy(&layer_size, layer_sizes.data(), sizeof(layer_size));
+      m_non_empty[i] = layer_size > 0;
       layer_sizes = layer_sizes.subspan(sizeof(layer_size));
       m_layer_stream_buffers.construct(i, compressed_layer_data.data(), layer_size);
       m_layer_streams.construct(i, &m_layer_stream_buffers[i]);
@@ -69,6 +71,8 @@ class LayeredInStreams {
       compressed_layer_data = compressed_layer_data.subspan(layer_size);
     }
   }
+
+  bool non_empty(std::size_t i) const noexcept { return m_non_empty[i]; }
 
   InStream& operator[](std::size_t i) noexcept { return m_streams[i]; }
 };

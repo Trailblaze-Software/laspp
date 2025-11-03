@@ -135,8 +135,8 @@ class LAZReader {
 
     if (m_special_vlr.compressor == LAZCompressor::LayeredChunked) {
       uint32_t num_points;
-      std::copy(compressed_data.begin(), compressed_data.begin() + sizeof(uint32_t),
-                reinterpret_cast<std::byte*>(&num_points));
+      // Read num_points as little-endian (LAS files use little-endian)
+      std::memcpy(&num_points, compressed_data.data(), sizeof(uint32_t));
       compressed_data = compressed_data.subspan(sizeof(uint32_t));
       LASPP_ASSERT_EQ(num_points, decompressed_data.size());
     }

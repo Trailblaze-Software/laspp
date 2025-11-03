@@ -19,13 +19,11 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
 
 #include "las_point.hpp"
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/integer_encoder.hpp"
 #include "laz/layered_stream.hpp"
-#include "laz/stream.hpp"
 #include "laz/streaming_median.hpp"
 #include "utilities/arithmetic.hpp"
 
@@ -60,8 +58,7 @@ struct LASPointFormat6Context : LASPointFormat6 {
   uint_fast8_t cpr;
   uint_fast8_t cprgps;
 
-  LASPointFormat6Context()
-      : initialized(false), last_z{}, last_intensity{}, gps_time_encoder(GPSTime(0)) {}
+  LASPointFormat6Context() : initialized(false), gps_time_encoder(GPSTime(0)) {}
 
   static constexpr uint8_t number_return_map_6ctx[16][16] = {
       {0, 1, 2, 3, 4, 5, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5},
@@ -249,28 +246,6 @@ class LASPointFormat6EncoderBase {
         context.classification_encoders[classification_idx].decode_symbol(classification_stream);
     context.classification = static_cast<LASClassification>(decoded_classification);
 
-    uint8_t last_flags =
-        static_cast<uint8_t>((context.edge_of_flight_line << 5) |
-                             (context.scan_direction_flag << 4) | context.classification_flags);
-    uint_fast16_t decoded_flags = context.flag_encoders[last_flags].decode_symbol(flags_stream);
-    context.edge_of_flight_line = static_cast<uint8_t>((decoded_flags >> 5) & 0x1);
-    context.scan_direction_flag = static_cast<uint8_t>((decoded_flags >> 4) & 0x1);
-    context.classification_flags = static_cast<uint8_t>(decoded_flags & 0x0F);
-
-    uint32_t intensity_instance =
-        (static_cast<uint32_t>(context.cpr) << 1) | static_cast<uint32_t>(gps_time_change);
-    int32_t intensity_delta =
-        context.intensity_encoder.decode_int(intensity_instance, intensity_stream);
-    int32_t new_intensity =
-        static_cast<int32_t>(context.last_intensity[intensity_instance]) + intensity_delta;
-    context.intensity = static_cast<uint16_t>(new_intensity);
-    context.last_intensity[intensity_instance] = context.intensity;
-
-    uint8_t user_ctx = context.user_data / 4;
-    uint_fast16_t decoded_user_data =
-        context.user_data_encoders[user_ctx].decode_symbol(user_data_stream);
-    context.user_data = static_cast<uint8_t>(decoded_user_data);
-
     uint32_t mgps = context.m * 2u + static_cast<uint32_t>(gps_time_change);
     int32_t decoded_dx =
         context.dx_encoders[context.number_of_returns == 1].decode_int(channel_returns_stream);
@@ -285,8 +260,8 @@ class LASPointFormat6EncoderBase {
       dy_instance++;
     }
     int32_t decoded_dy = context.dy_encoder[dy_instance].decode_int(channel_returns_stream);
-    int32_t dy = wrapping_int32_add(decoded_dy, context.dy_streamed_median[context.m].get_median());
-    context.dy_streamed_median[context.m].insert(dy);
+    int32_t dy = wrapping_int32_add(decoded_dy, context.dy_streamed_median[mgps].get_median());
+    context.dy_streamed_median[mgps].insert(dy);
     context.y = wrapping_int32_add(context.y, dy);
 
     uint_fast16_t dy_k = context.dy_encoder[dy_instance].prev_k();
@@ -299,6 +274,35 @@ class LASPointFormat6EncoderBase {
     int32_t decoded_dz = context.dz_encoder[dz_instance].decode_int(z_stream);
     context.z = wrapping_int32_add(context.last_z[context.l], decoded_dz);
     context.last_z[context.l] = context.z;
+
+    if (streams.non_empty(3)) {
+      bool debug = false;
+      if (context.x == 9282355 && context.y == 34405205) {
+        debug = true;
+      }
+      uint8_t last_flags =
+          static_cast<uint8_t>((context.edge_of_flight_line << 5) |
+                               (context.scan_direction_flag << 4) | context.classification_flags);
+      uint_fast16_t decoded_flags = context.flag_encoders[last_flags].decode_symbol(flags_stream);
+      if (debug) {
+        std::cout << " decoded_flags: " << static_cast<int>(decoded_flags)
+                  << " from last_flags: " << static_cast<int>(last_flags) << std::endl;
+      }
+      context.edge_of_flight_line = static_cast<uint8_t>((decoded_flags >> 5) & 0x1);
+      context.scan_direction_flag = static_cast<uint8_t>((decoded_flags >> 4) & 0x1);
+      context.classification_flags = static_cast<uint8_t>(decoded_flags & 0x0F);
+    }
+
+    int32_t intensity_delta = context.intensity_encoder.decode_int(context.cpr, intensity_stream);
+    int32_t new_intensity =
+        static_cast<int32_t>(context.last_intensity[context.cprgps]) + intensity_delta;
+    context.intensity = static_cast<uint16_t>(new_intensity);
+    context.last_intensity[context.cprgps] = context.intensity;
+
+    uint8_t user_ctx = context.user_data / 4;
+    uint_fast16_t decoded_user_data =
+        context.user_data_encoders[user_ctx].decode_symbol(user_data_stream);
+    context.user_data = static_cast<uint8_t>(decoded_user_data);
 
     context.scanner_channel = static_cast<uint8_t>(m_context & 0x3);
     return context;
@@ -454,12 +458,10 @@ class LASPointFormat6EncoderBase {
     context.scan_direction_flag = point.scan_direction_flag;
     context.classification_flags = point.classification_flags;
 
-    uint32_t intensity_instance =
-        (static_cast<uint32_t>(context.cpr) << 1) | static_cast<uint32_t>(gps_changed);
-    int32_t intensity_base = static_cast<int32_t>(context.last_intensity[intensity_instance]);
+    int32_t intensity_base = static_cast<int32_t>(context.last_intensity[context.cprgps]);
     int32_t intensity_diff = static_cast<int32_t>(point.intensity) - intensity_base;
-    context.intensity_encoder.encode_int(intensity_instance, intensity_stream, intensity_diff);
-    context.last_intensity[intensity_instance] = point.intensity;
+    context.intensity_encoder.encode_int(context.cpr, intensity_stream, intensity_diff);
+    context.last_intensity[context.cprgps] = point.intensity;
     context.intensity = point.intensity;
 
     uint8_t user_ctx = prev_user_data / 4;
@@ -484,8 +486,8 @@ class LASPointFormat6EncoderBase {
     int32_t dy = wrapping_int32_sub(point.y, context.y);
     context.dy_encoder[dy_instance].encode_int(
         channel_returns_stream,
-        wrapping_int32_sub(dy, context.dy_streamed_median[context.m].get_median()));
-    context.dy_streamed_median[context.m].insert(dy);
+        wrapping_int32_sub(dy, context.dy_streamed_median[mgps].get_median()));
+    context.dy_streamed_median[mgps].insert(dy);
     context.y = point.y;
 
     uint_fast16_t dy_k = context.dy_encoder[dy_instance].prev_k();
