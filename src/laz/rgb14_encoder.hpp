@@ -24,6 +24,7 @@
 #include "laz/layered_stream.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
+#include "utilities/arithmetic.hpp"
 
 namespace laspp {
 
@@ -45,15 +46,6 @@ class RGB14Encoder {
   std::array<Context, 4> m_contexts;
   uint8_t m_active_context;
   uint8_t m_last_value_context;
-
-  static uint8_t clamp(uint8_t value, int delta) {
-    if (delta + value > 255) {
-      return 255;
-    } else if (delta + value < 0) {
-      return 0;
-    }
-    return static_cast<uint8_t>(value + delta);
-  }
 
   Context& ensure_context(uint8_t idx) {
     if (!m_contexts[idx].initialized) {

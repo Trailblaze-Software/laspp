@@ -47,8 +47,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
     std::stringstream encoded_stream;
     std::vector<laspp::ColorData> random_color_data;
-    std::mt19937 gen(0);
-    gen.seed(42);
+    std::mt19937 gen(42);
     for (size_t i = 0; i < 1000; i++) {
       random_color_data.emplace_back(laspp::ColorData{static_cast<uint16_t>(gen()),
                                                       static_cast<uint16_t>(gen()),

@@ -153,9 +153,9 @@ class GeneralGPSTimeEncoder {
       } else if (case_delta <= 510) {
         uint32_t dgps_time_low = static_cast<uint32_t>(
             m_dgps_time_low_encoder.decode_int(case_delta == 510 ? 6 : 5, in_stream));
-        m_reference_frames[m_current_frame].prev_gps_time.as_int64() += static_cast<int32_t>(
-            -static_cast<uint32_t>(case_delta - 500) *
-                static_cast<uint32_t>(m_reference_frames[m_current_frame].delta) +
+        m_reference_frames[m_current_frame].prev_gps_time.as_int64() -= static_cast<int32_t>(
+            static_cast<uint32_t>(case_delta - 500) *
+                static_cast<uint32_t>(m_reference_frames[m_current_frame].delta) -
             dgps_time_low);
         if (case_delta == 510) {
           m_reference_frames[m_current_frame].counter++;

@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <ostream>
 #include <random>
 #include <type_traits>
@@ -177,6 +178,20 @@ struct LASPP_PACKED ClassificationByte {
   }
 };
 
+inline float random_float(std::mt19937_64& gen) {
+  uint32_t raw = static_cast<uint32_t>(gen());
+  float normalized =
+      static_cast<float>(raw) / static_cast<float>(std::numeric_limits<uint32_t>::max());
+  return normalized * 2e6f - 1e6f;
+}
+
+inline double random_double(std::mt19937_64& gen) {
+  uint64_t raw = gen();
+  double normalized =
+      static_cast<double>(raw) / static_cast<double>(std::numeric_limits<uint64_t>::max());
+  return normalized * 2e6 - 1e6;
+}
+
 struct LASPP_PACKED LASPointFormat0 {
   int32_t x;
   int32_t y;
@@ -189,23 +204,16 @@ struct LASPP_PACKED LASPointFormat0 {
   uint16_t point_source_id;
 
   static LASPointFormat0 RandomData(std::mt19937_64& gen) {
-    std::uniform_int_distribution<int32_t> coord_dist(std::numeric_limits<int32_t>::min(),
-                                                      std::numeric_limits<int32_t>::max());
-    std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
-    std::uniform_int_distribution<uint8_t> byte_dist(0, 255);
-    std::uniform_int_distribution<uint16_t> point_source_dist(0,
-                                                              std::numeric_limits<uint16_t>::max());
-
     LASPointFormat0 point;
-    point.x = coord_dist(gen);
-    point.y = coord_dist(gen);
-    point.z = coord_dist(gen);
-    point.intensity = intensity_dist(gen);
-    point.bit_byte = byte_dist(gen);
-    point.classification_byte = byte_dist(gen);
-    point.scan_angle_rank = byte_dist(gen);
-    point.user_data = byte_dist(gen);
-    point.point_source_id = point_source_dist(gen);
+    point.x = static_cast<int32_t>(gen());
+    point.y = static_cast<int32_t>(gen());
+    point.z = static_cast<int32_t>(gen());
+    point.intensity = static_cast<uint16_t>(gen());
+    point.bit_byte = static_cast<uint8_t>(gen());
+    point.classification_byte = static_cast<uint8_t>(gen());
+    point.scan_angle_rank = static_cast<uint8_t>(gen());
+    point.user_data = static_cast<uint8_t>(gen());
+    point.point_source_id = static_cast<uint16_t>(gen());
     return point;
   }
 
@@ -241,9 +249,7 @@ struct LASPP_PACKED GPSTime {
   int64_t& as_int64() { return gps_time.int64; }
 
   static GPSTime RandomData(std::mt19937_64& gen) {
-    std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
-    GPSTime gpst;
-    gpst.gps_time.f64 = gps_dist(gen);
+    GPSTime gpst(random_double(gen));
     return gpst;
   }
 
@@ -282,11 +288,10 @@ struct LASPP_PACKED ColorData {
   bool operator==(const ColorData& other) const = default;
 
   static ColorData RandomData(std::mt19937_64& gen) {
-    std::uniform_int_distribution<uint16_t> color_dist(0, std::numeric_limits<uint16_t>::max());
     ColorData color;
-    color.red = color_dist(gen);
-    color.green = color_dist(gen);
-    color.blue = color_dist(gen);
+    color.red = static_cast<uint16_t>(gen());
+    color.green = static_cast<uint16_t>(gen());
+    color.blue = static_cast<uint16_t>(gen());
     return color;
   }
 
@@ -340,19 +345,14 @@ struct LASPP_PACKED WavePacketData {
   bool operator==(const WavePacketData& other) const = default;
 
   static WavePacketData RandomData(std::mt19937_64& gen) {
-    std::uniform_int_distribution<uint8_t> byte_dist(0, 255);
-    std::uniform_int_distribution<uint64_t> uint64_dist(0, std::numeric_limits<uint64_t>::max());
-    std::uniform_int_distribution<uint32_t> uint32_dist(0, std::numeric_limits<uint32_t>::max());
-    std::uniform_real_distribution<float> float_dist(-1e6f, 1e6f);
-
     WavePacketData wave_packet;
-    wave_packet.wave_packet_descriptor_index = byte_dist(gen);
-    wave_packet.byte_offset_to_waveform_data = uint64_dist(gen);
-    wave_packet.wave_packet_size = uint32_dist(gen);
-    wave_packet.return_point_waveform_location = float_dist(gen);
-    wave_packet.x_t = float_dist(gen);
-    wave_packet.y_t = float_dist(gen);
-    wave_packet.z_t = float_dist(gen);
+    wave_packet.wave_packet_descriptor_index = static_cast<uint8_t>(gen());
+    wave_packet.byte_offset_to_waveform_data = gen();
+    wave_packet.wave_packet_size = static_cast<uint32_t>(gen());
+    wave_packet.return_point_waveform_location = random_float(gen);
+    wave_packet.x_t = random_float(gen);
+    wave_packet.y_t = random_float(gen);
+    wave_packet.z_t = random_float(gen);
     return wave_packet;
   }
 
@@ -420,36 +420,23 @@ struct LASPP_PACKED LASPointFormat6 {
   double gps_time;
 
   static LASPointFormat6 RandomData(std::mt19937_64& gen) {
-    std::uniform_int_distribution<int32_t> coord_dist(std::numeric_limits<int32_t>::min(),
-                                                      std::numeric_limits<int32_t>::max());
-    std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
-    std::uniform_int_distribution<uint8_t> return_dist(0, 15);
-    std::uniform_int_distribution<uint8_t> class_flags_dist(0, 15);
-    std::uniform_int_distribution<uint8_t> scanner_channel_dist(0, 3);
-    std::uniform_int_distribution<uint8_t> byte_dist(0, 255);
-    std::uniform_int_distribution<int16_t> angle_dist(std::numeric_limits<int16_t>::min(),
-                                                      std::numeric_limits<int16_t>::max());
-    std::uniform_int_distribution<uint16_t> point_source_dist(0,
-                                                              std::numeric_limits<uint16_t>::max());
-    std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
-
     LASPointFormat6 point;
-    point.x = coord_dist(gen);
-    point.y = coord_dist(gen);
-    point.z = coord_dist(gen);
-    point.intensity = intensity_dist(gen);
-    point.return_number = static_cast<uint8_t>(return_dist(gen) & 0x0F);
-    point.number_of_returns = static_cast<uint8_t>(return_dist(gen) & 0x0F);
-    point.classification_flags = static_cast<uint8_t>(class_flags_dist(gen) & 0x0F);
-    point.scanner_channel = static_cast<uint8_t>(scanner_channel_dist(gen) & 0x03);
-    point.scan_direction_flag = static_cast<uint8_t>(byte_dist(gen) & 0x1);
-    point.edge_of_flight_line = static_cast<uint8_t>(byte_dist(gen) & 0x1);
-    point.classification = static_cast<LASClassification>(
-        byte_dist(gen) % (static_cast<uint8_t>(LASClassification::TemporalExclusion) + 1));
-    point.user_data = byte_dist(gen);
-    point.scan_angle = angle_dist(gen);
-    point.point_source_id = point_source_dist(gen);
-    point.gps_time = gps_dist(gen);
+    point.x = static_cast<int32_t>(gen());
+    point.y = static_cast<int32_t>(gen());
+    point.z = static_cast<int32_t>(gen());
+    point.intensity = static_cast<uint16_t>(gen());
+    point.return_number = static_cast<uint8_t>(gen() & 0x0F);
+    point.number_of_returns = static_cast<uint8_t>(gen() & 0x0F);
+    point.classification_flags = static_cast<uint8_t>(gen() & 0x0F);
+    point.scanner_channel = static_cast<uint8_t>(gen() & 0x03);
+    point.scan_direction_flag = static_cast<uint8_t>(gen() & 0x01);
+    point.edge_of_flight_line = static_cast<uint8_t>(gen() & 0x01);
+    point.classification = static_cast<LASClassification>(static_cast<uint8_t>(
+        gen() % (static_cast<uint8_t>(LASClassification::TemporalExclusion) + 1)));
+    point.user_data = static_cast<uint8_t>(gen());
+    point.scan_angle = static_cast<int16_t>(gen());
+    point.point_source_id = static_cast<uint16_t>(gen());
+    point.gps_time = random_double(gen);
     return point;
   }
 
@@ -496,9 +483,8 @@ struct LASPP_PACKED NIRData {
   uint16_t NIR;
 
   static NIRData RandomData(std::mt19937_64& gen) {
-    std::uniform_int_distribution<uint16_t> nir_dist(0, std::numeric_limits<uint16_t>::max());
     NIRData nir;
-    nir.NIR = nir_dist(gen);
+    nir.NIR = static_cast<uint16_t>(gen());
     return nir;
   }
 

@@ -28,17 +28,8 @@ project(
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 if(LASPP_BUILD_TESTS)
-  include(FetchContent)
-  FetchContent_Declare(
-    laszip
-    GIT_REPOSITORY https://github.com/LASzip/LASzip.git
-    GIT_TAG 3.4.4)
-  # Build laszip as static library so we can link against it for internal
-  # symbols
-  set(LASZIP_BUILD_STATIC
-      ON
-      CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(laszip)
+  include(cmake/SetupLaszip.cmake)
+  setup_laszip()
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
@@ -165,36 +156,23 @@ if(LASPP_BUILD_TESTS)
   endforeach()
 
   if(TARGET test_laszip_interop)
+    FetchContent_GetProperties(laszip)
+    if(NOT laszip_POPULATED)
+      message(
+        FATAL_ERROR
+          "laszip FetchContent properties not found. Call setup_laszip() first."
+      )
+    endif()
     # laszipper.cpp and lasunzipper.cpp are wrapper files that need internal
-    # laszip symbols Since we build laszip as a static library
-    # (LASZIP_BUILD_STATIC), we can link against it directly. Only the wrapper
-    # files need to be compiled separately.
+    # laszip symbols
     file(GLOB LASZIP_WRAPPER_SOURCES "${laszip_SOURCE_DIR}/src/laszipper.cpp"
          "${laszip_SOURCE_DIR}/src/lasunzipper.cpp")
 
     # Add wrapper files as sources to the test
     target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
 
-    # Include directories for laszip
-    target_include_directories(
-      test_laszip_interop SYSTEM
-      PRIVATE ${laszip_SOURCE_DIR}/src ${laszip_SOURCE_DIR}/dll
-              ${laszip_BINARY_DIR}/include)
-
-    # Link against laszip's static library and API
-    if(TARGET laszip3)
-      target_link_libraries(test_laszip_interop PRIVATE laszip3)
-      if(TARGET laszip_api3)
-        target_link_libraries(test_laszip_interop PRIVATE laszip_api3)
-      endif()
-    elseif(TARGET laszip)
-      target_link_libraries(test_laszip_interop PRIVATE laszip)
-      if(TARGET laszip_api)
-        target_link_libraries(test_laszip_interop PRIVATE laszip_api)
-      endif()
-    else()
-      message(WARNING "Neither laszip nor laszip3 target found")
-    endif()
+    # Link against laszip
+    link_target_to_laszip(test_laszip_interop)
 
     # Suppress warnings from laszip wrapper source files
     if(MSVC)

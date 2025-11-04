@@ -502,10 +502,6 @@ class LASPointFormat6EncoderBase {
     context.last_z[context.l] = point.z;
     context.z = point.z;
 
-    context.number_of_returns = static_cast<uint8_t>(point.number_of_returns & 0xF);
-    context.return_number = static_cast<uint8_t>(point.return_number & 0xF);
-    context.set_cpr(gps_changed);
-    context.set_m_l();
     context.scanner_channel = static_cast<uint8_t>(point.scanner_channel & 0x3);
   }
 };

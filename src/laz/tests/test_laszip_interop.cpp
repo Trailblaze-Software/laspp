@@ -49,7 +49,6 @@
 
 #include "las_point.hpp"
 #include "las_reader.hpp"
-#include "laszip.hpp"
 #include "laszipper.hpp"
 #include "laz/laz_reader.hpp"
 #include "laz/laz_vlr.hpp"

@@ -60,7 +60,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                         .user_data = 32,
                         .point_source_id = 1});
     std::mt19937 gen(0);
-    gen.seed(0);
     for (size_t i = points.size(); i < 1000; i++) {
       const LASPointFormat0& prev = points.back();
       LASPointFormat0 next = prev;

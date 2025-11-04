@@ -26,4 +26,14 @@ inline int32_t wrapping_int32_add(int32_t a, int32_t b) {
 }
 
 inline int32_t wrapping_int32_sub(int32_t a, int32_t b) { return wrapping_int32_add(a, -b); }
+
+inline uint8_t clamp(uint8_t value, int delta) {
+  if (delta > 255 - value) {
+    return 255;
+  } else if (value < -delta) {
+    return 0;
+  }
+  return static_cast<uint8_t>(value + static_cast<uint32_t>(delta));
+}
+
 }  // namespace laspp

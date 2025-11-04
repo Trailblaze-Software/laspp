@@ -66,7 +66,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      LASPP_ASSERT_EQ(stream.str().size(), 2132);
+      LASPP_ASSERT_EQ(stream.str().size(), 2138);
 
       {
         LAZReader reader(*laz_special_vlr);
@@ -133,7 +133,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      LASPP_ASSERT_EQ(stream.str().size(), 7215);
+      LASPP_ASSERT_EQ(stream.str().size(), 7213);
 
       {
         LAZReader reader(*laz_special_vlr);
@@ -164,8 +164,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     std::stringstream stream;
     std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
-    std::mt19937_64 gen(0);
-    gen.seed(2024);
+    std::mt19937_64 gen(2024);
     std::vector<LASPointFormat7> points;
     points.reserve(150);
     for (size_t i = 0; i < 150; i++) {
@@ -181,7 +180,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
       laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
     }
 
-    LASPP_ASSERT_GT(stream.str().size(), 0);
+    LASPP_ASSERT_EQ(stream.str().size(), 5929);
 
     {
       LAZReader reader(*laz_special_vlr);

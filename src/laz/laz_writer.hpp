@@ -100,7 +100,7 @@ class LAZWriter {
             break;
           }
           case LAZItemType::GPSTime11: {
-            GPSTime gps_time;
+            GPSTime gps_time{};
             if constexpr (is_copy_assignable<decltype(gps_time), T>()) {
               gps_time = points[0];
             }
@@ -112,7 +112,7 @@ class LAZWriter {
             break;
           }
           case LAZItemType::RGB12: {
-            ColorData color_data;
+            ColorData color_data{};
             if constexpr (is_copy_assignable<decltype(color_data), T>()) {
               color_data = points[0];
             }
@@ -124,7 +124,7 @@ class LAZWriter {
             break;
           }
           case LAZItemType::RGB14: {
-            ColorData color_data;
+            ColorData color_data{};
             if constexpr (is_copy_assignable<decltype(color_data), T>()) {
               color_data = points[0];
             }

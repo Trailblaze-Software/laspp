@@ -19,7 +19,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <memory>
 #include <random>
 #include <span>
@@ -29,7 +28,6 @@
 #include "las_point.hpp"
 #include "laz/layered_stream.hpp"
 #include "laz/point14_encoder.hpp"
-#include "laz/stream.hpp"
 
 using namespace laspp;
 
@@ -55,67 +53,41 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     first_point.gps_time = 0.0;
     points.push_back(first_point);
 
-    std::mt19937 gen(0);
-    std::uniform_int_distribution<int32_t> coord_dist(-500000, 500000);
-    std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
-    std::uniform_int_distribution<uint16_t> point_source_dist(0,
-                                                              std::numeric_limits<uint16_t>::max());
-    std::uniform_int_distribution<int16_t> angle_dist(-1800, 1800);
-    // MSVC doesn't support uniform_int_distribution<uint8_t>, use uint16_t and cast
-    std::uniform_int_distribution<uint16_t> user_dist(0, std::numeric_limits<uint8_t>::max());
-    std::uniform_int_distribution<uint16_t> flag_dist(0, 15);
-    std::uniform_int_distribution<uint16_t> scanner_dist(0, 3);
-    std::uniform_int_distribution<uint16_t> returns_dist(1, 15);
-    std::uniform_int_distribution<uint16_t> bool_dist(0, 1);
-    std::uniform_int_distribution<uint16_t> classification_dist(0, 22);
-    std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
+    std::mt19937_64 gen(0);
 
     for (size_t i = 1; i < 1000; i++) {
-      LASPointFormat6 next = points.back();
-      next.scanner_channel = static_cast<uint8_t>(scanner_dist(gen) & 0x3);
-      next.number_of_returns = static_cast<uint8_t>(returns_dist(gen) & 0xF);
-      uint8_t max_return = next.number_of_returns;
-      std::uniform_int_distribution<uint16_t> return_number_dist(
-          1, (std::max)(static_cast<uint8_t>(1), max_return));
-      next.return_number = static_cast<uint8_t>(
-          (std::min)(static_cast<uint8_t>(return_number_dist(gen)), max_return) & 0xF);
-      next.classification_flags = static_cast<uint8_t>(flag_dist(gen) & 0x0F);
-      next.scan_direction_flag = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      next.edge_of_flight_line = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      next.classification = static_cast<LASClassification>(classification_dist(gen));
-      next.user_data = static_cast<uint8_t>(user_dist(gen));
-      next.scan_angle = angle_dist(gen);
-      next.point_source_id = point_source_dist(gen);
-      next.intensity = intensity_dist(gen);
-      next.gps_time = gps_dist(gen);
-      next.x = coord_dist(gen);
-      next.y = coord_dist(gen);
-      next.z = coord_dist(gen);
-      points.emplace_back(next);
+      points.emplace_back(LASPointFormat6::RandomData(gen));
     }
 
-    LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS> out_streams;
+    std::string combined_data;
+
     {
-      std::unique_ptr<LASPointFormat6Encoder> encoder =
-          std::make_unique<LASPointFormat6Encoder>(points.front());
-      for (size_t i = 1; i < points.size(); i++) {
-        encoder->encode(out_streams, points[i]);
+      LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS> out_streams;
+      {
+        std::unique_ptr<LASPointFormat6Encoder> encoder =
+            std::make_unique<LASPointFormat6Encoder>(points.front());
+        for (size_t i = 1; i < points.size(); i++) {
+          encoder->encode(out_streams, points[i]);
+        }
       }
+
+      std::stringstream combined_stream = out_streams.combined_stream();
+      combined_data = combined_stream.str();
     }
 
-    std::stringstream combined_stream = out_streams.combined_stream();
-    std::string combined_data = combined_stream.str();
+    LASPP_ASSERT_EQ(combined_data.size(), 30852);
 
     std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
                                    LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
     std::span<std::byte> data_span(
         reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
-        reinterpret_cast<std::byte*>(combined_data.data()) - size_span.size());
+        combined_data.size() - size_span.size());
 
     LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
 
     std::unique_ptr<LASPointFormat6Encoder> decoder =
         std::make_unique<LASPointFormat6Encoder>(points.front());
+    LASPP_ASSERT_EQ(decoder->last_value(), points[0]);
     for (size_t i = 1; i < points.size(); i++) {
       LASPP_ASSERT_EQ(decoder->decode(in_streams), points[i]);
       LASPP_ASSERT_EQ(decoder->last_value(), points[i]);
