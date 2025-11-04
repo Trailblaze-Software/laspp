@@ -145,7 +145,15 @@ if(LASPP_BUILD_TESTS)
   include(CTest)
   enable_testing()
 
-  file(GLOB_RECURSE TEST_SOURCES "test*.cpp")
+  file(GLOB_RECURSE UNFILTERED_TEST_SOURCES "${CMAKE_SOURCE_DIR}/*test*.cpp")
+
+  # Filter to only those under a 'tests' directory
+  set(SOURCES "")
+  foreach(path ${UNFILTERED_TEST_SOURCES})
+    if(path MATCHES "/tests/")
+      list(APPEND TEST_SOURCES "${path}")
+    endif()
+  endforeach()
   message(STATUS "Test sources: ${TEST_SOURCES}")
 
   foreach(TEST_SOURCE ${TEST_SOURCES})

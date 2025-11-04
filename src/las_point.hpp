@@ -23,6 +23,7 @@
 #include <iomanip>
 #include <iostream>
 #include <ostream>
+#include <random>
 #include <type_traits>
 
 #include "utilities/macros.hpp"
@@ -187,6 +188,27 @@ struct LASPP_PACKED LASPointFormat0 {
   uint8_t user_data;
   uint16_t point_source_id;
 
+  static LASPointFormat0 RandomData(std::mt19937_64& gen) {
+    std::uniform_int_distribution<int32_t> coord_dist(std::numeric_limits<int32_t>::min(),
+                                                      std::numeric_limits<int32_t>::max());
+    std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
+    std::uniform_int_distribution<uint8_t> byte_dist(0, 255);
+    std::uniform_int_distribution<uint16_t> point_source_dist(0,
+                                                              std::numeric_limits<uint16_t>::max());
+
+    LASPointFormat0 point;
+    point.x = coord_dist(gen);
+    point.y = coord_dist(gen);
+    point.z = coord_dist(gen);
+    point.intensity = intensity_dist(gen);
+    point.bit_byte = byte_dist(gen);
+    point.classification_byte = byte_dist(gen);
+    point.scan_angle_rank = byte_dist(gen);
+    point.user_data = byte_dist(gen);
+    point.point_source_id = point_source_dist(gen);
+    return point;
+  }
+
   LASClassification classification() const { return classification_byte.classification; }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat0& point) {
@@ -218,6 +240,13 @@ struct LASPP_PACKED GPSTime {
 
   int64_t& as_int64() { return gps_time.int64; }
 
+  static GPSTime RandomData(std::mt19937_64& gen) {
+    std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
+    GPSTime gpst;
+    gpst.gps_time.f64 = gps_dist(gen);
+    return gpst;
+  }
+
   explicit GPSTime(double time) { gps_time.f64 = time; }
   GPSTime() = default;
 
@@ -232,6 +261,13 @@ struct LASPP_PACKED GPSTime {
 struct LASPP_PACKED LASPointFormat1 : LASPointFormat0, GPSTime {
   bool operator==(const LASPointFormat1& other) const = default;
 
+  static LASPointFormat1 RandomData(std::mt19937_64& gen) {
+    LASPointFormat1 point;
+    static_cast<LASPointFormat0&>(point) = LASPointFormat0::RandomData(gen);
+    static_cast<GPSTime&>(point) = GPSTime::RandomData(gen);
+    return point;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat1& lpf1) {
     return os << static_cast<const LASPointFormat0&>(lpf1) << static_cast<const GPSTime&>(lpf1)
               << std::endl;
@@ -245,6 +281,15 @@ struct LASPP_PACKED ColorData {
 
   bool operator==(const ColorData& other) const = default;
 
+  static ColorData RandomData(std::mt19937_64& gen) {
+    std::uniform_int_distribution<uint16_t> color_dist(0, std::numeric_limits<uint16_t>::max());
+    ColorData color;
+    color.red = color_dist(gen);
+    color.green = color_dist(gen);
+    color.blue = color_dist(gen);
+    return color;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const ColorData& color) {
     os << "RGB: (" << color.red << ", " << color.green << ", " << color.blue << ")" << std::endl;
     return os;
@@ -254,6 +299,13 @@ struct LASPP_PACKED ColorData {
 struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {
   bool operator==(const LASPointFormat2& other) const = default;
 
+  static LASPointFormat2 RandomData(std::mt19937_64& gen) {
+    LASPointFormat2 point;
+    static_cast<LASPointFormat0&>(point) = LASPointFormat0::RandomData(gen);
+    static_cast<ColorData&>(point) = ColorData::RandomData(gen);
+    return point;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat2& lpf2) {
     return os << static_cast<const LASPointFormat0&>(lpf2) << static_cast<const ColorData&>(lpf2)
               << std::endl;
@@ -262,6 +314,13 @@ struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {
 
 struct LASPP_PACKED LASPointFormat3 : LASPointFormat1, ColorData {
   bool operator==(const LASPointFormat3& other) const = default;
+
+  static LASPointFormat3 RandomData(std::mt19937_64& gen) {
+    LASPointFormat3 point;
+    static_cast<LASPointFormat1&>(point) = LASPointFormat1::RandomData(gen);
+    static_cast<ColorData&>(point) = ColorData::RandomData(gen);
+    return point;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat3& lpf3) {
     return os << static_cast<const LASPointFormat1&>(lpf3) << static_cast<const ColorData&>(lpf3)
@@ -280,6 +339,23 @@ struct LASPP_PACKED WavePacketData {
 
   bool operator==(const WavePacketData& other) const = default;
 
+  static WavePacketData RandomData(std::mt19937_64& gen) {
+    std::uniform_int_distribution<uint8_t> byte_dist(0, 255);
+    std::uniform_int_distribution<uint64_t> uint64_dist(0, std::numeric_limits<uint64_t>::max());
+    std::uniform_int_distribution<uint32_t> uint32_dist(0, std::numeric_limits<uint32_t>::max());
+    std::uniform_real_distribution<float> float_dist(-1e6f, 1e6f);
+
+    WavePacketData wave_packet;
+    wave_packet.wave_packet_descriptor_index = byte_dist(gen);
+    wave_packet.byte_offset_to_waveform_data = uint64_dist(gen);
+    wave_packet.wave_packet_size = uint32_dist(gen);
+    wave_packet.return_point_waveform_location = float_dist(gen);
+    wave_packet.x_t = float_dist(gen);
+    wave_packet.y_t = float_dist(gen);
+    wave_packet.z_t = float_dist(gen);
+    return wave_packet;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const WavePacketData& wave_packet) {
     os << "Wave packet descriptor index: "
        << static_cast<int>(wave_packet.wave_packet_descriptor_index) << std::endl;
@@ -297,6 +373,13 @@ struct LASPP_PACKED WavePacketData {
 struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {
   bool operator==(const LASPointFormat4& other) const = default;
 
+  static LASPointFormat4 RandomData(std::mt19937_64& gen) {
+    LASPointFormat4 point;
+    static_cast<LASPointFormat1&>(point) = LASPointFormat1::RandomData(gen);
+    static_cast<WavePacketData&>(point) = WavePacketData::RandomData(gen);
+    return point;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat4& lpf4) {
     return os << static_cast<const LASPointFormat1&>(lpf4)
               << static_cast<const WavePacketData&>(lpf4) << std::endl;
@@ -305,6 +388,13 @@ struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {
 
 struct LASPP_PACKED LASPointFormat5 : LASPointFormat3, WavePacketData {
   bool operator==(const LASPointFormat5& other) const = default;
+
+  static LASPointFormat5 RandomData(std::mt19937_64& gen) {
+    LASPointFormat5 point;
+    static_cast<LASPointFormat3&>(point) = LASPointFormat3::RandomData(gen);
+    static_cast<WavePacketData&>(point) = WavePacketData::RandomData(gen);
+    return point;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat5& lpf5) {
     return os << static_cast<const LASPointFormat3&>(lpf5)
@@ -328,6 +418,40 @@ struct LASPP_PACKED LASPointFormat6 {
   int16_t scan_angle;
   uint16_t point_source_id;
   double gps_time;
+
+  static LASPointFormat6 RandomData(std::mt19937_64& gen) {
+    std::uniform_int_distribution<int32_t> coord_dist(std::numeric_limits<int32_t>::min(),
+                                                      std::numeric_limits<int32_t>::max());
+    std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
+    std::uniform_int_distribution<uint8_t> return_dist(0, 15);
+    std::uniform_int_distribution<uint8_t> class_flags_dist(0, 15);
+    std::uniform_int_distribution<uint8_t> scanner_channel_dist(0, 3);
+    std::uniform_int_distribution<uint8_t> byte_dist(0, 255);
+    std::uniform_int_distribution<int16_t> angle_dist(std::numeric_limits<int16_t>::min(),
+                                                      std::numeric_limits<int16_t>::max());
+    std::uniform_int_distribution<uint16_t> point_source_dist(0,
+                                                              std::numeric_limits<uint16_t>::max());
+    std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
+
+    LASPointFormat6 point;
+    point.x = coord_dist(gen);
+    point.y = coord_dist(gen);
+    point.z = coord_dist(gen);
+    point.intensity = intensity_dist(gen);
+    point.return_number = static_cast<uint8_t>(return_dist(gen) & 0x0F);
+    point.number_of_returns = static_cast<uint8_t>(return_dist(gen) & 0x0F);
+    point.classification_flags = static_cast<uint8_t>(class_flags_dist(gen) & 0x0F);
+    point.scanner_channel = static_cast<uint8_t>(scanner_channel_dist(gen) & 0x03);
+    point.scan_direction_flag = static_cast<uint8_t>(byte_dist(gen) & 0x1);
+    point.edge_of_flight_line = static_cast<uint8_t>(byte_dist(gen) & 0x1);
+    point.classification = static_cast<LASClassification>(
+        byte_dist(gen) % (static_cast<uint8_t>(LASClassification::TemporalExclusion) + 1));
+    point.user_data = byte_dist(gen);
+    point.scan_angle = angle_dist(gen);
+    point.point_source_id = point_source_dist(gen);
+    point.gps_time = gps_dist(gen);
+    return point;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat6& point) {
     os << "X: " << point.x << std::endl;
@@ -354,6 +478,13 @@ struct LASPP_PACKED LASPointFormat6 {
 struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
   bool operator==(const LASPointFormat7& other) const = default;
 
+  static LASPointFormat7 RandomData(std::mt19937_64& gen) {
+    LASPointFormat7 point;
+    static_cast<LASPointFormat6&>(point) = LASPointFormat6::RandomData(gen);
+    static_cast<ColorData&>(point) = ColorData::RandomData(gen);
+    return point;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat7& lpf7) {
     return os << static_cast<const LASPointFormat6&>(lpf7) << static_cast<const ColorData&>(lpf7)
               << std::endl;
@@ -364,6 +495,13 @@ struct LASPP_PACKED NIRData {
   bool operator==(const NIRData& other) const = default;
   uint16_t NIR;
 
+  static NIRData RandomData(std::mt19937_64& gen) {
+    std::uniform_int_distribution<uint16_t> nir_dist(0, std::numeric_limits<uint16_t>::max());
+    NIRData nir;
+    nir.NIR = nir_dist(gen);
+    return nir;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const NIRData& nir) {
     os << "NIR: " << nir.NIR << std::endl;
     return os;
@@ -372,6 +510,13 @@ struct LASPP_PACKED NIRData {
 
 struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
   bool operator==(const LASPointFormat8& other) const = default;
+
+  static LASPointFormat8 RandomData(std::mt19937_64& gen) {
+    LASPointFormat8 point;
+    static_cast<LASPointFormat7&>(point) = LASPointFormat7::RandomData(gen);
+    static_cast<NIRData&>(point) = NIRData::RandomData(gen);
+    return point;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat8& lpf8) {
     return os << static_cast<const LASPointFormat7&>(lpf8) << static_cast<const NIRData&>(lpf8)
@@ -382,6 +527,13 @@ struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
 struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
   bool operator==(const LASPointFormat9& other) const = default;
 
+  static LASPointFormat9 RandomData(std::mt19937_64& gen) {
+    LASPointFormat9 point;
+    static_cast<LASPointFormat6&>(point) = LASPointFormat6::RandomData(gen);
+    static_cast<WavePacketData&>(point) = WavePacketData::RandomData(gen);
+    return point;
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat9& lpf9) {
     return os << static_cast<const LASPointFormat6&>(lpf9)
               << static_cast<const WavePacketData&>(lpf9) << std::endl;
@@ -390,6 +542,14 @@ struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
 
 struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
   bool operator==(const LASPointFormat10& other) const = default;
+
+  static LASPointFormat10 RandomData(std::mt19937_64& gen) {
+    LASPointFormat10 point;
+    static_cast<LASPointFormat9&>(point) = LASPointFormat9::RandomData(gen);
+    static_cast<ColorData&>(point) = ColorData::RandomData(gen);
+    static_cast<NIRData&>(point) = NIRData::RandomData(gen);
+    return point;
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const LASPointFormat10& lpf10) {
     return os << static_cast<const LASPointFormat9&>(lpf10) << static_cast<const ColorData&>(lpf10)

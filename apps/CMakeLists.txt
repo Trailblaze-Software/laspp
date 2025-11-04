@@ -23,3 +23,39 @@ install(
   TARGETS ${LAS2LAS++_EXE_NAME}
   DESTINATION bin
   COMPONENT applications)
+
+if(LASPP_BUILD_TESTS)
+  # Test application for comparing LAS++ and LASzip
+  set(TEST_LASPP_LASZIP_EXE_NAME test_laspp_laszip)
+
+  add_executable(${TEST_LASPP_LASZIP_EXE_NAME} test_laspp_laszip.cpp)
+
+  target_link_libraries(${TEST_LASPP_LASZIP_EXE_NAME}
+                        PRIVATE ${LIBRARY_NAME} OpenMP::OpenMP_CXX)
+
+  # Link against laszip if available
+  if(TARGET laszip3)
+    target_link_libraries(${TEST_LASPP_LASZIP_EXE_NAME} PRIVATE laszip3)
+    if(TARGET laszip_api3)
+      target_link_libraries(${TEST_LASPP_LASZIP_EXE_NAME} PRIVATE laszip_api3)
+    endif()
+  elseif(TARGET laszip)
+    target_link_libraries(${TEST_LASPP_LASZIP_EXE_NAME} PRIVATE laszip)
+    if(TARGET laszip_api)
+      target_link_libraries(${TEST_LASPP_LASZIP_EXE_NAME} PRIVATE laszip_api)
+    endif()
+  endif()
+
+  # Include directories for laszip
+  if(EXISTS ${laszip_SOURCE_DIR})
+    target_include_directories(
+      ${TEST_LASPP_LASZIP_EXE_NAME} SYSTEM
+      PRIVATE ${laszip_SOURCE_DIR}/src ${laszip_SOURCE_DIR}/dll
+              ${laszip_BINARY_DIR}/include)
+  endif()
+
+  install(
+    TARGETS ${TEST_LASPP_LASZIP_EXE_NAME}
+    DESTINATION bin
+    COMPONENT applications)
+endif()

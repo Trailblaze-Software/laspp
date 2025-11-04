@@ -51,6 +51,19 @@ struct has_num_layers<
 template <typename T>
 constexpr bool has_num_layers_v = has_num_layers<T>::value;
 
+template <typename TDest, typename TSrc>
+void copy_from_if_possible(TDest& dest, const TSrc& src) {
+  if constexpr (is_copy_fromable<TDest, TSrc>()) {
+    copy_from(dest, src);
+  } else if constexpr (is_copy_assignable<TDest, TSrc>()) {
+    dest = src;
+  } else if constexpr (std::is_base_of_v<std::remove_const_t<std::remove_reference_t<TSrc>>,
+                                         TDest>) {
+    using DecompressedType = std::remove_const_t<std::remove_reference_t<TSrc>>;
+    static_cast<DecompressedType&>(dest) = src;
+  }
+}
+
 class LAZReader {
   LAZSpecialVLRContent m_special_vlr;
   std::optional<LAZChunkTable> m_chunk_table;
@@ -134,13 +147,13 @@ class LAZReader {
     }
 
     if (m_special_vlr.compressor == LAZCompressor::LayeredChunked) {
-      uint32_t num_points;
-      std::memcpy(&num_points, compressed_data.data(), sizeof(num_points));
-      compressed_data = compressed_data.subspan(sizeof(uint32_t));
-      LASPP_ASSERT_EQ(num_points, decompressed_data.size());
-    }
+      {
+        uint32_t num_points;
+        std::memcpy(&num_points, compressed_data.data(), sizeof(num_points));
+        compressed_data = compressed_data.subspan(sizeof(uint32_t));
+        LASPP_ASSERT_EQ(num_points, decompressed_data.size());
+      }
 
-    if (m_special_vlr.compressor == LAZCompressor::LayeredChunked) {
       static_assert(has_num_layers<laspp::LASPointFormat6Encoder>::value,
                     "LAZPointFormat6Encoder must have NUM_LAYERS");
       size_t total_n_layers = 0;
@@ -198,17 +211,7 @@ class LAZReader {
                       encoder.decode(layered_in_stream, context.value());
                     }
                   }
-                  if constexpr (is_copy_fromable<T, decltype(encoder.last_value())>()) {
-                    copy_from(decompressed_data[i], encoder.last_value());
-                  } else if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {
-                    decompressed_data[i] = encoder.last_value();
-                  } else if constexpr (std::is_base_of_v<
-                                           std::remove_reference_t<decltype(encoder.last_value())>,
-                                           T>) {
-                    using DecompressedType = std::remove_const_t<
-                        std::remove_reference_t<decltype(encoder.last_value())>>;
-                    static_cast<DecompressedType&>(decompressed_data[i]) = encoder.last_value();
-                  }
+                  copy_from_if_possible(decompressed_data[i], encoder.last_value());
                 } else {
                   LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
                 }
@@ -228,18 +231,7 @@ class LAZReader {
                   LASPP_FAIL("Cannot use layered encoder with non-layered compression.");
                 } else {
                   if (i > 0) encoder.decode(compressed_in_stream);
-
-                  if constexpr (is_copy_fromable<T, decltype(encoder.last_value())>()) {
-                    copy_from(decompressed_data[i], encoder.last_value());
-                  } else if constexpr (is_copy_assignable<T, decltype(encoder.last_value())>()) {
-                    decompressed_data[i] = encoder.last_value();
-                  } else if constexpr (std::is_base_of_v<
-                                           std::remove_reference_t<decltype(encoder.last_value())>,
-                                           T>) {
-                    using DecompressedType = std::remove_const_t<
-                        std::remove_reference_t<decltype(encoder.last_value())>>;
-                    static_cast<DecompressedType&>(decompressed_data[i]) = encoder.last_value();
-                  }
+                  copy_from_if_possible(decompressed_data[i], encoder.last_value());
                 }
               },
               laz_encoder);

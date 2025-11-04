@@ -96,89 +96,12 @@ struct PointFormatTraits<LASPointFormat7> {
 };
 
 template <typename PointT>
-std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 0) {
+std::vector<PointT> generate_points(size_t n_points, uint32_t seed = 42) {
   std::vector<PointT> points;
   points.reserve(n_points);
-
-  std::mt19937 gen(seed);
-  std::uniform_int_distribution<int32_t> coord_dist(-500000, 500000);
-  std::uniform_int_distribution<uint16_t> intensity_dist(0, std::numeric_limits<uint16_t>::max());
-  std::uniform_int_distribution<uint16_t> point_source_dist(0,
-                                                            std::numeric_limits<uint16_t>::max());
-  // MSVC doesn't support uniform_int_distribution<uint8_t>, use uint16_t and cast
-  std::uniform_int_distribution<uint16_t> returns_dist(1, 15);
-  std::uniform_int_distribution<uint16_t> bool_dist(0, 1);
-  std::uniform_int_distribution<uint16_t> classification_dist(0, 22);
-  std::uniform_int_distribution<uint16_t> user_dist(0, std::numeric_limits<uint8_t>::max());
-  std::uniform_int_distribution<uint16_t> angle_dist(0, 65535);
-  std::uniform_int_distribution<uint16_t> color_dist(0, std::numeric_limits<uint16_t>::max());
-  std::uniform_real_distribution<double> gps_dist(-1e6, 1e6);
-
+  std::mt19937_64 gen(seed);
   for (size_t i = 0; i < n_points; i++) {
-    PointT point{};
-
-    point.x = coord_dist(gen);
-    point.y = coord_dist(gen);
-    point.z = coord_dist(gen);
-    point.intensity = intensity_dist(gen);
-
-    if constexpr (std::is_base_of_v<LASPointFormat0, PointT>) {
-      uint8_t number_of_returns = static_cast<uint8_t>(returns_dist(gen) & 0x0F);
-      number_of_returns = (std::max)(number_of_returns, static_cast<uint8_t>(1));
-      uint8_t return_number = static_cast<uint8_t>(returns_dist(gen) & 0x0F);
-      return_number = (std::max)(return_number, static_cast<uint8_t>(1));
-      return_number = (std::min)(return_number, number_of_returns);
-      point.bit_byte.number_of_returns = static_cast<uint8_t>(number_of_returns & 0x07);
-      point.bit_byte.return_number = static_cast<uint8_t>(return_number & 0x07);
-      point.bit_byte.scan_direction_flag = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.bit_byte.edge_of_flight_line = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.classification_byte.classification =
-          static_cast<LASClassification>(classification_dist(gen));
-      point.classification_byte.synthetic = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.classification_byte.key_point = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.classification_byte.withheld = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.scan_angle_rank = static_cast<uint8_t>(angle_dist(gen) & 0xFF);
-      point.user_data = static_cast<uint8_t>(user_dist(gen));
-      point.point_source_id = point_source_dist(gen);
-    }
-
-    if constexpr (std::is_base_of_v<GPSTime, PointT>) {
-      static_cast<GPSTime&>(point).gps_time.f64 = gps_dist(gen);
-    }
-
-    if constexpr (std::is_base_of_v<LASPointFormat6, PointT>) {
-      uint8_t return_number = static_cast<uint8_t>((returns_dist(gen) % 4) + 1);
-      uint8_t number_of_returns = static_cast<uint8_t>((returns_dist(gen) % 4) + 1);
-      if (return_number > number_of_returns) {
-        return_number = number_of_returns;
-      }
-      point.return_number = return_number & 0x0F;
-      point.number_of_returns = number_of_returns & 0x0F;
-      uint8_t synthetic = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      uint8_t keypoint = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      uint8_t withheld = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      uint8_t overlap = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.classification_flags =
-          static_cast<uint8_t>((overlap << 3) | (withheld << 2) | (keypoint << 1) | synthetic) &
-          0x0F;
-      point.classification_flags &= 0x07;
-      point.scanner_channel = static_cast<uint8_t>(bool_dist(gen) & 0x3);
-      point.scan_direction_flag = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.edge_of_flight_line = static_cast<uint8_t>(bool_dist(gen) & 0x1);
-      point.classification = static_cast<LASClassification>(classification_dist(gen));
-      point.user_data = static_cast<uint8_t>(user_dist(gen));
-      point.scan_angle = static_cast<int16_t>(angle_dist(gen));
-      point.point_source_id = point_source_dist(gen);
-      point.gps_time = gps_dist(gen);
-    }
-
-    if constexpr (std::is_base_of_v<ColorData, PointT>) {
-      point.red = color_dist(gen);
-      point.green = color_dist(gen);
-      point.blue = color_dist(gen);
-    }
-
-    points.push_back(point);
+    points.push_back(PointT::RandomData(gen));
   }
 
   return points;
@@ -191,27 +114,6 @@ void populate_laszip_point(const PointT& point, laszip_point& las_point) {
   las_point.Y = point.y;
   las_point.Z = point.z;
   las_point.intensity = point.intensity;
-
-  las_point.return_number = 0;
-  las_point.number_of_returns = 0;
-  las_point.scan_direction_flag = 0;
-  las_point.edge_of_flight_line = 0;
-  las_point.classification = 0;
-  las_point.synthetic_flag = 0;
-  las_point.keypoint_flag = 0;
-  las_point.withheld_flag = 0;
-  las_point.scan_angle_rank = 0;
-  las_point.user_data = 0;
-  las_point.point_source_ID = 0;
-  las_point.extended_scan_angle = 0;
-  las_point.extended_scanner_channel = 0;
-  las_point.extended_classification_flags = 0;
-  las_point.extended_classification = 0;
-  las_point.extended_return_number = 0;
-  las_point.extended_number_of_returns = 0;
-  las_point.gps_time = 0.0;
-  las_point.rgb[0] = las_point.rgb[1] = las_point.rgb[2] = las_point.rgb[3] = 0;
-  las_point.num_extra_bytes = 0;
   las_point.extra_bytes = nullptr;
 
   if constexpr (std::is_base_of_v<LASPointFormat0, PointT>) {

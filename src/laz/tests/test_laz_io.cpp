@@ -51,23 +51,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
       std::stringstream stream;
       std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
-      std::mt19937 gen(0);
-      gen.seed(42);
+      std::mt19937_64 gen(42);
       std::vector<LASPointFormat1> points;
       points.reserve(100);
       for (size_t i = 0; i < 100; i++) {
-        LASPointFormat1 point;
-        point.x = static_cast<int32_t>(gen());
-        point.y = static_cast<int32_t>(gen());
-        point.z = static_cast<int32_t>(gen());
-        point.intensity = static_cast<uint16_t>(gen());
-        point.bit_byte = static_cast<uint8_t>(gen());
-        point.classification_byte = static_cast<uint8_t>(gen());
-        point.scan_angle_rank = static_cast<uint8_t>(gen());
-        point.user_data = static_cast<uint8_t>(gen());
-        point.point_source_id = static_cast<uint16_t>(gen());
-        point.gps_time.f64 = static_cast<double>(gen());
-        points.push_back(point);
+        points.push_back(LASPointFormat1::RandomData(gen));
       }
 
       {
@@ -78,7 +66,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      LASPP_ASSERT_EQ(stream.str().size(), 2136);
+      LASPP_ASSERT_EQ(stream.str().size(), 2132);
 
       {
         LAZReader reader(*laz_special_vlr);
@@ -124,26 +112,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
       std::stringstream stream;
       std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
-      std::mt19937 gen(0);
-      gen.seed(42);
+      std::mt19937_64 gen(42);
       std::vector<LASPointFormat3> points;
       points.reserve(200);
       for (size_t i = 0; i < 200; i++) {
-        LASPointFormat3 point;
-        point.x = static_cast<int32_t>(gen());
-        point.y = static_cast<int32_t>(gen());
-        point.z = static_cast<int32_t>(gen());
-        point.intensity = static_cast<uint16_t>(gen());
-        point.bit_byte = static_cast<uint8_t>(gen());
-        point.classification_byte = static_cast<uint8_t>(gen());
-        point.scan_angle_rank = static_cast<uint8_t>(gen());
-        point.user_data = static_cast<uint8_t>(gen());
-        point.point_source_id = static_cast<uint16_t>(gen());
-        point.gps_time.f64 = static_cast<double>(gen());
-        point.red = static_cast<uint16_t>(gen());
-        point.green = static_cast<uint16_t>(gen());
-        point.blue = static_cast<uint16_t>(gen());
-        points.push_back(point);
+        points.push_back(LASPointFormat3::RandomData(gen));
       }
 
       {
@@ -160,7 +133,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
       }
 
-      LASPP_ASSERT_EQ(stream.str().size(), 7083);
+      LASPP_ASSERT_EQ(stream.str().size(), 7215);
 
       {
         LAZReader reader(*laz_special_vlr);
@@ -191,34 +164,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     std::stringstream stream;
     std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
 
-    std::mt19937 gen(0);
+    std::mt19937_64 gen(0);
     gen.seed(2024);
     std::vector<LASPointFormat7> points;
     points.reserve(150);
     for (size_t i = 0; i < 150; i++) {
-      LASPointFormat7 point;
-      point.x = static_cast<int32_t>(gen());
-      point.y = static_cast<int32_t>(gen());
-      point.z = static_cast<int32_t>(gen());
-      point.intensity = static_cast<uint16_t>(gen());
-      point.return_number = static_cast<uint8_t>(((gen() % 15) + 1) & 0x0F);
-      point.number_of_returns = static_cast<uint8_t>(((gen() % 15) + 1) & 0x0F);
-      if (point.return_number > point.number_of_returns) {
-        point.return_number = point.number_of_returns;
-      }
-      point.classification_flags = static_cast<uint8_t>(gen() & 0x0F);
-      point.scanner_channel = static_cast<uint8_t>(gen() & 0x3);
-      point.scan_direction_flag = static_cast<uint8_t>(gen() & 0x1);
-      point.edge_of_flight_line = static_cast<uint8_t>((gen() >> 1) & 0x1);
-      point.classification = static_cast<LASClassification>(gen() % 23);
-      point.user_data = static_cast<uint8_t>(gen());
-      point.scan_angle = static_cast<int16_t>(gen());
-      point.point_source_id = static_cast<uint16_t>(gen());
-      point.gps_time = static_cast<double>(gen());
-      point.red = static_cast<uint16_t>(gen());
-      point.green = static_cast<uint16_t>(gen());
-      point.blue = static_cast<uint16_t>(gen());
-      points.push_back(point);
+      points.push_back(LASPointFormat7::RandomData(gen));
     }
 
     {

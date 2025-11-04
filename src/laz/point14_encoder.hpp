@@ -134,6 +134,16 @@ struct LASPointFormat6Context : LASPointFormat6 {
   }
 };
 
+#define LASPP_CHANNEL_RETURNS_STREAM 0
+#define LASPP_Z_STREAM 1
+#define LASPP_CLASSIFICATION_STREAM 2
+#define LASPP_FLAGS_STREAM 3
+#define LASPP_INTENSITY_STREAM 4
+#define LASPP_SCAN_ANGLE_STREAM 5
+#define LASPP_USER_DATA_STREAM 6
+#define LASPP_POINT_SOURCE_STREAM 7
+#define LASPP_GPS_TIME_STREAM 8
+
 template <int Version = 3>
 class LASPointFormat6EncoderBase {
   std::array<LASPointFormat6Context, 4> m_contexts;
@@ -155,28 +165,18 @@ class LASPointFormat6EncoderBase {
   uint8_t get_active_context() const { return m_external_context; }
 
   LASPointFormat6 decode(LayeredInStreams<NUM_LAYERS>& streams) {
-    auto& channel_returns_stream = streams[0];
-    auto& z_stream = streams[1];
-    auto& classification_stream = streams[2];
-    auto& flags_stream = streams[3];
-    auto& intensity_stream = streams[4];
-    auto& scan_angle_stream = streams[5];
-    auto& user_data_stream = streams[6];
-    auto& point_source_stream = streams[7];
-    auto& gps_time_stream = streams[8];
-
     LASPointFormat6Context& prev_context = m_contexts[m_context];
     uint_fast16_t changed_values =
         prev_context.changed_values_encoders[prev_context.cprgps].decode_symbol(
-            channel_returns_stream);
+            streams[LASPP_CHANNEL_RETURNS_STREAM]);
 
     bool point_source_change = static_cast<bool>(changed_values & (1 << 5));
     bool gps_time_change = static_cast<bool>(changed_values & (1 << 4));
     bool scan_angle_change = static_cast<bool>(changed_values & (1 << 3));
 
     if (changed_values & (1 << 6)) {
-      uint_fast16_t d_scanner_channel =
-          prev_context.d_scanner_channel_encoder.decode_symbol(channel_returns_stream);
+      uint_fast16_t d_scanner_channel = prev_context.d_scanner_channel_encoder.decode_symbol(
+          streams[LASPP_CHANNEL_RETURNS_STREAM]);
       uint_fast8_t new_scanner_channel =
           static_cast<uint_fast8_t>((m_context + d_scanner_channel + 1) % 4);
       if (!m_contexts[new_scanner_channel].initialized) {
@@ -200,7 +200,8 @@ class LASPointFormat6EncoderBase {
 
     if (changed_values & (1 << 2)) {
       uint_fast16_t new_number_of_returns =
-          context.n_returns_encoders[last_number_of_returns].decode_symbol(channel_returns_stream);
+          context.n_returns_encoders[last_number_of_returns].decode_symbol(
+              streams[LASPP_CHANNEL_RETURNS_STREAM]);
       context.number_of_returns = static_cast<uint8_t>(new_number_of_returns & 0xF);
     }
 
@@ -213,11 +214,11 @@ class LASPointFormat6EncoderBase {
       if (gps_time_change) {
         uint_fast16_t decoded_return =
             context.return_number_diff_time_encoder[last_return_number].decode_symbol(
-                channel_returns_stream);
+                streams[LASPP_CHANNEL_RETURNS_STREAM]);
         context.return_number = static_cast<uint8_t>(decoded_return & 0xF);
       } else {
-        uint_fast16_t sym =
-            context.d_return_number_same_time_encoder.decode_symbol(channel_returns_stream);
+        uint_fast16_t sym = context.d_return_number_same_time_encoder.decode_symbol(
+            streams[LASPP_CHANNEL_RETURNS_STREAM]);
         context.return_number = static_cast<uint8_t>((last_return_number + sym + 2) & 0xF);
       }
     }
@@ -226,34 +227,37 @@ class LASPointFormat6EncoderBase {
     context.set_m_l();
 
     if (point_source_change) {
-      int32_t diff = context.point_source_id_encoder.decode_int(point_source_stream);
+      int32_t diff = context.point_source_id_encoder.decode_int(streams[LASPP_POINT_SOURCE_STREAM]);
       context.point_source_id =
           static_cast<uint16_t>(static_cast<int32_t>(context.point_source_id) + diff);
     }
 
     if (gps_time_change) {
-      GPSTime new_time = context.gps_time_encoder.decode(gps_time_stream);
+      GPSTime new_time = context.gps_time_encoder.decode(streams[LASPP_GPS_TIME_STREAM]);
       context.gps_time = static_cast<double>(new_time);
     }
 
     if (scan_angle_change) {
       int16_t prev_scan_angle = context.scan_angle;
       int16_t diff = static_cast<int16_t>(
-          context.scan_angle_encoder[gps_time_change].decode_int(scan_angle_stream));
+          context.scan_angle_encoder[gps_time_change].decode_int(streams[LASPP_SCAN_ANGLE_STREAM]));
       int16_t updated_scan_angle = prev_scan_angle + diff;
       context.scan_angle = updated_scan_angle;
     }
 
-    uint8_t last_classification = static_cast<uint8_t>(context.classification);
-    uint8_t classification_idx =
-        static_cast<uint8_t>(((last_classification & 0x1F) << 1) + (context.cpr == 3 ? 1 : 0));
-    uint_fast16_t decoded_classification =
-        context.classification_encoders[classification_idx].decode_symbol(classification_stream);
-    context.classification = static_cast<LASClassification>(decoded_classification);
+    if (streams.non_empty(LASPP_CLASSIFICATION_STREAM)) {
+      uint8_t last_classification = static_cast<uint8_t>(context.classification);
+      uint8_t classification_idx =
+          static_cast<uint8_t>(((last_classification & 0x1F) << 1) + (context.cpr == 3 ? 1 : 0));
+      uint_fast16_t decoded_classification =
+          context.classification_encoders[classification_idx].decode_symbol(
+              streams[LASPP_CLASSIFICATION_STREAM]);
+      context.classification = static_cast<LASClassification>(decoded_classification);
+    }
 
     uint32_t mgps = context.m * 2u + static_cast<uint32_t>(gps_time_change);
-    int32_t decoded_dx =
-        context.dx_encoders[context.number_of_returns == 1].decode_int(channel_returns_stream);
+    int32_t decoded_dx = context.dx_encoders[context.number_of_returns == 1].decode_int(
+        streams[LASPP_CHANNEL_RETURNS_STREAM]);
     int32_t dx = wrapping_int32_add(decoded_dx, context.dx_streamed_median[mgps].get_median());
     context.dx_streamed_median[mgps].insert(dx);
     context.x = wrapping_int32_add(context.x, dx);
@@ -264,7 +268,8 @@ class LASPointFormat6EncoderBase {
     if (context.number_of_returns == 1) {
       dy_instance++;
     }
-    int32_t decoded_dy = context.dy_encoder[dy_instance].decode_int(channel_returns_stream);
+    int32_t decoded_dy =
+        context.dy_encoder[dy_instance].decode_int(streams[LASPP_CHANNEL_RETURNS_STREAM]);
     int32_t dy = wrapping_int32_add(decoded_dy, context.dy_streamed_median[mgps].get_median());
     context.dy_streamed_median[mgps].insert(dy);
     context.y = wrapping_int32_add(context.y, dy);
@@ -276,46 +281,41 @@ class LASPointFormat6EncoderBase {
     if (context.number_of_returns == 1) {
       dz_instance++;
     }
-    int32_t decoded_dz = context.dz_encoder[dz_instance].decode_int(z_stream);
+    int32_t decoded_dz = context.dz_encoder[dz_instance].decode_int(streams[LASPP_Z_STREAM]);
     context.z = wrapping_int32_add(context.last_z[context.l], decoded_dz);
     context.last_z[context.l] = context.z;
 
-    if (streams.non_empty(3)) {  // TODO: Rest of streams
+    if (streams.non_empty(LASPP_FLAGS_STREAM)) {  // TODO: Rest of streams
       uint8_t last_flags =
           static_cast<uint8_t>((context.edge_of_flight_line << 5) |
                                (context.scan_direction_flag << 4) | context.classification_flags);
-      uint_fast16_t decoded_flags = context.flag_encoders[last_flags].decode_symbol(flags_stream);
+      uint_fast16_t decoded_flags =
+          context.flag_encoders[last_flags].decode_symbol(streams[LASPP_FLAGS_STREAM]);
       context.edge_of_flight_line = static_cast<uint8_t>((decoded_flags >> 5) & 0x1);
       context.scan_direction_flag = static_cast<uint8_t>((decoded_flags >> 4) & 0x1);
       context.classification_flags = static_cast<uint8_t>(decoded_flags & 0x0F);
     }
 
-    int32_t intensity_delta = context.intensity_encoder[context.cpr].decode_int(intensity_stream);
-    int32_t new_intensity =
-        static_cast<int32_t>(context.last_intensity[context.cprgps]) + intensity_delta;
-    context.intensity = static_cast<uint16_t>(new_intensity);
-    context.last_intensity[context.cprgps] = context.intensity;
+    if (streams.non_empty(LASPP_INTENSITY_STREAM)) {
+      int32_t intensity_delta =
+          context.intensity_encoder[context.cpr].decode_int(streams[LASPP_INTENSITY_STREAM]);
+      int32_t new_intensity =
+          static_cast<int32_t>(context.last_intensity[context.cprgps]) + intensity_delta;
+      context.intensity = static_cast<uint16_t>(new_intensity);
+      context.last_intensity[context.cprgps] = context.intensity;
+    }
 
-    uint8_t user_ctx = context.user_data / 4;
-    uint_fast16_t decoded_user_data =
-        context.user_data_encoders[user_ctx].decode_symbol(user_data_stream);
-    context.user_data = static_cast<uint8_t>(decoded_user_data);
+    if (streams.non_empty(LASPP_USER_DATA_STREAM)) {
+      uint8_t user_ctx = context.user_data / 4;
+      uint_fast16_t decoded_user_data =
+          context.user_data_encoders[user_ctx].decode_symbol(streams[LASPP_USER_DATA_STREAM]);
+      context.user_data = static_cast<uint8_t>(decoded_user_data);
+    }
 
-    context.scanner_channel = static_cast<uint8_t>(m_context & 0x3);
     return context;
   }
 
   void encode(LayeredOutStreams<NUM_LAYERS>& streams, const LASPointFormat6& point) {
-    auto& channel_returns_stream = streams[0];
-    auto& z_stream = streams[1];
-    auto& classification_stream = streams[2];
-    auto& flags_stream = streams[3];
-    auto& intensity_stream = streams[4];
-    auto& scan_angle_stream = streams[5];
-    auto& user_data_stream = streams[6];
-    auto& point_source_stream = streams[7];
-    auto& gps_time_stream = streams[8];
-
     LASPointFormat6Context& prev_context = m_contexts[m_context];
 
     uint_fast8_t target_context_idx = point.scanner_channel;
@@ -370,12 +370,13 @@ class LASPointFormat6EncoderBase {
       }
     }
 
-    prev_context.changed_values_encoders[old_cprgps].encode_symbol(channel_returns_stream,
-                                                                   changed_values);
+    prev_context.changed_values_encoders[old_cprgps].encode_symbol(
+        streams[LASPP_CHANNEL_RETURNS_STREAM], changed_values);
 
     if (scanner_changed) {
       uint_fast16_t delta = (point.scanner_channel - prev_context.scanner_channel + 4u) % 4u;
-      prev_context.d_scanner_channel_encoder.encode_symbol(channel_returns_stream, delta - 1);
+      prev_context.d_scanner_channel_encoder.encode_symbol(streams[LASPP_CHANNEL_RETURNS_STREAM],
+                                                           delta - 1);
       if (!m_contexts[target_context_idx].initialized) {
         m_contexts[target_context_idx].initialize(prev_context);
         m_contexts[target_context_idx].scanner_channel =
@@ -391,8 +392,8 @@ class LASPointFormat6EncoderBase {
     LASPointFormat6Context& context = m_contexts[m_context];
 
     if (changed_values & (1 << 2)) {
-      context.n_returns_encoders[last_number_of_returns].encode_symbol(channel_returns_stream,
-                                                                       point.number_of_returns);
+      context.n_returns_encoders[last_number_of_returns].encode_symbol(
+          streams[LASPP_CHANNEL_RETURNS_STREAM], point.number_of_returns);
       context.number_of_returns = static_cast<uint8_t>(point.number_of_returns & 0xF);
     } else {
       context.number_of_returns = static_cast<uint8_t>(last_number_of_returns & 0xF);
@@ -407,11 +408,11 @@ class LASPointFormat6EncoderBase {
     } else if (return_flag == 0b11) {
       if (gps_time_change) {
         context.return_number_diff_time_encoder[last_return_number].encode_symbol(
-            channel_returns_stream, point.return_number);
+            streams[LASPP_CHANNEL_RETURNS_STREAM], point.return_number);
         new_return_number = point.return_number;
       } else {
-        context.d_return_number_same_time_encoder.encode_symbol(channel_returns_stream,
-                                                                rn_diff - 2);
+        context.d_return_number_same_time_encoder.encode_symbol(
+            streams[LASPP_CHANNEL_RETURNS_STREAM], rn_diff - 2);
         new_return_number = static_cast<uint8_t>((last_return_number + rn_diff) & 0xF);
       }
     }
@@ -424,12 +425,12 @@ class LASPointFormat6EncoderBase {
     if (point_source_change) {
       int32_t diff =
           static_cast<int32_t>(point.point_source_id) - static_cast<int32_t>(prev_point_source_id);
-      context.point_source_id_encoder.encode_int(point_source_stream, diff);
+      context.point_source_id_encoder.encode_int(streams[LASPP_POINT_SOURCE_STREAM], diff);
     }
     context.point_source_id = point.point_source_id;
 
     if (gps_time_change) {
-      context.gps_time_encoder.encode(gps_time_stream, GPSTime(point.gps_time));
+      context.gps_time_encoder.encode(streams[LASPP_GPS_TIME_STREAM], GPSTime(point.gps_time));
     }
     context.gps_time = point.gps_time;
 
@@ -437,18 +438,18 @@ class LASPointFormat6EncoderBase {
       int16_t prev_angle = prev_scan_angle;
       int16_t next_angle = point.scan_angle;
       int32_t diff = static_cast<int32_t>(next_angle) - static_cast<int32_t>(prev_angle);
-      context.scan_angle_encoder[gps_changed].encode_int(scan_angle_stream, diff);
+      context.scan_angle_encoder[gps_changed].encode_int(streams[LASPP_SCAN_ANGLE_STREAM], diff);
     }
     context.scan_angle = point.scan_angle;
 
     uint8_t classification_idx =
         static_cast<uint8_t>(((last_classification & 0x1F) << 1) + (context.cpr == 3 ? 1 : 0));
     context.classification_encoders[classification_idx].encode_symbol(
-        classification_stream, static_cast<uint8_t>(point.classification));
+        streams[LASPP_CLASSIFICATION_STREAM], static_cast<uint8_t>(point.classification));
     context.classification = point.classification;
 
     context.flag_encoders[last_flags].encode_symbol(
-        flags_stream,
+        streams[LASPP_FLAGS_STREAM],
         static_cast<uint8_t>((point.edge_of_flight_line << 5) | (point.scan_direction_flag << 4) |
                              point.classification_flags));
     context.edge_of_flight_line = point.edge_of_flight_line;
@@ -457,19 +458,21 @@ class LASPointFormat6EncoderBase {
 
     int32_t intensity_base = static_cast<int32_t>(context.last_intensity[context.cprgps]);
     int32_t intensity_diff = static_cast<int32_t>(point.intensity) - intensity_base;
-    context.intensity_encoder[context.cpr].encode_int(intensity_stream, intensity_diff);
+    context.intensity_encoder[context.cpr].encode_int(streams[LASPP_INTENSITY_STREAM],
+                                                      intensity_diff);
     context.last_intensity[context.cprgps] = point.intensity;
     context.intensity = point.intensity;
 
     uint8_t user_ctx = prev_user_data / 4;
-    context.user_data_encoders[user_ctx].encode_symbol(user_data_stream, point.user_data);
+    context.user_data_encoders[user_ctx].encode_symbol(streams[LASPP_USER_DATA_STREAM],
+                                                       point.user_data);
     context.user_data = point.user_data;
 
     uint32_t mgps = context.m * 2u + static_cast<uint32_t>(gps_changed);
 
     int32_t dx = wrapping_int32_sub(point.x, context.x);
     context.dx_encoders[context.number_of_returns == 1].encode_int(
-        channel_returns_stream,
+        streams[LASPP_CHANNEL_RETURNS_STREAM],
         wrapping_int32_sub(dx, context.dx_streamed_median[mgps].get_median()));
     context.dx_streamed_median[mgps].insert(dx);
     context.x = point.x;
@@ -482,7 +485,7 @@ class LASPointFormat6EncoderBase {
     }
     int32_t dy = wrapping_int32_sub(point.y, context.y);
     context.dy_encoder[dy_instance].encode_int(
-        channel_returns_stream,
+        streams[LASPP_CHANNEL_RETURNS_STREAM],
         wrapping_int32_sub(dy, context.dy_streamed_median[mgps].get_median()));
     context.dy_streamed_median[mgps].insert(dy);
     context.y = point.y;
@@ -495,7 +498,7 @@ class LASPointFormat6EncoderBase {
       dz_instance++;
     }
     int32_t dz = wrapping_int32_sub(point.z, context.last_z[context.l]);
-    context.dz_encoder[dz_instance].encode_int(z_stream, dz);
+    context.dz_encoder[dz_instance].encode_int(streams[LASPP_Z_STREAM], dz);
     context.last_z[context.l] = point.z;
     context.z = point.z;
 
