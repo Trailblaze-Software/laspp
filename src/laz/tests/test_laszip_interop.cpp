@@ -336,10 +336,10 @@ void populate_header(const std::vector<PointT>& points, laszip_header& header) {
 
   std::string system_identifier = "laspp-tests";
   std::string generating_software = "laspp-tests";
-  std::strncpy(header.system_identifier, system_identifier.c_str(),
-               sizeof(header.system_identifier) - 1);
-  std::strncpy(header.generating_software, generating_software.c_str(),
-               sizeof(header.generating_software) - 1);
+  std::snprintf(header.system_identifier, sizeof(header.system_identifier), "%s",
+                system_identifier.c_str());
+  std::snprintf(header.generating_software, sizeof(header.generating_software), "%s",
+                generating_software.c_str());
 }
 
 class TempFile {
@@ -443,17 +443,17 @@ void run_laszip_internal_roundtrip(size_t n_points) {
   LASzipper zipper;
   LASPP_ASSERT(zipper.open(compressed_stream, &laszip));
 
-  std::vector<unsigned char> point_buffer(sizeof(PointT));
+  PointT point_buffer;
   std::vector<unsigned char*> point_items(laszip.num_items);
   size_t offset = 0;
   for (unsigned int i = 0; i < laszip.num_items; i++) {
-    point_items[i] = point_buffer.data() + offset;
+    point_items[i] = reinterpret_cast<uint8_t*>(&point_buffer) + offset;
     offset += laszip.items[i].size;
   }
-  LASPP_ASSERT_EQ(offset, point_buffer.size());
+  LASPP_ASSERT_EQ(offset, sizeof(PointT));
 
   for (const PointT& point : points) {
-    std::memcpy(point_buffer.data(), &point, sizeof(PointT));
+    std::memcpy(&point_buffer, &point, sizeof(point_buffer));
     LASPP_ASSERT(zipper.write(point_items.data()));
   }
   LASPP_ASSERT(zipper.close());
@@ -462,12 +462,14 @@ void run_laszip_internal_roundtrip(size_t n_points) {
   LASPP_ASSERT_GE(compressed.size(), sizeof(uint64_t));
 
   uint64_t chunk_table_offset = 0;
-  std::memcpy(&chunk_table_offset, compressed.data(), sizeof(uint64_t));
+  std::memcpy(&chunk_table_offset, compressed.data(), sizeof(chunk_table_offset));
   LASPP_ASSERT(chunk_table_offset >= sizeof(uint64_t));
   LASPP_ASSERT_LE(chunk_table_offset, compressed.size());
 
   std::vector<std::byte> chunk_data(chunk_table_offset - sizeof(uint64_t));
-  std::memcpy(chunk_data.data(), compressed.data() + sizeof(uint64_t), chunk_data.size());
+  std::copy(compressed.begin() + sizeof(uint64_t),
+            compressed.begin() + static_cast<int64_t>(chunk_table_offset),
+            reinterpret_cast<char*>(chunk_data.data()));
 
   std::string vlr_string(reinterpret_cast<char*>(vlr_bytes), static_cast<size_t>(vlr_size));
   std::stringstream vlr_stream(vlr_string);

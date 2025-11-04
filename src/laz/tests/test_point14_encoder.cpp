@@ -105,13 +105,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     std::stringstream combined_stream = out_streams.combined_stream();
     std::string combined_data = combined_stream.str();
-    std::vector<std::byte> buffer(combined_data.size());
-    std::memcpy(buffer.data(), combined_data.data(), combined_data.size());
 
-    std::span<std::byte> size_span(buffer.data(),
+    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
                                    LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
-    std::span<std::byte> data_span(buffer.data() + size_span.size(),
-                                   buffer.size() - size_span.size());
+    std::span<std::byte> data_span(
+        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
+        reinterpret_cast<std::byte*>(combined_data.data()) - size_span.size());
 
     LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
 
