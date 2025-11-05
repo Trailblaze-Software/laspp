@@ -71,9 +71,66 @@ class RGB14Encoder {
     m_last_value_context = context;
   }
 
+ private:
+  void decode_red_channels(Context& context, InStream& in_stream, uint_fast16_t changed_values,
+                           uint8_t& red_low, uint8_t& red_high) {
+    if (changed_values & 1) {
+      uint8_t delta = static_cast<uint8_t>(context.red_low_encoder.decode_symbol(in_stream));
+      red_low = static_cast<uint8_t>(red_low + delta);
+    }
+    if (changed_values & (1 << 1)) {
+      uint8_t delta = static_cast<uint8_t>(context.red_high_encoder.decode_symbol(in_stream));
+      red_high = static_cast<uint8_t>(red_high + delta);
+    }
+  }
+
+  void decode_green_blue_channels(Context& context, InStream& in_stream,
+                                  uint_fast16_t changed_values, ColorData& last_value,
+                                  uint8_t red_low, uint8_t red_high) {
+    uint8_t green_low = static_cast<uint8_t>(last_value.green);
+    uint8_t green_high = static_cast<uint8_t>(last_value.green >> 8);
+    uint8_t blue_low = static_cast<uint8_t>(last_value.blue);
+    uint8_t blue_high = static_cast<uint8_t>(last_value.blue >> 8);
+
+    int d_red_low = red_low - static_cast<uint8_t>(last_value.red);
+    int d_red_high = red_high - static_cast<uint8_t>(last_value.red >> 8);
+
+    if (changed_values & (1 << 2)) {
+      uint8_t base = clamp(green_low, d_red_low);
+      uint8_t delta = static_cast<uint8_t>(context.green_low_encoder.decode_symbol(in_stream));
+      green_low = static_cast<uint8_t>((base + delta) & 0xFF);
+    }
+    if (changed_values & (1 << 4)) {
+      int d_green_low = green_low - static_cast<uint8_t>(last_value.green);
+      int d = (d_red_low + d_green_low) / 2;
+      uint8_t base = clamp(blue_low, d);
+      uint8_t delta = static_cast<uint8_t>(context.blue_low_encoder.decode_symbol(in_stream));
+      blue_low = static_cast<uint8_t>((base + delta) & 0xFF);
+    }
+    if (changed_values & (1 << 3)) {
+      uint8_t base = clamp(green_high, d_red_high);
+      uint8_t delta = static_cast<uint8_t>(context.green_high_encoder.decode_symbol(in_stream));
+      green_high = static_cast<uint8_t>((base + delta) & 0xFF);
+    }
+    if (changed_values & (1 << 5)) {
+      int d_green_high = green_high - static_cast<uint8_t>(last_value.green >> 8);
+      int d = (d_red_high + d_green_high) / 2;
+      uint8_t base = clamp(blue_high, d);
+      uint8_t delta = static_cast<uint8_t>(context.blue_high_encoder.decode_symbol(in_stream));
+      blue_high = static_cast<uint8_t>((base + delta) & 0xFF);
+    }
+
+    last_value.green = static_cast<uint16_t>(
+        (static_cast<uint16_t>(green_low) | (static_cast<uint16_t>(green_high) << 8)));
+    last_value.blue = static_cast<uint16_t>(
+        (static_cast<uint16_t>(blue_low) | (static_cast<uint16_t>(blue_high) << 8)));
+  }
+
+ public:
   ColorData decode(LayeredInStreams<NUM_LAYERS>& in_streams, uint8_t context_idx) {
     InStream& in_stream = in_streams[0];
-    // Yet another cursed bug in LASzip where the last item is not switched to the new context
+    // Yet another cursed bug in LASzip where the last item
+    // is not switched to the new context
     m_last_value_context = m_contexts[context_idx].initialized ? m_active_context : context_idx;
     ColorData& last_value = m_contexts[m_last_value_context].last_value;
     Context& context = ensure_context(context_idx);
@@ -83,87 +140,27 @@ class RGB14Encoder {
     uint8_t red_low = static_cast<uint8_t>(last_value.red);
     uint8_t red_high = static_cast<uint8_t>(last_value.red >> 8);
 
-    if (changed_values & 1) {
-      uint8_t delta = static_cast<uint8_t>(context.red_low_encoder.decode_symbol(in_stream));
-      red_low = static_cast<uint8_t>(red_low + delta);
-    }
-    if (changed_values & (1 << 1)) {
-      uint8_t delta = static_cast<uint8_t>(context.red_high_encoder.decode_symbol(in_stream));
-      red_high = static_cast<uint8_t>(red_high + delta);
-    }
+    decode_red_channels(context, in_stream, changed_values, red_low, red_high);
 
-    ColorData decoded_value{};
-    decoded_value.red = static_cast<uint16_t>(
-        (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
-
-    if (changed_values &
-        (1 << 6)) {  // Seems to be opposite of the specification but consistent with LASzip
-      uint8_t green_low = static_cast<uint8_t>(last_value.green);
-      uint8_t green_high = static_cast<uint8_t>(last_value.green >> 8);
-      uint8_t blue_low = static_cast<uint8_t>(last_value.blue);
-      uint8_t blue_high = static_cast<uint8_t>(last_value.blue >> 8);
-
-      int d_red_low = red_low - static_cast<uint8_t>(last_value.red);
-      int d_red_high = red_high - static_cast<uint8_t>(last_value.red >> 8);
-
-      if (changed_values & (1 << 2)) {
-        uint8_t base = clamp(green_low, d_red_low);
-        uint8_t delta = static_cast<uint8_t>(context.green_low_encoder.decode_symbol(in_stream));
-        green_low = static_cast<uint8_t>((base + delta) & 0xFF);  // Match U8_FOLD wrapping behavior
-      }
-      if (changed_values &
-          (1 << 4)) {  // This ordering is inconsistent with the specification but matches LASzip
-        int d_green_low = green_low - static_cast<uint8_t>(last_value.green);
-        int d = (d_red_low + d_green_low) / 2;
-        uint8_t base = clamp(blue_low, d);
-        uint8_t delta = static_cast<uint8_t>(context.blue_low_encoder.decode_symbol(in_stream));
-        blue_low = static_cast<uint8_t>((base + delta) & 0xFF);  // Match U8_FOLD wrapping behavior
-      }
-      if (changed_values & (1 << 3)) {
-        uint8_t base = clamp(green_high, d_red_high);
-        uint8_t delta = static_cast<uint8_t>(context.green_high_encoder.decode_symbol(in_stream));
-        green_high =
-            static_cast<uint8_t>((base + delta) & 0xFF);  // Match U8_FOLD wrapping behavior
-      }
-      if (changed_values & (1 << 5)) {
-        int d_green_high = green_high - static_cast<uint8_t>(last_value.green >> 8);
-        int d = (d_red_high + d_green_high) / 2;
-        uint8_t base = clamp(blue_high, d);
-        uint8_t delta = static_cast<uint8_t>(context.blue_high_encoder.decode_symbol(in_stream));
-        blue_high = static_cast<uint8_t>((base + delta) & 0xFF);  // Match U8_FOLD wrapping behavior
-      }
-
-      decoded_value.green = static_cast<uint16_t>(
-          (static_cast<uint16_t>(green_low) | (static_cast<uint16_t>(green_high) << 8)));
-      decoded_value.blue = static_cast<uint16_t>(
-          (static_cast<uint16_t>(blue_low) | (static_cast<uint16_t>(blue_high) << 8)));
+    if (changed_values & (1 << 6)) {
+      decode_green_blue_channels(context, in_stream, changed_values, last_value, red_low, red_high);
+      last_value.red = static_cast<uint16_t>(
+          (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
     } else {
-      decoded_value.green = decoded_value.red;
-      decoded_value.blue = decoded_value.red;
+      last_value.red = static_cast<uint16_t>(
+          (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
+      last_value.green = last_value.red;
+      last_value.blue = last_value.red;
     }
 
-    last_value = decoded_value;
     return last_value;
   }
 
-  void encode(LayeredOutStreams<NUM_LAYERS>& out_streams, ColorData color_data,
-              uint8_t context_idx) {
-    OutStream& out_stream = out_streams[0];
-    // Yet another cursed bug in LASzip where the last item is not switched to the new context
-    ColorData& last_value = m_contexts[context_idx].initialized
-                                ? m_contexts[m_active_context].last_value
-                                : m_contexts[context_idx].last_value;
-    Context& context = ensure_context(context_idx);
-
-    uint8_t red_low = static_cast<uint8_t>(color_data.red);
-    uint8_t red_high = static_cast<uint8_t>(color_data.red >> 8);
-    int d_red_low = red_low - static_cast<uint8_t>(last_value.red);
-    int d_red_high = red_high - static_cast<uint8_t>(last_value.red >> 8);
-    uint8_t green_low = static_cast<uint8_t>(color_data.green);
-    uint8_t green_high = static_cast<uint8_t>(color_data.green >> 8);
-    uint8_t blue_low = static_cast<uint8_t>(color_data.blue);
-    uint8_t blue_high = static_cast<uint8_t>(color_data.blue >> 8);
-
+ private:
+  uint_fast16_t compute_changed_values(const ColorData& last_value, uint8_t red_low,
+                                       uint8_t red_high, uint8_t green_low, uint8_t green_high,
+                                       uint8_t blue_low, uint8_t blue_high, int d_red_low,
+                                       int d_red_high) {
     uint_fast16_t changed_values = 0;
 
     if (d_red_low != 0) {
@@ -188,6 +185,56 @@ class RGB14Encoder {
         changed_values |= (1 << 5);
       }
     }
+    return changed_values;
+  }
+
+  void encode_green_blue_channels(Context& context, OutStream& out_stream,
+                                  uint_fast16_t changed_values, const ColorData& last_value,
+                                  uint8_t green_low, uint8_t green_high, uint8_t blue_low,
+                                  uint8_t blue_high, int d_red_low, int d_red_high) {
+    if (changed_values & (1 << 2)) {
+      uint8_t base = clamp(static_cast<uint8_t>(last_value.green), d_red_low);
+      context.green_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_low - base));
+    }
+    if (changed_values & (1 << 4)) {
+      int d = (d_red_low + (green_low - static_cast<uint8_t>(last_value.green))) / 2;
+      uint8_t base = clamp(static_cast<uint8_t>(last_value.blue), d);
+      context.blue_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_low - base));
+    }
+    if (changed_values & (1 << 3)) {
+      uint8_t base = clamp(static_cast<uint8_t>(last_value.green >> 8), d_red_high);
+      context.green_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_high - base));
+    }
+    if (changed_values & (1 << 5)) {
+      int d = (d_red_high + (green_high - static_cast<uint8_t>(last_value.green >> 8))) / 2;
+      uint8_t base = clamp(static_cast<uint8_t>(last_value.blue >> 8), d);
+      context.blue_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_high - base));
+    }
+  }
+
+ public:
+  void encode(LayeredOutStreams<NUM_LAYERS>& out_streams, ColorData color_data,
+              uint8_t context_idx) {
+    OutStream& out_stream = out_streams[0];
+    // Yet another cursed bug in LASzip where the last item
+    // is not switched to the new context
+    ColorData& last_value = m_contexts[context_idx].initialized
+                                ? m_contexts[m_active_context].last_value
+                                : m_contexts[context_idx].last_value;
+    Context& context = ensure_context(context_idx);
+
+    uint8_t red_low = static_cast<uint8_t>(color_data.red);
+    uint8_t red_high = static_cast<uint8_t>(color_data.red >> 8);
+    int d_red_low = red_low - static_cast<uint8_t>(last_value.red);
+    int d_red_high = red_high - static_cast<uint8_t>(last_value.red >> 8);
+    uint8_t green_low = static_cast<uint8_t>(color_data.green);
+    uint8_t green_high = static_cast<uint8_t>(color_data.green >> 8);
+    uint8_t blue_low = static_cast<uint8_t>(color_data.blue);
+    uint8_t blue_high = static_cast<uint8_t>(color_data.blue >> 8);
+
+    uint_fast16_t changed_values =
+        compute_changed_values(last_value, red_low, red_high, green_low, green_high, blue_low,
+                               blue_high, d_red_low, d_red_high);
 
     context.changed_values_encoder.encode_symbol(out_stream, changed_values);
     if (changed_values & 1) {
@@ -197,25 +244,8 @@ class RGB14Encoder {
       context.red_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_high));
     }
     if (changed_values & (1 << 6)) {
-      if (changed_values & (1 << 2)) {
-        uint8_t base = clamp(static_cast<uint8_t>(last_value.green), d_red_low);
-        context.green_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_low - base));
-      }
-      if (changed_values & (1 << 4)) {
-        int d = (d_red_low + (green_low - static_cast<uint8_t>(last_value.green))) / 2;
-        uint8_t base = clamp(static_cast<uint8_t>(last_value.blue), d);
-        context.blue_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_low - base));
-      }
-      if (changed_values & (1 << 3)) {
-        uint8_t base = clamp(static_cast<uint8_t>(last_value.green >> 8), d_red_high);
-        context.green_high_encoder.encode_symbol(out_stream,
-                                                 static_cast<uint8_t>(green_high - base));
-      }
-      if (changed_values & (1 << 5)) {
-        int d = (d_red_high + (green_high - static_cast<uint8_t>(last_value.green >> 8))) / 2;
-        uint8_t base = clamp(static_cast<uint8_t>(last_value.blue >> 8), d);
-        context.blue_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_high - base));
-      }
+      encode_green_blue_channels(context, out_stream, changed_values, last_value, green_low,
+                                 green_high, blue_low, blue_high, d_red_low, d_red_high);
     }
 
     last_value = color_data;

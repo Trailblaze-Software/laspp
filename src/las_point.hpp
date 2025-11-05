@@ -203,6 +203,9 @@ struct LASPP_PACKED LASPointFormat0 {
   uint8_t user_data;
   uint16_t point_source_id;
 
+  static constexpr int PointFormat = 0;
+  static constexpr int MinVersion = 2;
+
   static LASPointFormat0 RandomData(std::mt19937_64& gen) {
     LASPointFormat0 point;
     point.x = static_cast<int32_t>(gen());
@@ -265,6 +268,9 @@ struct LASPP_PACKED GPSTime {
 };
 
 struct LASPP_PACKED LASPointFormat1 : LASPointFormat0, GPSTime {
+  static constexpr int PointFormat = 1;
+  static constexpr int MinVersion = 2;
+
   bool operator==(const LASPointFormat1& other) const = default;
 
   static LASPointFormat1 RandomData(std::mt19937_64& gen) {
@@ -302,6 +308,9 @@ struct LASPP_PACKED ColorData {
 };
 
 struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {
+  static constexpr int PointFormat = 2;
+  static constexpr int MinVersion = 2;
+
   bool operator==(const LASPointFormat2& other) const = default;
 
   static LASPointFormat2 RandomData(std::mt19937_64& gen) {
@@ -318,6 +327,9 @@ struct LASPP_PACKED LASPointFormat2 : LASPointFormat0, ColorData {
 };
 
 struct LASPP_PACKED LASPointFormat3 : LASPointFormat1, ColorData {
+  static constexpr int PointFormat = 3;
+  static constexpr int MinVersion = 2;
+
   bool operator==(const LASPointFormat3& other) const = default;
 
   static LASPointFormat3 RandomData(std::mt19937_64& gen) {
@@ -371,6 +383,9 @@ struct LASPP_PACKED WavePacketData {
 };
 
 struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {
+  static constexpr int PointFormat = 4;
+  static constexpr int MinVersion = 2;
+
   bool operator==(const LASPointFormat4& other) const = default;
 
   static LASPointFormat4 RandomData(std::mt19937_64& gen) {
@@ -387,6 +402,9 @@ struct LASPP_PACKED LASPointFormat4 : LASPointFormat1, WavePacketData {
 };
 
 struct LASPP_PACKED LASPointFormat5 : LASPointFormat3, WavePacketData {
+  static constexpr int PointFormat = 5;
+  static constexpr int MinVersion = 2;
+
   bool operator==(const LASPointFormat5& other) const = default;
 
   static LASPointFormat5 RandomData(std::mt19937_64& gen) {
@@ -418,6 +436,9 @@ struct LASPP_PACKED LASPointFormat6 {
   int16_t scan_angle;
   uint16_t point_source_id;
   double gps_time;
+
+  static constexpr int PointFormat = 6;
+  static constexpr int MinVersion = 4;
 
   static LASPointFormat6 RandomData(std::mt19937_64& gen) {
     LASPointFormat6 point;
@@ -463,6 +484,9 @@ struct LASPP_PACKED LASPointFormat6 {
 };
 
 struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
+  static constexpr int PointFormat = 7;
+  static constexpr int MinVersion = 4;
+
   bool operator==(const LASPointFormat7& other) const = default;
 
   static LASPointFormat7 RandomData(std::mt19937_64& gen) {
@@ -479,6 +503,8 @@ struct LASPP_PACKED LASPointFormat7 : LASPointFormat6, ColorData {
 };
 
 struct LASPP_PACKED NIRData {
+  static constexpr int NIRBytes = 2;
+
   bool operator==(const NIRData& other) const = default;
   uint16_t NIR;
 
@@ -495,6 +521,9 @@ struct LASPP_PACKED NIRData {
 };
 
 struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
+  static constexpr int PointFormat = 8;
+  static constexpr int MinVersion = 4;
+
   bool operator==(const LASPointFormat8& other) const = default;
 
   static LASPointFormat8 RandomData(std::mt19937_64& gen) {
@@ -511,6 +540,9 @@ struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
 };
 
 struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
+  static constexpr int PointFormat = 9;
+  static constexpr int MinVersion = 4;
+
   bool operator==(const LASPointFormat9& other) const = default;
 
   static LASPointFormat9 RandomData(std::mt19937_64& gen) {
@@ -527,6 +559,9 @@ struct LASPP_PACKED LASPointFormat9 : LASPointFormat6, WavePacketData {
 };
 
 struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
+  static constexpr int PointFormat = 10;
+  static constexpr int MinVersion = 4;
+
   bool operator==(const LASPointFormat10& other) const = default;
 
   static LASPointFormat10 RandomData(std::mt19937_64& gen) {

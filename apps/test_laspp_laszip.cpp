@@ -129,80 +129,47 @@ LASPointFormat7 convert_laszip_to_format7(const laszip_point& laszip_pt) {
   return pt;
 }
 
-// Helper function to compare two LASPointFormat0 points
-bool compare_points(const LASPointFormat0& pt1, const LASPointFormat0& pt2) {
-  return pt1.x == pt2.x && pt1.y == pt2.y && pt1.z == pt2.z && pt1.intensity == pt2.intensity &&
-         pt1.bit_byte.return_number == pt2.bit_byte.return_number &&
-         pt1.bit_byte.number_of_returns == pt2.bit_byte.number_of_returns &&
-         pt1.bit_byte.scan_direction_flag == pt2.bit_byte.scan_direction_flag &&
-         pt1.bit_byte.edge_of_flight_line == pt2.bit_byte.edge_of_flight_line &&
-         pt1.classification_byte.classification == pt2.classification_byte.classification &&
-         pt1.classification_byte.synthetic == pt2.classification_byte.synthetic &&
-         pt1.classification_byte.key_point == pt2.classification_byte.key_point &&
-         pt1.classification_byte.withheld == pt2.classification_byte.withheld &&
-         pt1.scan_angle_rank == pt2.scan_angle_rank && pt1.user_data == pt2.user_data &&
-         pt1.point_source_id == pt2.point_source_id;
-}
-
-// Helper function to compare two LASPointFormat1 points
-bool compare_points(const LASPointFormat1& pt1, const LASPointFormat1& pt2) {
-  return compare_points(static_cast<const LASPointFormat0&>(pt1),
-                        static_cast<const LASPointFormat0&>(pt2)) &&
-         pt1.gps_time.uint64 == pt2.gps_time.uint64;
-}
-
-// Helper function to compare two LASPointFormat2 points
-bool compare_points(const LASPointFormat2& pt1, const LASPointFormat2& pt2) {
-  return compare_points(static_cast<const LASPointFormat0&>(pt1),
-                        static_cast<const LASPointFormat0&>(pt2)) &&
-         pt1.red == pt2.red && pt1.green == pt2.green && pt1.blue == pt2.blue;
-}
-
-// Helper function to compare two LASPointFormat3 points
-bool compare_points(const LASPointFormat3& pt1, const LASPointFormat3& pt2) {
-  return compare_points(static_cast<const LASPointFormat1&>(pt1),
-                        static_cast<const LASPointFormat1&>(pt2)) &&
-         pt1.red == pt2.red && pt1.green == pt2.green && pt1.blue == pt2.blue;
-}
-
-// Helper function to compare two LASPointFormat6 points
-bool compare_points(const LASPointFormat6& pt1, const LASPointFormat6& pt2) {
-  return pt1.x == pt2.x && pt1.y == pt2.y && pt1.z == pt2.z && pt1.intensity == pt2.intensity &&
-         pt1.return_number == pt2.return_number && pt1.number_of_returns == pt2.number_of_returns &&
-         pt1.classification_flags == pt2.classification_flags &&
-         pt1.scanner_channel == pt2.scanner_channel &&
-         pt1.scan_direction_flag == pt2.scan_direction_flag &&
-         pt1.edge_of_flight_line == pt2.edge_of_flight_line &&
-         pt1.classification == pt2.classification && pt1.user_data == pt2.user_data &&
-         pt1.scan_angle == pt2.scan_angle && pt1.point_source_id == pt2.point_source_id &&
-         pt1.gps_time == pt2.gps_time;
-}
-
-// Helper function to compare two LASPointFormat7 points
-bool compare_points(const LASPointFormat7& pt1, const LASPointFormat7& pt2) {
-  return compare_points(static_cast<const LASPointFormat6&>(pt1),
-                        static_cast<const LASPointFormat6&>(pt2)) &&
-         pt1.red == pt2.red && pt1.green == pt2.green && pt1.blue == pt2.blue;
-}
-
-// Template function to read and compare points for a specific format
+// Helper function to convert laszip point to PointType
 template <typename PointType>
-void read_and_compare_points(const std::filesystem::path& file_path) {
-  // Read with laspp
+PointType convert_laszip_point(const laszip_point& laszip_pt) {
+  if constexpr (std::is_same_v<PointType, LASPointFormat0>) {
+    return convert_laszip_to_format0(laszip_pt);
+  } else if constexpr (std::is_same_v<PointType, LASPointFormat1>) {
+    return convert_laszip_to_format1(laszip_pt);
+  } else if constexpr (std::is_same_v<PointType, LASPointFormat2>) {
+    return convert_laszip_to_format2(laszip_pt);
+  } else if constexpr (std::is_same_v<PointType, LASPointFormat3>) {
+    return convert_laszip_to_format3(laszip_pt);
+  } else if constexpr (std::is_same_v<PointType, LASPointFormat6>) {
+    return convert_laszip_to_format6(laszip_pt);
+  } else if constexpr (std::is_same_v<PointType, LASPointFormat7>) {
+    return convert_laszip_to_format7(laszip_pt);
+  } else {
+    LASPP_FAIL("Unsupported point format");
+  }
+}
+
+// Read points with laspp
+template <typename PointType>
+std::vector<PointType> read_laspp_points(const std::filesystem::path& file_path,
+                                         laszip_U64& num_points) {
   std::ifstream ifs(file_path, std::ios::binary);
   LASPP_ASSERT(ifs.is_open(), "Failed to open file: ", file_path);
   LASReader reader(ifs);
 
-  laszip_U64 num_points = reader.num_points();
+  num_points = reader.num_points();
   std::cout << "Reading " << num_points << " points from file: " << file_path << std::endl;
 
-  // Read all points with laspp
   std::vector<PointType> laspp_points(num_points);
   auto laspp_span =
       reader.read_chunks(std::span<PointType>(laspp_points), {0, reader.num_chunks()});
   LASPP_ASSERT_EQ(laspp_span.size(), num_points, "LAS++ read incorrect number of points");
+  return laspp_points;
+}
 
-  // Read with laszip
+// Open laszip reader and validate point count
+template <typename PointType>
+laszip_POINTER open_laszip_reader(const std::filesystem::path& file_path, laszip_U64 num_points) {
   laszip_POINTER reader_laszip;
   LASPP_ASSERT_EQ(laszip_create(&reader_laszip), 0, "Failed to create laszip reader");
 
@@ -214,51 +181,55 @@ void read_and_compare_points(const std::filesystem::path& file_path) {
   LASPP_ASSERT_EQ(laszip_get_header_pointer(reader_laszip, &header_laszip), 0,
                   "Failed to get laszip header");
 
-  // Use extended number of point records if available (for files with > 2^32 points)
   laszip_U64 laszip_num_points = header_laszip->extended_number_of_point_records;
   if (laszip_num_points == 0) {
     laszip_num_points = header_laszip->number_of_point_records;
   }
   LASPP_ASSERT_EQ(laszip_num_points, num_points, "Point count mismatch in headers");
 
+  return reader_laszip;
+}
+
+// Read all points from laszip reader
+template <typename PointType>
+std::vector<PointType> read_all_laszip_points(laszip_POINTER reader_laszip, laszip_U64 num_points) {
   laszip_point* laszip_pt;
   LASPP_ASSERT_EQ(laszip_get_point_pointer(reader_laszip, &laszip_pt), 0,
                   "Failed to get laszip point pointer");
 
-  // Read all points with laszip
   std::vector<PointType> laszip_points;
   laszip_points.reserve(num_points);
 
   for (laszip_U64 i = 0; i < num_points; ++i) {
     LASPP_ASSERT_EQ(laszip_read_point(reader_laszip), 0, "Failed to read point ", i);
-    // After laszip_read_point, the point is already populated in laszip_pt
-
-    PointType converted_pt;
-    if constexpr (std::is_same_v<PointType, LASPointFormat0>) {
-      converted_pt = convert_laszip_to_format0(*laszip_pt);
-    } else if constexpr (std::is_same_v<PointType, LASPointFormat1>) {
-      converted_pt = convert_laszip_to_format1(*laszip_pt);
-    } else if constexpr (std::is_same_v<PointType, LASPointFormat2>) {
-      converted_pt = convert_laszip_to_format2(*laszip_pt);
-    } else if constexpr (std::is_same_v<PointType, LASPointFormat3>) {
-      converted_pt = convert_laszip_to_format3(*laszip_pt);
-    } else if constexpr (std::is_same_v<PointType, LASPointFormat6>) {
-      converted_pt = convert_laszip_to_format6(*laszip_pt);
-    } else if constexpr (std::is_same_v<PointType, LASPointFormat7>) {
-      converted_pt = convert_laszip_to_format7(*laszip_pt);
-    } else {
-      LASPP_FAIL("Unsupported point format for comparison");
-    }
+    PointType converted_pt = convert_laszip_point<PointType>(*laszip_pt);
     laszip_points.push_back(converted_pt);
   }
+
+  return laszip_points;
+}
+
+template <typename PointType>
+std::vector<PointType> read_points_with_laszip(const std::filesystem::path& file_path,
+                                               laszip_U64 num_points) {
+  laszip_POINTER reader_laszip = open_laszip_reader<PointType>(file_path, num_points);
+
+  std::vector<PointType> laszip_points =
+      read_all_laszip_points<PointType>(reader_laszip, num_points);
 
   LASPP_ASSERT_EQ(laszip_close_reader(reader_laszip), 0, "Failed to close laszip reader");
   LASPP_ASSERT_EQ(laszip_destroy(reader_laszip), 0, "Failed to destroy laszip reader");
 
-  // Compare points
+  return laszip_points;
+}
+
+template <typename PointType>
+void compare_and_report_mismatches(const std::vector<PointType>& laspp_points,
+                                   const std::vector<PointType>& laszip_points,
+                                   laszip_U64 num_points) {
   size_t mismatch_count = 0;
   for (size_t i = 0; i < num_points; ++i) {
-    if (!compare_points(laspp_points[i], laszip_points[i])) {
+    if (laspp_points[i] != laszip_points[i]) {
       if (mismatch_count == 0) {
         std::cerr << "\nMismatch found at point " << i << ":" << std::endl;
         std::cerr << "LAS++ point:" << std::endl;
@@ -283,6 +254,14 @@ void read_and_compare_points(const std::filesystem::path& file_path) {
   }
 }
 
+template <typename PointType>
+void read_and_compare_points(const std::filesystem::path& file_path) {
+  laszip_U64 num_points = 0;
+  std::vector<PointType> laspp_points = read_laspp_points<PointType>(file_path, num_points);
+  std::vector<PointType> laszip_points = read_points_with_laszip<PointType>(file_path, num_points);
+  compare_and_report_mismatches(laspp_points, laszip_points, num_points);
+}
+
 // Wrapper function to handle different point formats
 void compare_file(const std::filesystem::path& file_path) {
   std::ifstream ifs(file_path, std::ios::binary);
@@ -290,11 +269,13 @@ void compare_file(const std::filesystem::path& file_path) {
   LASReader reader(ifs);
 
   uint8_t point_format = reader.header().point_format();
-  uint8_t base_format = point_format & uint8_t(~(uint8_t(1u) << 7));  // Remove compression bit
+  // Remove compression bit
+  uint8_t base_format = point_format & uint8_t(~(uint8_t(1u) << 7));
 
   std::cout << "File: " << file_path << std::endl;
   std::cout << "Point format: " << static_cast<int>(base_format) << std::endl;
-  std::cout << "Compressed: " << (point_format & (uint8_t(1u) << 7) ? "yes" : "no") << std::endl;
+  bool is_compressed = (point_format & (uint8_t(1u) << 7)) != 0;
+  std::cout << "Compressed: " << (is_compressed ? "yes" : "no") << std::endl;
   std::cout << "Number of points: " << reader.num_points() << std::endl;
   std::cout << std::endl;
 
@@ -313,7 +294,8 @@ void compare_file(const std::filesystem::path& file_path) {
       break;
     case 4:
     case 5:
-      std::cerr << "Error: Point formats 4 and 5 (with wave packet data) are not yet supported"
+      std::cerr << "Error: Point formats 4 and 5 "
+                   "(with wave packet data) are not yet supported"
                 << std::endl;
       std::exit(1);
       break;
@@ -326,7 +308,9 @@ void compare_file(const std::filesystem::path& file_path) {
     case 8:
     case 9:
     case 10:
-      std::cerr << "Error: Point formats 8, 9, and 10 are not yet supported" << std::endl;
+      std::cerr << "Error: Point formats 8, 9, and 10 "
+                   "are not yet supported"
+                << std::endl;
       std::exit(1);
       break;
     default:

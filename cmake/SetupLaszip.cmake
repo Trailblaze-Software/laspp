@@ -17,12 +17,6 @@
 function(setup_laszip)
   include(FetchContent)
 
-  # Keep FetchContent deterministic in CI; set this to FALSE locally if you want
-  # updates.
-  set(FETCHCONTENT_UPDATES_DISCONNECTED
-      ON
-      CACHE BOOL "" FORCE)
-
   # Build LASzip as static so we can link it privately.
   set(LASZIP_BUILD_STATIC
       ON

@@ -116,53 +116,61 @@ class LASWriter {
   }
 
   template <typename PointType, typename T>
-  void t_write_points(const std::span<T>& points, std::optional<size_t> chunk_size) {
+  void t_write_points(const std::span<const T>& points, std::optional<size_t> chunk_size) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
     LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
     if (m_header.is_laz_compressed()) {
       if (m_stage < WritingStage::POINTS) {
-        LAZSpecialVLRContent laz_vlr_content(LAZCompressor::PointwiseChunked);
+        LAZSpecialVLRContent laz_vlr_content(std::is_base_of_v<LASPointFormat6, PointType>
+                                                 ? LAZCompressor::LayeredChunked
+                                                 : LAZCompressor::PointwiseChunked);
 
         if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
           laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Point10));
+        }
+        if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+          laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Point14));
         }
         if constexpr (std::is_base_of_v<GPSTime, PointType>) {
           laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::GPSTime11));
         }
         if constexpr (std::is_base_of_v<ColorData, PointType>) {
-          laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB12));
+          if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+            laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB12));
+          } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+            laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB14));
+          } else {
+            static_assert(!std::is_base_of_v<ColorData, PointType>,
+                          "ColorData is only supported alongside point format 0 and 6");
+          }
         }
         if constexpr (std::is_base_of_v<WavePacketData, PointType>) {
           laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Wavepacket13));
         }
-        if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
-          LASPP_FAIL("LASPointFormat6-10 is not currently supported in LAZ compression");
-        } else {
-          std::stringstream laz_vlr_content_stream;
-          laz_vlr_content.write_to(laz_vlr_content_stream);
-          std::vector<char> laz_vlr_content_char(
-              (std::istreambuf_iterator<char>(laz_vlr_content_stream)),
-              std::istreambuf_iterator<char>());
-          std::vector<std::byte> laz_vlr_content_bytes;
-          laz_vlr_content_bytes.reserve(laz_vlr_content_char.size());
-          for (char c : laz_vlr_content_char) {
-            laz_vlr_content_bytes.push_back(static_cast<std::byte>(c));
-          }
-
-          LASVLR laz_vlr;
-          laz_vlr.reserved = 0xAABB;
-          string_to_arr("laszip encoded", laz_vlr.user_id);
-          laz_vlr.record_id = 22204;
-          laz_vlr.record_length_after_header = static_cast<uint16_t>(laz_vlr_content_bytes.size());
-          string_to_arr("LAZ VLR", laz_vlr.description);
-
-          m_laz_vlr_offset = m_output_stream.tellp();
-          write_vlr(laz_vlr, laz_vlr_content_bytes);
-
-          LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_output_stream.tellp());
-
-          m_laz_writer.emplace(m_output_stream, std::move(laz_vlr_content));
+        std::stringstream laz_vlr_content_stream;
+        laz_vlr_content.write_to(laz_vlr_content_stream);
+        std::vector<char> laz_vlr_content_char(
+            (std::istreambuf_iterator<char>(laz_vlr_content_stream)),
+            std::istreambuf_iterator<char>());
+        std::vector<std::byte> laz_vlr_content_bytes;
+        laz_vlr_content_bytes.reserve(laz_vlr_content_char.size());
+        for (char c : laz_vlr_content_char) {
+          laz_vlr_content_bytes.push_back(static_cast<std::byte>(c));
         }
+
+        LASVLR laz_vlr;
+        laz_vlr.reserved = 0xAABB;
+        string_to_arr("laszip encoded", laz_vlr.user_id);
+        laz_vlr.record_id = 22204;
+        laz_vlr.record_length_after_header = static_cast<uint16_t>(laz_vlr_content_bytes.size());
+        string_to_arr("LAZ VLR", laz_vlr.description);
+
+        m_laz_vlr_offset = m_output_stream.tellp();
+        write_vlr(laz_vlr, laz_vlr_content_bytes);
+
+        LASPP_ASSERT_EQ(m_header.offset_to_point_data(), m_output_stream.tellp());
+
+        m_laz_writer.emplace(m_output_stream, std::move(laz_vlr_content));
       } else {
         LASPP_ASSERT(m_laz_writer.has_value());
       }
@@ -193,6 +201,7 @@ class LASWriter {
         static_assert(is_copy_fromable<GPSTime, ExampleFullLASPoint>());
 
         copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
+        copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
         copy_if_possible<GPSTime>(points_to_write[i], points[i]);
         copy_if_possible<ColorData>(points_to_write[i], points[i]);
         copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
@@ -267,7 +276,8 @@ class LASWriter {
 
  public:
   template <typename T>
-  void write_points(const std::span<T>& points, std::optional<size_t> chunk_size = std::nullopt) {
+  void write_points(const std::span<const T>& points,
+                    std::optional<size_t> chunk_size = std::nullopt) {
     if constexpr (std::is_base_of_v<LASPointFormat0, T> || std::is_base_of_v<LASPointFormat6, T>) {
       t_write_points<T>(points, chunk_size);
     } else {
