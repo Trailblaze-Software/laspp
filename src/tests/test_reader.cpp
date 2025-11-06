@@ -41,7 +41,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       writer.header().transform() = Transform({1, 1, 1}, {0, 0, 0});
 
-      writer.write_points(std::span<LASPointFormat0>(points));
+      writer.write_points(std::span<const LASPointFormat0>(points));
 
       LASPP_ASSERT_THROWS(writer.write_vlr(LASVLR(), std::vector<std::byte>()), std::runtime_error);
     }
@@ -91,9 +91,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       }
 
       writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
-      LASPP_ASSERT_THROWS(writer.write_points(std::span<LASPointFormat3>(points_bad)),
+      LASPP_ASSERT_THROWS(writer.write_points(std::span<const LASPointFormat3>(points_bad)),
                           std::runtime_error);
-      writer.write_points(std::span<LASPointFormat5>(points));
+      writer.write_points(std::span<const LASPointFormat5>(points));
 
       LASPP_ASSERT_THROWS(writer.write_vlr(LASVLR(), std::vector<std::byte>()), std::runtime_error);
     }
@@ -137,7 +137,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       }
 
       writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
-      writer.write_points(std::span<LASPointFormat1>(points));
+      writer.write_points(std::span<const LASPointFormat1>(points));
 
       LASPP_ASSERT_THROWS(writer.write_vlr(LASVLR(), std::vector<std::byte>()), std::runtime_error);
     }
@@ -184,9 +184,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       for (LASWriter* writer : {&las_writer, &laz_writer}) {
         writer->write_vlr(LASVLR(), std::vector<std::byte>(0));
-        writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(0, 20));
-        writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(20, 61));
-        writer->write_points(std::span<ExampleFullLASPoint>(points).subspan(81, 19));
+        writer->write_points(std::span<const ExampleFullLASPoint>(points).subspan(0, 20));
+        writer->write_points(std::span<const ExampleFullLASPoint>(points).subspan(20, 61));
+        writer->write_points(std::span<const ExampleFullLASPoint>(points).subspan(81, 19));
         LASPP_ASSERT_THROWS(writer->write_vlr(LASVLR(), std::vector<std::byte>()),
                             std::runtime_error);
 

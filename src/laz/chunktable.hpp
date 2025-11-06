@@ -77,15 +77,20 @@ class LAZChunkTable : LAZChunkTableHeader {
                 ? static_cast<uint32_t>(total_n_points - i * constant_chunk_size.value())
                 : constant_chunk_size.value());
       } else {
-        uint32_t decoded_int = static_cast<uint32_t>(n_points_int_decoder.decode_int(decoder));
-        uint32_t previous_int = i == 0 ? 0u : static_cast<uint32_t>(m_n_points_per_chunk[i - 1]);
-        m_n_points_per_chunk.push_back(decoded_int + previous_int);
+        int32_t decoded_delta = n_points_int_decoder.decode_int(decoder);
+        int64_t previous_value = i == 0 ? 0LL : static_cast<int64_t>(m_n_points_per_chunk[i - 1]);
+        int64_t current_value = previous_value + decoded_delta;
+        LASPP_ASSERT_GE(current_value, 0);
+        m_n_points_per_chunk.push_back(static_cast<size_t>(current_value));
       }
       m_decompressed_chunk_offsets.push_back(
           i == 0 ? 0 : m_decompressed_chunk_offsets[i - 1] + m_n_points_per_chunk[i - 1]);
-      uint32_t decoded_int = static_cast<uint32_t>(compressed_size_int_decoder.decode_int(decoder));
-      uint32_t previous_int = i == 0 ? 0u : m_compressed_chunk_size[i - 1];
-      m_compressed_chunk_size.push_back(decoded_int + previous_int);
+
+      int32_t decoded_delta = compressed_size_int_decoder.decode_int(decoder);
+      int64_t previous_value = i == 0 ? 0LL : static_cast<int64_t>(m_compressed_chunk_size[i - 1]);
+      int64_t current_value = previous_value + decoded_delta;
+      LASPP_ASSERT_GE(current_value, 0);
+      m_compressed_chunk_size.push_back(static_cast<uint32_t>(current_value));
       m_compressed_chunk_offsets.push_back(
           i == 0 ? 8 : m_compressed_chunk_offsets[i - 1] + m_compressed_chunk_size[i - 1]);
     }

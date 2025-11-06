@@ -149,6 +149,9 @@ struct LASPP_PACKED LASHeaderPacked {
   double m_min_y;
   double m_max_z;
   double m_min_z;
+};
+
+struct LASPP_PACKED LASHeader14Packed : public LASHeaderPacked {
   uint64_t m_start_of_waveform_data_packet_record;
   uint64_t m_start_of_first_extended_variable_length_record;
   uint32_t m_number_of_extended_variable_length_records;
@@ -157,7 +160,8 @@ struct LASPP_PACKED LASHeaderPacked {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(LASHeaderPacked) == 375);
+static_assert(sizeof(LASHeaderPacked) == 227);
+static_assert(sizeof(LASHeader14Packed) == 375);
 
 class Bound3D {
   Vector3D m_min;
@@ -207,7 +211,7 @@ class LASHeader {
   char m_generating_software[32] = {'\0'};
   uint16_t m_file_creation_day = 0;
   uint16_t m_file_creation_year = 0;
-  uint16_t m_header_size = sizeof(LASHeaderPacked);
+  uint16_t m_header_size = sizeof(LASHeader14Packed);
   uint32_t m_offset_to_point_data = 0;
   uint32_t m_number_of_variable_length_records = 0;
   uint8_t m_point_data_record_format = 127;
@@ -224,6 +228,15 @@ class LASHeader {
 
   template <typename F>
   void apply_all_in_order(F f) {
+    apply_all_in_order_v12(f);
+    if (m_version_major == 1 && m_version_minor >= 4) {
+      apply_all_in_order_v14_extended(f);
+    }
+  }
+
+  // Apply function to fields for versions 1.0-1.3 (227 bytes)
+  template <typename F>
+  void apply_all_in_order_v12(F f) {
     f(m_file_signature);
     f(m_file_source_id);
     f(m_global_encoding);
@@ -251,6 +264,12 @@ class LASHeader {
     f(m_bounds.min().y());
     f(m_bounds.max().z());
     f(m_bounds.min().z());
+    // Version 1.0-1.3 stops here (227 bytes total)
+  }
+
+  // Apply function to extended fields for version 1.4 (offset 227-375)
+  template <typename F>
+  void apply_all_in_order_v14_extended(F f) {
     f(m_start_of_waveform_data_packet_record);
     f(m_start_of_first_extended_variable_length_record);
     f(m_number_of_extended_variable_length_records);
@@ -260,9 +279,26 @@ class LASHeader {
 
  public:
   explicit LASHeader(std::istream& in_stream) {
+    in_stream.seekg(0);
     apply_all_in_order([&](auto& val) {
       LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&val), sizeof(val)));
     });
+
+    // Validate header_size matches version
+    if (m_version_major == 1 && m_version_minor == 4) {
+      LASPP_ASSERT(m_header_size == sizeof(LASHeader14Packed),
+                   "Version 1.4 requires header_size=375, got ", m_header_size);
+    } else {
+      LASPP_ASSERT(m_header_size == sizeof(LASHeaderPacked),
+                   "Versions 1.0-1.3 require header_size=227, got ", m_header_size);
+      // Version 1.0-1.3: use legacy field for point count
+      m_start_of_waveform_data_packet_record = 0;
+      m_start_of_first_extended_variable_length_record = 0;
+      m_number_of_extended_variable_length_records = 0;
+      m_number_of_point_records = 0;
+      std::fill(std::begin(m_number_of_points_by_return), std::end(m_number_of_points_by_return),
+                0);
+    }
   }
 
   void write(std::ostream& out_stream) const {

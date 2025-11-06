@@ -261,8 +261,6 @@ class LASReader {
       std::vector<std::byte> compressed_data(total_compressed_size);
       m_input_stream.seekg(
           static_cast<int64_t>(header().offset_to_point_data() + compressed_start_offset));
-      std::cout << "Reading " << total_compressed_size << " bytes from " << compressed_start_offset
-                << " to " << compressed_start_offset + total_compressed_size << std::endl;
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(compressed_data.data()),
                                            static_cast<int64_t>(compressed_data.size())));
 

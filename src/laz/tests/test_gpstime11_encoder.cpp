@@ -20,28 +20,31 @@
 #include "laz/gpstime11_encoder.hpp"
 #include "utilities/assert.hpp"
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
+template <typename GPSTimeEncoder>
+void run_gpstime_test() {
   {
     std::stringstream encoded_stream;
     {
       laspp::OutStream ostream(encoded_stream);
-      laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
+      GPSTimeEncoder encoder(laspp::GPSTime(0));
       encoder.encode(ostream, laspp::GPSTime(0.0));
       encoder.encode(ostream, laspp::GPSTime(1.0));
       encoder.encode(ostream, laspp::GPSTime(2.0));
+      encoder.encode(ostream, laspp::GPSTime(3.0));
       encoder.encode(ostream, laspp::GPSTime(1.0));
       encoder.encode(ostream, laspp::GPSTime(0.0));
       encoder.encode(ostream, laspp::GPSTime(2.0));
     }
 
-    LASPP_ASSERT_EQ(encoded_stream.str().size(), 22);
+    LASPP_ASSERT_EQ(encoded_stream.str().size(), GPSTimeEncoder::Point14Mode ? 32 : 29);
 
     {
       laspp::InStream instream(encoded_stream);
-      laspp::GPSTime11Encoder encoder(laspp::GPSTime(0));
+      GPSTimeEncoder encoder(laspp::GPSTime(0));
       LASPP_ASSERT_EQ(encoder.decode(instream), 0.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 1.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 2.0);
+      LASPP_ASSERT_EQ(encoder.decode(instream), 3.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 1.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 0.0);
       LASPP_ASSERT_EQ(encoder.decode(instream), 2.0);
@@ -66,7 +69,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         values[1][i] = static_cast<double>(i % 5);
       }
     }
-    compressed_sizes.push_back(6895);
+    compressed_sizes.push_back(GPSTimeEncoder::Point14Mode ? 6894 : 6895);
 
     values.emplace_back(1000);
     for (size_t i = 0; i < values.back().size(); i++) {
@@ -76,7 +79,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         values[2][i] = 0;
       }
     }
-    compressed_sizes.push_back(900);
+    compressed_sizes.push_back(GPSTimeEncoder::Point14Mode ? 934 : 900);
 
     values.emplace_back(1000);
     for (size_t i = 0; i < values.back().size(); i++) {
@@ -90,7 +93,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         values[3][i] = 15666123123123123123. * static_cast<double>(i) + 1e34;
       }
     }
-    compressed_sizes.push_back(1102);
+    compressed_sizes.push_back(GPSTimeEncoder::Point14Mode ? 1199 : 1102);
 
     values.emplace_back();
     {
@@ -114,7 +117,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       std::stringstream encoded_stream;
       {
         laspp::OutStream ostream(encoded_stream);
-        laspp::GPSTime11Encoder encoder(laspp::GPSTime(12));
+        GPSTimeEncoder encoder(laspp::GPSTime(12));
         for (auto value : vec) {
           encoder.encode(ostream, laspp::GPSTime(value));
         }
@@ -124,7 +127,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       {
         laspp::InStream instream(encoded_stream);
-        laspp::GPSTime11Encoder encoder(laspp::GPSTime(12));
+        GPSTimeEncoder encoder(laspp::GPSTime(12));
         LASPP_ASSERT_EQ(encoder.last_value(), laspp::GPSTime(12));
         for (auto value : vec) {
           LASPP_ASSERT_EQ(encoder.decode(instream), value);
@@ -133,6 +136,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       }
     }
   }
+}
 
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
+  run_gpstime_test<laspp::GPSTime11Encoder>();
+  run_gpstime_test<laspp::GeneralGPSTimeEncoder<true>>();
   return 0;
 }

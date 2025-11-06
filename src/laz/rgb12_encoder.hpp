@@ -17,11 +17,10 @@
 
 #pragma once
 
-#include <bitset>
-
 #include "las_point.hpp"
 #include "laz/stream.hpp"
 #include "laz/symbol_encoder.hpp"
+#include "utilities/arithmetic.hpp"
 namespace laspp {
 
 class RGB12Encoder {
@@ -35,31 +34,63 @@ class RGB12Encoder {
   SymbolEncoder<256> m_blue_low_encoder;
   SymbolEncoder<256> m_blue_high_encoder;
 
-  static uint8_t clamp(uint8_t value, int delta) {
-    if (delta + value > 255) {
-      return 255;
-    } else if (delta + value < 0) {
-      return 0;
-    }
-    return static_cast<uint8_t>(value + delta);
-  }
-
  public:
   using EncodedType = ColorData;
   const EncodedType& last_value() const { return m_last_value; }
 
   explicit RGB12Encoder(ColorData initial_color_data) : m_last_value(initial_color_data) {}
 
-  ColorData decode(InStream& in_stream) {
-    uint_fast16_t changed_values = m_changed_values_encoder.decode_symbol(in_stream);
-    uint8_t red_low = static_cast<uint8_t>(m_last_value.red);
-    uint8_t red_high = static_cast<uint8_t>(m_last_value.red >> 8);
+ private:
+  void decode_red_channels(InStream& in_stream, uint_fast16_t changed_values, uint8_t& red_low,
+                           uint8_t& red_high) {
     if (changed_values & 1) {
       red_low += static_cast<uint8_t>(m_red_low_encoder.decode_symbol(in_stream));
     }
     if (changed_values & (1 << 1)) {
       red_high += static_cast<uint8_t>(m_red_high_encoder.decode_symbol(in_stream));
     }
+  }
+
+  void decode_green_blue_channels(InStream& in_stream, uint_fast16_t changed_values, int d_red_low,
+                                  int d_red_high) {
+    uint8_t green_low = static_cast<uint8_t>(m_last_value.green);
+    uint8_t green_high = static_cast<uint8_t>(m_last_value.green >> 8);
+    uint8_t blue_low = static_cast<uint8_t>(m_last_value.blue);
+    uint8_t blue_high = static_cast<uint8_t>(m_last_value.blue >> 8);
+
+    if (changed_values & (1 << 2)) {
+      green_low = clamp(green_low, d_red_low) +
+                  static_cast<uint8_t>(m_green_low_encoder.decode_symbol(in_stream));
+    }
+    if (changed_values & (1 << 3)) {
+      green_high = clamp(green_high, d_red_high) +
+                   static_cast<uint8_t>(m_green_high_encoder.decode_symbol(in_stream));
+    }
+    if (changed_values & (1 << 4)) {
+      int d_green_low = green_low - static_cast<uint8_t>(m_last_value.green);
+      int d = (d_red_low + d_green_low) / 2;
+      blue_low =
+          clamp(blue_low, d) + static_cast<uint8_t>(m_blue_low_encoder.decode_symbol(in_stream));
+    }
+    if (changed_values & (1 << 5)) {
+      int d_green_high = green_high - static_cast<uint8_t>(m_last_value.green >> 8);
+      int d = (d_red_high + d_green_high) / 2;
+      blue_high =
+          clamp(blue_high, d) + static_cast<uint8_t>(m_blue_high_encoder.decode_symbol(in_stream));
+    }
+
+    m_last_value.green = green_low | static_cast<uint16_t>(green_high << 8);
+    m_last_value.blue = blue_low | static_cast<uint16_t>(blue_high << 8);
+  }
+
+ public:
+  ColorData decode(InStream& in_stream) {
+    uint_fast16_t changed_values = m_changed_values_encoder.decode_symbol(in_stream);
+    uint8_t red_low = static_cast<uint8_t>(m_last_value.red);
+    uint8_t red_high = static_cast<uint8_t>(m_last_value.red >> 8);
+
+    decode_red_channels(in_stream, changed_values, red_low, red_high);
+
     if (changed_values & (1 << 6)) {
       m_last_value.red = red_low | static_cast<uint16_t>(red_high << 8);
       m_last_value.green = m_last_value.red;
@@ -67,49 +98,18 @@ class RGB12Encoder {
     } else {
       int d_red_low = red_low - static_cast<uint8_t>(m_last_value.red);
       int d_red_high = red_high - static_cast<uint8_t>(m_last_value.red >> 8);
-      uint8_t green_low = static_cast<uint8_t>(m_last_value.green);
-      uint8_t green_high = static_cast<uint8_t>(m_last_value.green >> 8);
-      uint8_t blue_low = static_cast<uint8_t>(m_last_value.blue);
-      uint8_t blue_high = static_cast<uint8_t>(m_last_value.blue >> 8);
-      if (changed_values & (1 << 2)) {
-        green_low = clamp(green_low, d_red_low) +
-                    static_cast<uint8_t>(m_green_low_encoder.decode_symbol(in_stream));
-      }
-      if (changed_values & (1 << 3)) {
-        green_high = clamp(green_high, d_red_high) +
-                     static_cast<uint8_t>(m_green_high_encoder.decode_symbol(in_stream));
-      }
-      if (changed_values & (1 << 4)) {
-        int d_green_low = green_low - static_cast<uint8_t>(m_last_value.green);
-        int d = (d_red_low + d_green_low) / 2;
-        blue_low =
-            clamp(blue_low, d) + static_cast<uint8_t>(m_blue_low_encoder.decode_symbol(in_stream));
-      }
-      if (changed_values & (1 << 5)) {
-        int d_green_high = green_high - static_cast<uint8_t>(m_last_value.green >> 8);
-        int d = (d_red_high + d_green_high) / 2;
-        blue_high = clamp(blue_high, d) +
-                    static_cast<uint8_t>(m_blue_high_encoder.decode_symbol(in_stream));
-      }
+      decode_green_blue_channels(in_stream, changed_values, d_red_low, d_red_high);
       m_last_value.red = red_low | static_cast<uint16_t>(red_high << 8);
-      m_last_value.green = green_low | static_cast<uint16_t>(green_high << 8);
-      m_last_value.blue = blue_low | static_cast<uint16_t>(blue_high << 8);
     }
 
     return m_last_value;
   }
 
-  void encode(OutStream& out_stream, ColorData color_data) {
+ private:
+  uint_fast16_t compute_changed_values(uint8_t red_low, uint8_t red_high, uint8_t green_low,
+                                       uint8_t green_high, uint8_t blue_low, uint8_t blue_high,
+                                       int d_red_low, int d_red_high) {
     uint_fast16_t changed_values = 0;
-
-    uint8_t red_low = static_cast<uint8_t>(color_data.red);
-    uint8_t red_high = static_cast<uint8_t>(color_data.red >> 8);
-    int d_red_low = red_low - static_cast<uint8_t>(m_last_value.red);
-    int d_red_high = red_high - static_cast<uint8_t>(m_last_value.red >> 8);
-    uint8_t green_low = static_cast<uint8_t>(color_data.green);
-    uint8_t green_high = static_cast<uint8_t>(color_data.green >> 8);
-    uint8_t blue_low = static_cast<uint8_t>(color_data.blue);
-    uint8_t blue_high = static_cast<uint8_t>(color_data.blue >> 8);
 
     if (d_red_low != 0) {
       changed_values |= 1;
@@ -134,6 +134,46 @@ class RGB12Encoder {
         changed_values |= (1 << 5);
       }
     }
+    return changed_values;
+  }
+
+  void encode_green_blue_channels(OutStream& out_stream, uint_fast16_t changed_values,
+                                  uint8_t green_low, uint8_t green_high, uint8_t blue_low,
+                                  uint8_t blue_high, int d_red_low, int d_red_high) {
+    if (changed_values & (1 << 2)) {
+      uint8_t base = clamp(static_cast<uint8_t>(m_last_value.green), d_red_low);
+      m_green_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_low - base));
+    }
+    if (changed_values & (1 << 3)) {
+      uint8_t base = clamp(static_cast<uint8_t>(m_last_value.green >> 8), d_red_high);
+      m_green_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_high - base));
+    }
+    if (changed_values & (1 << 4)) {
+      int d = (d_red_low + (green_low - static_cast<uint8_t>(m_last_value.green))) / 2;
+      uint8_t base = clamp(static_cast<uint8_t>(m_last_value.blue), d);
+      m_blue_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_low - base));
+    }
+    if (changed_values & (1 << 5)) {
+      int d = (d_red_high + (green_high - static_cast<uint8_t>(m_last_value.green >> 8))) / 2;
+      uint8_t base = clamp(static_cast<uint8_t>(m_last_value.blue >> 8), d);
+      m_blue_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_high - base));
+    }
+  }
+
+ public:
+  void encode(OutStream& out_stream, ColorData color_data) {
+    uint8_t red_low = static_cast<uint8_t>(color_data.red);
+    uint8_t red_high = static_cast<uint8_t>(color_data.red >> 8);
+    int d_red_low = red_low - static_cast<uint8_t>(m_last_value.red);
+    int d_red_high = red_high - static_cast<uint8_t>(m_last_value.red >> 8);
+    uint8_t green_low = static_cast<uint8_t>(color_data.green);
+    uint8_t green_high = static_cast<uint8_t>(color_data.green >> 8);
+    uint8_t blue_low = static_cast<uint8_t>(color_data.blue);
+    uint8_t blue_high = static_cast<uint8_t>(color_data.blue >> 8);
+
+    uint_fast16_t changed_values = compute_changed_values(
+        red_low, red_high, green_low, green_high, blue_low, blue_high, d_red_low, d_red_high);
+
     m_changed_values_encoder.encode_symbol(out_stream, changed_values);
     if (changed_values & 1) {
       m_red_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_low));
@@ -142,24 +182,8 @@ class RGB12Encoder {
       m_red_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_high));
     }
     if (!(changed_values & (1 << 6))) {
-      if (changed_values & (1 << 2)) {
-        uint8_t base = clamp(static_cast<uint8_t>(m_last_value.green), d_red_low);
-        m_green_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_low - base));
-      }
-      if (changed_values & (1 << 3)) {
-        uint8_t base = clamp(static_cast<uint8_t>(m_last_value.green >> 8), d_red_high);
-        m_green_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_high - base));
-      }
-      if (changed_values & (1 << 4)) {
-        int d = (d_red_low + (green_low - static_cast<uint8_t>(m_last_value.green))) / 2;
-        uint8_t base = clamp(static_cast<uint8_t>(m_last_value.blue), d);
-        m_blue_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_low - base));
-      }
-      if (changed_values & (1 << 5)) {
-        int d = (d_red_high + (green_high - static_cast<uint8_t>(m_last_value.green >> 8))) / 2;
-        uint8_t base = clamp(static_cast<uint8_t>(m_last_value.blue >> 8), d);
-        m_blue_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_high - base));
-      }
+      encode_green_blue_channels(out_stream, changed_values, green_low, green_high, blue_low,
+                                 blue_high, d_red_low, d_red_high);
     }
     m_last_value = color_data;
   }

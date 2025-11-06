@@ -23,3 +23,20 @@ install(
   TARGETS ${LAS2LAS++_EXE_NAME}
   DESTINATION bin
   COMPONENT applications)
+
+if(LASPP_BUILD_TESTS)
+  # Test application for comparing LAS++ and LASzip
+  set(TEST_LASPP_LASZIP_EXE_NAME test_laspp_laszip)
+
+  add_executable(${TEST_LASPP_LASZIP_EXE_NAME} test_laspp_laszip.cpp)
+
+  target_link_libraries(${TEST_LASPP_LASZIP_EXE_NAME}
+                        PRIVATE ${LIBRARY_NAME} OpenMP::OpenMP_CXX)
+
+  link_target_to_laszip(${TEST_LASPP_LASZIP_EXE_NAME})
+
+  install(
+    TARGETS ${TEST_LASPP_LASZIP_EXE_NAME}
+    DESTINATION bin
+    COMPONENT applications)
+endif()

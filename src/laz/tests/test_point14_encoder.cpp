@@ -15,14 +15,19 @@
  * trailblaze.software@gmail.com
  */
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <random>
+#include <span>
 #include <sstream>
+#include <vector>
 
 #include "las_point.hpp"
+#include "laz/layered_stream.hpp"
 #include "laz/point14_encoder.hpp"
-#include "laz/stream.hpp"
 
 using namespace laspp;
 
@@ -30,52 +35,63 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
     std::vector<LASPointFormat6> points;
     points.reserve(1000);
-    LASPointFormat6 first_point;
+    LASPointFormat6 first_point{};
     first_point.x = 0;
     first_point.y = 0;
     first_point.z = 0;
     first_point.intensity = 0;
-    first_point.return_number = 0;
-    first_point.number_of_returns = 0;
+    first_point.return_number = 1;
+    first_point.number_of_returns = 1;
+    first_point.classification_flags = 0;
+    first_point.scanner_channel = 0;
     first_point.scan_direction_flag = 0;
     first_point.edge_of_flight_line = 0;
     first_point.classification = LASClassification::OverlapPoints;
-    first_point.scan_angle = 0;
     first_point.user_data = 0;
+    first_point.scan_angle = 0;
     first_point.point_source_id = 0;
-    first_point.gps_time = 0;
+    first_point.gps_time = 0.0;
     points.push_back(first_point);
-    std::mt19937 gen(0);
-    gen.seed(0);
-    for (size_t i = points.size(); i < 1000; i++) {
-      const LASPointFormat6& prev = points.back();
-      LASPointFormat6 next = prev;
-      // uint8_t changed = gen() % 128;
-      next.x = static_cast<int32_t>(gen());
-      next.y = static_cast<int32_t>(gen());
-      next.z = static_cast<int32_t>(gen());
-      points.emplace_back(next);
+
+    std::mt19937_64 gen(0);
+
+    for (size_t i = 1; i < 1000; i++) {
+      points.emplace_back(LASPointFormat6::RandomData(gen));
     }
 
-    std::stringstream encoded_stream;
+    std::string combined_data;
+
     {
-      laspp::OutStream ostream(encoded_stream);
-      LASPointFormat6Encoder encoder(points.front());
-      for (LASPointFormat6& point : points) {
-        encoder.encode(ostream, point);
+      LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS> out_streams;
+      {
+        std::unique_ptr<LASPointFormat6Encoder> encoder =
+            std::make_unique<LASPointFormat6Encoder>(points.front());
+        for (size_t i = 1; i < points.size(); i++) {
+          encoder->encode(out_streams, points[i]);
+        }
       }
+
+      std::stringstream combined_stream = out_streams.combined_stream();
+      combined_data = combined_stream.str();
     }
 
-    // LASPP_ASSERT_EQ(encoded_stream.str().size(), 17377);
-    //
-    //{
-    // laspp::InStream instream(encoded_stream);
-    // LASPointFormat6Encoder encoder(points.back());
-    // for (LASPointFormat6& point : points) {
-    // LASPP_ASSERT_EQ(encoder.decode(instream), point);
-    // LASPP_ASSERT_EQ(encoder.last_value(), point);
-    //}
-    //}
+    LASPP_ASSERT_EQ(combined_data.size(), 30852);
+
+    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
+                                   LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<std::byte> data_span(
+        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
+        combined_data.size() - size_span.size());
+
+    LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
+
+    std::unique_ptr<LASPointFormat6Encoder> decoder =
+        std::make_unique<LASPointFormat6Encoder>(points.front());
+    LASPP_ASSERT_EQ(decoder->last_value(), points[0]);
+    for (size_t i = 1; i < points.size(); i++) {
+      LASPP_ASSERT_EQ(decoder->decode(in_streams), points[i]);
+      LASPP_ASSERT_EQ(decoder->last_value(), points[i]);
+    }
   }
 
   return 0;

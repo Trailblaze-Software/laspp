@@ -17,19 +17,23 @@
 
 #pragma once
 
-#include <variant>
-
-#include "laz/byte_encoder.hpp"
-#include "laz/gpstime11_encoder.hpp"
-#include "laz/point10_encoder.hpp"
-#include "laz/point14_encoder.hpp"
-#include "laz/rgb12_encoder.hpp"
-#include "laz/rgb14_encoder.hpp"
+#include <cstdint>
 
 namespace laspp {
 
-// FIXME: Inefficient use of memory
-typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, RGB12Encoder, RGB14Encoder,
-                     BytesEncoder, LASPointFormat6Encoder>
-    LAZEncoder;
+inline int32_t wrapping_int32_add(int32_t a, int32_t b) {
+  return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
+}
+
+inline int32_t wrapping_int32_sub(int32_t a, int32_t b) { return wrapping_int32_add(a, -b); }
+
+inline uint8_t clamp(uint8_t value, int delta) {
+  if (delta > 255 - value) {
+    return 255;
+  } else if (value < -delta) {
+    return 0;
+  }
+  return static_cast<uint8_t>(value + static_cast<uint32_t>(delta));
+}
+
 }  // namespace laspp

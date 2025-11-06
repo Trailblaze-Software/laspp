@@ -28,9 +28,8 @@ project(
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 if(LASPP_BUILD_TESTS)
-  # include(FetchContent) FetchContent_Declare( laszip GIT_REPOSITORY
-  # https://github.com/LASzip/LASzip.git GIT_TAG 3.4.4)
-  # FetchContent_MakeAvailable(laszip)
+  include(cmake/SetupLaszip.cmake)
+  setup_laszip()
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
@@ -75,7 +74,9 @@ if(WIN32)
       "/wd4711"
       "/wd4625"
       "/wd5026"
-      "/wd5246")
+      "/wd5246"
+      "/wd4127"
+      "/wd4061")
   endif()
 elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
@@ -135,7 +136,15 @@ if(LASPP_BUILD_TESTS)
   include(CTest)
   enable_testing()
 
-  file(GLOB_RECURSE TEST_SOURCES "test*.cpp")
+  file(GLOB_RECURSE UNFILTERED_TEST_SOURCES "${CMAKE_SOURCE_DIR}/*test*.cpp")
+
+  # Filter to only those under a 'tests' directory
+  set(SOURCES "")
+  foreach(path ${UNFILTERED_TEST_SOURCES})
+    if(path MATCHES "/tests/")
+      list(APPEND TEST_SOURCES "${path}")
+    endif()
+  endforeach()
   message(STATUS "Test sources: ${TEST_SOURCES}")
 
   foreach(TEST_SOURCE ${TEST_SOURCES})
@@ -146,6 +155,47 @@ if(LASPP_BUILD_TESTS)
     target_compile_definitions(${TEST_NAME} PRIVATE LASPP_DEBUG_ASSERTS)
   endforeach()
 
+  if(TARGET test_laszip_interop)
+    FetchContent_GetProperties(laszip)
+    if(NOT laszip_POPULATED)
+      message(
+        FATAL_ERROR
+          "laszip FetchContent properties not found. Call setup_laszip() first."
+      )
+    endif()
+    # laszipper.cpp and lasunzipper.cpp are wrapper files that need internal
+    # laszip symbols
+    file(GLOB LASZIP_WRAPPER_SOURCES "${laszip_SOURCE_DIR}/src/laszipper.cpp"
+         "${laszip_SOURCE_DIR}/src/lasunzipper.cpp")
+
+    # Add wrapper files as sources to the test
+    target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
+
+    # Link against laszip
+    link_target_to_laszip(test_laszip_interop)
+
+    # Suppress warnings from laszip wrapper source files
+    if(MSVC)
+      set_source_files_properties(
+        ${LASZIP_WRAPPER_SOURCES} PROPERTIES COMPILE_FLAGS
+                                             "/wd4774 /wd4062 /wd4100")
+    else()
+      set_source_files_properties(
+        ${LASZIP_WRAPPER_SOURCES}
+        PROPERTIES
+          COMPILE_FLAGS
+          "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion"
+      )
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_source_files_properties(
+          ${LASZIP_WRAPPER_SOURCES}
+          PROPERTIES
+            COMPILE_FLAGS
+            "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion -Wno-useless-cast"
+        )
+      endif()
+    endif()
+  endif()
 endif()
 
 include(GNUInstallDirs)
