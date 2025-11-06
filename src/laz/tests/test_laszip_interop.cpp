@@ -521,7 +521,7 @@ void run_laszip_internal_roundtrip(size_t n_points) {
     }
     LASPP_ASSERT_EQ(offset, sizeof(PointT));
     for (const PointT& point : points) {
-      std::memcpy(&point_buffer, &point, sizeof(PointT));
+      std::memcpy(&point_buffer, &point, sizeof(point_buffer));
       LASPP_ASSERT(zipper.write(point_items.data()));
     }
   } else {
