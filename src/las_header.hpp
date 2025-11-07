@@ -66,7 +66,7 @@ class Vector3D {
   const double& z() const { return m_data[2]; }
 
   double& operator[](size_t i) { return m_data[i]; }
-  double operator[](size_t i) const { return m_data[i]; }
+  const double& operator[](size_t i) const { return m_data[i]; }
 
   explicit Vector3D(std::istream& in_stream) {
     LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
@@ -95,7 +95,9 @@ class Transform {
   Transform() = default;
 
   const Vector3D& scale_factors() const { return m_scale_factors; }
+  Vector3D& scale_factors() { return m_scale_factors; }
   const Vector3D& offsets() const { return m_offsets; }
+  Vector3D& offsets() { return m_offsets; }
 
   friend std::ostream& operator<<(std::ostream& os, const Transform& transform) {
     os << "Scale factors: " << transform.m_scale_factors << std::endl;

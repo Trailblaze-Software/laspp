@@ -193,9 +193,11 @@ class QuadtreeSpatialIndex {
  public:
   QuadtreeSpatialIndex() {
     // Initialize with default values
-    memcpy(m_quadtree_header.spatial_signature, "LASS", 4);
+    std::memcpy(m_quadtree_header.spatial_signature, "LASS",
+                sizeof(m_quadtree_header.spatial_signature));
     m_quadtree_header.type = 0;  // LAS_SPATIAL_QUAD_TREE
-    memcpy(m_quadtree_header.quadtree_signature, "LASQ", 4);
+    std::memcpy(m_quadtree_header.quadtree_signature, "LASQ",
+                sizeof(m_quadtree_header.quadtree_signature));
     m_quadtree_header.version = 0;
     m_quadtree_header.levels = 0;
     m_quadtree_header.level_index = 0;
