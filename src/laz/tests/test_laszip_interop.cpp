@@ -375,13 +375,7 @@ void write_points_with_laspp(const std::vector<PointT>& points, const std::files
   LASPP_ASSERT(writer.header().is_laz_compressed(), "File should be LAZ compressed");
 
   // Set scale factors and offsets (LASWriter handles point counts and bounds automatically)
-  const double scale = 0.27;
-  writer.header().transform().m_scale_factors.x() = scale;
-  writer.header().transform().m_scale_factors.y() = scale;
-  writer.header().transform().m_scale_factors.z() = scale;
-  writer.header().transform().m_offsets.x() = 146;
-  writer.header().transform().m_offsets.y() = -25.4;
-  writer.header().transform().m_offsets.z() = 512;
+  writer.header().transform() = Transform({0.27, 0.35, -26}, {146, -25.4, 512});
 
   writer.write_points(std::span<const PointT>(points.data(), points.size()), ChunkSize);
 }
