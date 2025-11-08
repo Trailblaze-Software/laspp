@@ -77,6 +77,30 @@ int main(int argc, char* argv[]) {
 
     // Copy everything from reader to writer
     writer.copy_from_reader(reader, add_spatial_index_flag);
+
+    LASPP_ASSERT_EQ(reader.num_points(), writer.header().num_points(),
+                    "Number of points in output file does not match input file");
+    LASPP_ASSERT_EQ(reader.header().num_points_by_return(), writer.header().num_points_by_return(),
+                    "Number of points by return in output file does not match input file");
+    LASPP_ASSERT_LE(reader.header().bounds().min_x(), writer.header().bounds().min_x(),
+                    "Output file min x is less than input file min x");
+    LASPP_ASSERT_GE(reader.header().bounds().max_x(), writer.header().bounds().max_x(),
+                    "Output file max x is greater than input file max x");
+    LASPP_ASSERT_LE(reader.header().bounds().min_y(), writer.header().bounds().min_y(),
+                    "Output file min y is less than input file min y");
+    LASPP_ASSERT_GE(reader.header().bounds().max_y(), writer.header().bounds().max_y(),
+                    "Output file max y is greater than input file max y");
+    LASPP_ASSERT_LE(reader.header().bounds().min_z(), writer.header().bounds().min_z(),
+                    "Output file min z is less than input file min z");
+    LASPP_ASSERT_GE(reader.header().bounds().max_z(), writer.header().bounds().max_z(),
+                    "Output file max z is greater than input file max z");
+    LASPP_ASSERT_EQ(reader.header().transform().scale_factors(),
+                    writer.header().transform().scale_factors(),
+                    "Scale factors in output file do not match input file");
+    LASPP_ASSERT_EQ(reader.header().transform().offsets(), writer.header().transform().offsets(),
+                    "Offsets in output file do not match input file");
+
+    std::cout << writer.header() << std::endl;
   }
 
   return 0;

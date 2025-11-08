@@ -580,5 +580,152 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     LASPP_ASSERT_GT(index.num_cells(), 0);
   }
 
+  // Test find_cell_index with adaptive quadtree (cells at different levels)
+  {
+    QuadtreeSpatialIndex index;
+    index.set_bounds(0.0f, 0.0f, 100.0f, 100.0f);
+    index.set_levels(3);
+
+    // Calculate correct cell indices for different levels
+    // For point (30.0, 10.0) at level 2:
+    //   Level 0: x < 50, y < 50 -> quadrant 0 (bottom-left)
+    //   Level 1: x < 25, y < 25 -> quadrant 0 (bottom-left)
+    //   Cell path = 0 << 2 | 0 = 0
+    //   Cell index = level_offset[2] + 0 = 5 + 0 = 5
+    int32_t expected_cell_30_10 = index.get_cell_index(30.0, 10.0);
+    // But we want level 2, so let's use get_cell_index_at_level
+    // Actually, let's just add the cells that would naturally exist and test
+
+    // Add a cell at level 1: right-bottom quadrant
+    // For point (75.0, 25.0) at level 1:
+    //   Level 0: x >= 50, y < 50 -> quadrant 1 (right-bottom)
+    //   Cell path = 1
+    //   Cell index = level_offset[1] + 1 = 1 + 1 = 2
+    int32_t cell_index_level1 = index.get_cell_index_at_level(75.0, 25.0, 1);
+    std::vector<PointInterval> intervals1;
+    intervals1.push_back({0, 99});
+    index.add_cell(cell_index_level1, 100, intervals1);
+
+    // Add a cell at level 2: for point (30.0, 10.0)
+    int32_t cell_index_level2 = index.get_cell_index_at_level(30.0, 10.0, 2);
+    std::vector<PointInterval> intervals2;
+    intervals2.push_back({100, 199});
+    index.add_cell(cell_index_level2, 100, intervals2);
+
+    // Test that find_cell_index finds the most specific cell
+    int32_t cell1 = index.find_cell_index(30.0, 10.0);
+    LASPP_ASSERT_EQ(cell1, cell_index_level2);
+
+    // Test that find_cell_index falls back to parent cell
+    int32_t cell2 = index.find_cell_index(75.0, 25.0);
+    LASPP_ASSERT_EQ(cell2, cell_index_level1);
+
+    // Test point that would be at level 3 but cell doesn't exist - should find level 1
+    int32_t cell3 = index.find_cell_index(60.0, 10.0);
+    LASPP_ASSERT_EQ(cell3, cell_index_level1);
+  }
+
+  // Test get_cell_level_from_index
+  // The function returns the level index (0-based), where:
+  // - Index 0 -> level 0 (root)
+  // - Indices 1-4 -> level 0 (first subdivision, level_offset[1] = 1)
+  // - Indices 5-20 -> level 1 (second subdivision, level_offset[2] = 5)
+  // - Indices 21-84 -> level 2 (third subdivision, level_offset[3] = 21)
+  {
+    QuadtreeSpatialIndex index;
+    index.set_bounds(0.0f, 0.0f, 100.0f, 100.0f);
+    index.set_levels(3);
+
+    // Test root level (index 0)
+    uint32_t level0 = index.get_cell_level_from_index(0);
+    LASPP_ASSERT_EQ(level0, 0u);
+
+    // Test level 1 cells (indices 1-4, level_offset[1] = 1)
+    uint32_t level1 = index.get_cell_level_from_index(1);
+    LASPP_ASSERT_EQ(level1, 0u);
+    uint32_t level2 = index.get_cell_level_from_index(2);
+    LASPP_ASSERT_EQ(level2, 0u);
+    uint32_t level3 = index.get_cell_level_from_index(3);
+    LASPP_ASSERT_EQ(level3, 0u);
+    uint32_t level4 = index.get_cell_level_from_index(4);
+    LASPP_ASSERT_EQ(level4, 0u);
+
+    // Test level 2 cells (indices 5-20, level_offset[2] = 5)
+    uint32_t level5 = index.get_cell_level_from_index(5);
+    LASPP_ASSERT_EQ(level5, 1u);
+    uint32_t level10 = index.get_cell_level_from_index(10);
+    LASPP_ASSERT_EQ(level10, 1u);
+    uint32_t level20 = index.get_cell_level_from_index(20);
+    LASPP_ASSERT_EQ(level20, 1u);
+
+    // Test level 3 cells (indices 21-84, level_offset[3] = 21)
+    uint32_t level21 = index.get_cell_level_from_index(21);
+    LASPP_ASSERT_EQ(level21, 2u);
+    uint32_t level50 = index.get_cell_level_from_index(50);
+    LASPP_ASSERT_EQ(level50, 2u);
+    uint32_t level84 = index.get_cell_level_from_index(84);
+    LASPP_ASSERT_EQ(level84, 2u);
+  }
+
+  // Test get_cell_bounds with cells at different levels
+  {
+    QuadtreeSpatialIndex index;
+    index.set_bounds(0.0f, 0.0f, 100.0f, 100.0f);
+    index.set_levels(2);
+
+    // Calculate the correct cell indices for the quadrants
+    // Level 1 quadrants (level_offset=1):
+    // - cell_path=0 (00): left-bottom [0, 50) x [0, 50) -> cell_index = 1
+    // - cell_path=1 (01): right-bottom [50, 100) x [0, 50) -> cell_index = 2
+    // - cell_path=2 (10): left-top [0, 50) x [50, 100) -> cell_index = 3
+    // - cell_path=3 (11): right-top [50, 100) x [50, 100) -> cell_index = 4
+
+    // Test level 1 cell (index 1): should cover [0, 50) x [0, 50) - left-bottom
+    Bound2D bounds1 = index.get_cell_bounds(1);
+    LASPP_ASSERT_EQ(bounds1.min_x(), 0.0);
+    LASPP_ASSERT_EQ(bounds1.min_y(), 0.0);
+    LASPP_ASSERT_EQ(bounds1.max_x(), 50.0);
+    LASPP_ASSERT_EQ(bounds1.max_y(), 50.0);
+
+    // Test level 1 cell (index 2): should cover [50, 100) x [0, 50) - right-bottom
+    Bound2D bounds2 = index.get_cell_bounds(2);
+    LASPP_ASSERT_EQ(bounds2.min_x(), 50.0);
+    LASPP_ASSERT_EQ(bounds2.min_y(), 0.0);
+    LASPP_ASSERT_EQ(bounds2.max_x(), 100.0);
+    LASPP_ASSERT_EQ(bounds2.max_y(), 50.0);
+
+    // Test level 2 cell (index 6): should cover [25, 50) x [0, 25)
+    // Level 2: level_offset=5, cell_path=1 (01) -> cell_index = 6
+    Bound2D bounds6 = index.get_cell_bounds(6);
+    LASPP_ASSERT_EQ(bounds6.min_x(), 25.0);
+    LASPP_ASSERT_EQ(bounds6.min_y(), 0.0);
+    LASPP_ASSERT_EQ(bounds6.max_x(), 50.0);
+    LASPP_ASSERT_EQ(bounds6.max_y(), 25.0);
+  }
+
+  // Test find_cell_index with no cells (should return -1)
+  {
+    QuadtreeSpatialIndex index;
+    index.set_bounds(0.0f, 0.0f, 100.0f, 100.0f);
+    index.set_levels(2);
+
+    int32_t cell = index.find_cell_index(50.0, 50.0);
+    LASPP_ASSERT_EQ(cell, -1);
+  }
+
+  // Test find_cell_index with root cell only
+  {
+    QuadtreeSpatialIndex index;
+    index.set_bounds(0.0f, 0.0f, 100.0f, 100.0f);
+    index.set_levels(2);
+
+    std::vector<PointInterval> intervals;
+    intervals.push_back({0, 99});
+    index.add_cell(0, 100, intervals);
+
+    int32_t cell = index.find_cell_index(50.0, 50.0);
+    LASPP_ASSERT_EQ(cell, 0);
+  }
+
   return 0;
 }

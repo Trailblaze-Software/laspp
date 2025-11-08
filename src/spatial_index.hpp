@@ -27,6 +27,7 @@
 #include "las_header.hpp"
 #include "utilities/assert.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/printing.hpp"
 
 namespace laspp {
 
@@ -141,53 +142,6 @@ class QuadtreeSpatialIndex {
       offset += (1u << l) * (1u << l);  // 4^l
     }
     return offset;
-  }
-
-  // Get cell index for a point at a specific level (not necessarily the deepest level)
-  int32_t get_cell_index_at_level(double x, double y, uint32_t target_level) const {
-    if (target_level == 0 || m_quadtree_header.levels == 0) return 0;
-    if (target_level > m_quadtree_header.levels) {
-      target_level = m_quadtree_header.levels;
-    }
-
-    double min_x = static_cast<double>(m_quadtree_header.min_x);
-    double min_y = static_cast<double>(m_quadtree_header.min_y);
-    double max_x = static_cast<double>(m_quadtree_header.max_x);
-    double max_y = static_cast<double>(m_quadtree_header.max_y);
-
-    double dx = max_x - min_x;
-    double dy = max_y - min_y;
-    if (dx <= 0 || dy <= 0) return 0;
-
-    // Build the quadtree path (cell index within the target level)
-    uint32_t cell_path = 0;
-    double cell_size_x = dx;
-    double cell_size_y = dy;
-
-    // Build index from root (MSB) to target level (LSB)
-    for (uint32_t level = 0; level < target_level; ++level) {
-      cell_size_x /= 2.0;
-      cell_size_y /= 2.0;
-
-      // Determine quadrant at this level
-      uint32_t quadrant = 0;
-      if (x >= min_x + cell_size_x) {
-        quadrant |= 1;  // Right half (x bit)
-        min_x += cell_size_x;
-      }
-      if (y >= min_y + cell_size_y) {
-        quadrant |= 2;  // Top half (y bit)
-        min_y += cell_size_y;
-      }
-
-      // Place bits at the correct position: root at MSB, leaves at LSB
-      uint32_t shift = 2 * (target_level - 1 - level);
-      cell_path |= (quadrant << shift);
-    }
-
-    // Add level offset for the target level
-    uint32_t level_offset = calculate_level_offset(target_level);
-    return static_cast<int32_t>(level_offset + cell_path);
   }
 
  public:
@@ -413,6 +367,72 @@ class QuadtreeSpatialIndex {
 
   size_t num_cells() const { return m_cells.size(); }
 
+  // Get cell index for a point at a specific level (public for testing)
+  int32_t get_cell_index_at_level(double x, double y, uint32_t target_level) const {
+    if (target_level == 0 || m_quadtree_header.levels == 0) return 0;
+    if (target_level > m_quadtree_header.levels) {
+      target_level = m_quadtree_header.levels;
+    }
+
+    double min_x = static_cast<double>(m_quadtree_header.min_x);
+    double min_y = static_cast<double>(m_quadtree_header.min_y);
+    double max_x = static_cast<double>(m_quadtree_header.max_x);
+    double max_y = static_cast<double>(m_quadtree_header.max_y);
+
+    double dx = max_x - min_x;
+    double dy = max_y - min_y;
+    if (dx <= 0 || dy <= 0) return 0;
+
+    // Build the quadtree path (cell index within the target level)
+    uint32_t cell_path = 0;
+    double cell_size_x = dx;
+    double cell_size_y = dy;
+
+    // Build index from root (MSB) to target level (LSB)
+    for (uint32_t level = 0; level < target_level; ++level) {
+      cell_size_x /= 2.0;
+      cell_size_y /= 2.0;
+
+      // Determine quadrant at this level
+      uint32_t quadrant = 0;
+      if (x >= min_x + cell_size_x) {
+        quadrant |= 1;  // Right half (x bit)
+        min_x += cell_size_x;
+      }
+      if (y >= min_y + cell_size_y) {
+        quadrant |= 2;  // Top half (y bit)
+        min_y += cell_size_y;
+      }
+
+      // Place bits at the correct position: root at MSB, leaves at LSB
+      uint32_t shift = 2 * (target_level - 1 - level);
+      cell_path |= (quadrant << shift);
+    }
+
+    // Add level offset for the target level
+    uint32_t level_offset = calculate_level_offset(target_level);
+    return static_cast<int32_t>(level_offset + cell_path);
+  }
+
+  // Determine which level a cell index belongs to
+  // Returns the 0-based level: 0 = root, 1 = first subdivision, 2 = second subdivision, etc.
+  uint32_t get_cell_level_from_index(int32_t cell_index) const {
+    if (m_quadtree_header.levels == 0 || cell_index == 0) return 0;
+
+    // Find the highest level offset that is <= cell_index
+    // Level offsets: offset[0]=0, offset[1]=1, offset[2]=5, offset[3]=21, etc.
+    // Cell index 1 is at level 1 (first subdivision), which is 0-indexed as level 0
+    // But we want to return the actual level number (1-based converted to 0-based)
+    for (uint32_t level = m_quadtree_header.levels; level > 0; --level) {
+      uint32_t offset = calculate_level_offset(level);
+      if (static_cast<uint32_t>(cell_index) >= offset) {
+        // level is 1-based here, so level 1 -> return 0, level 2 -> return 1, etc.
+        return level - 1;
+      }
+    }
+    return 0;  // Root level
+  }
+
   // Find the cell index for a point, searching up the quadtree if the exact cell doesn't exist
   // Returns the cell index of the nearest ancestor that exists in the spatial index
   // Returns -1 if no cell is found (shouldn't happen for valid spatial indexes)
@@ -482,20 +502,6 @@ class QuadtreeSpatialIndex {
     return static_cast<int32_t>(level_offset + cell_path);
   }
 
-  // Determine which level a cell index belongs to
-  uint32_t get_cell_level_from_index(int32_t cell_index) const {
-    if (m_quadtree_header.levels == 0 || cell_index == 0) return 0;
-
-    // Find the highest level offset that is <= cell_index
-    for (uint32_t level = m_quadtree_header.levels; level > 0; --level) {
-      uint32_t offset = calculate_level_offset(level);
-      if (static_cast<uint32_t>(cell_index) >= offset) {
-        return level - 1;  // Cell is at this level
-      }
-    }
-    return 0;  // Root level
-  }
-
   // Get cell bounds from cell index (reverse of get_cell_index)
   // The cell_index includes level offset, so we need to determine which level it's at
   // This handles adaptive quadtrees where cells can be at any level
@@ -508,10 +514,15 @@ class QuadtreeSpatialIndex {
     }
 
     // Determine which level this cell belongs to
+    // get_cell_level_from_index returns 0-based level (0=root, 1=first subdivision, etc.)
     uint32_t cell_level = get_cell_level_from_index(cell_index);
 
-    // Subtract level offset for this cell's level to get the cell path
-    uint32_t level_offset = calculate_level_offset(cell_level + 1);
+    // Find the level offset for this cell's level
+    // The level offset for level L is calculate_level_offset(L+1) where L is 0-based
+    // For example: level 0 (root) has offset 0, level 1 has offset 1, level 2 has offset 5
+    // But get_cell_level_from_index returns 0 for level 1, so we need to add 1
+    uint32_t actual_level = cell_level + 1;  // Convert to 1-based for offset calculation
+    uint32_t level_offset = calculate_level_offset(actual_level);
     uint32_t cell_path = static_cast<uint32_t>(cell_index) - level_offset;
 
     double min_x = static_cast<double>(m_quadtree_header.min_x);
@@ -533,9 +544,13 @@ class QuadtreeSpatialIndex {
     // Extract bits from cell_path to determine cell position
     // The path is built with root at MSB, so we extract from MSB to LSB
     // Only process levels up to the cell's level
-    for (uint32_t level = 0; level <= cell_level; ++level) {
+    // Note: cell_level is 0-based, so for level 1 (first subdivision), cell_level=0
+    // We need to process (cell_level + 1) levels to get to the actual level
+    uint32_t num_levels_to_process = cell_level + 1;
+    for (uint32_t level = 0; level < num_levels_to_process; ++level) {
       // Calculate shift to get the bits for this level (from MSB)
-      uint32_t shift = 2 * (cell_level - level);
+      // For level 1 (cell_level=0), we have 1 level to process, so shift = 2 * (0 - 0) = 0
+      uint32_t shift = 2 * (num_levels_to_process - 1 - level);
       uint32_t bits = (cell_path >> shift) & 3;
 
       cell_size_x /= 2.0;

@@ -227,6 +227,14 @@ class LASWriter {
               points_to_write[i].bit_byte.return_number > 0) {
             local_points_by_return[points_to_write[i].bit_byte.return_number - 1]++;
           }
+        }
+        if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+          if (points_to_write[i].return_number < 16 && points_to_write[i].return_number > 0) {
+            local_points_by_return[points_to_write[i].return_number - 1]++;
+          }
+        }
+        if constexpr (std::is_base_of_v<LASPointFormat0, PointType> ||
+                      std::is_base_of_v<LASPointFormat6, PointType>) {
           PointType point = points_to_write[i];
           local_min_pos[0] = std::min(local_min_pos[0], point.x);
           local_min_pos[1] = std::min(local_min_pos[1], point.y);

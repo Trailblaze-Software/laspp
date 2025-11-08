@@ -76,6 +76,8 @@ class Vector3D {
 
   Vector3D() = default;
 
+  bool operator==(const Vector3D& other) const = default;
+
   friend std::ostream& operator<<(std::ostream& os, const Vector3D& vec) {
     os << "(" << vec.m_data[0] << ", " << vec.m_data[1] << ", " << vec.m_data[2] << ")";
     return os;
@@ -98,6 +100,12 @@ class Transform {
   Vector3D& scale_factors() { return m_scale_factors; }
   const Vector3D& offsets() const { return m_offsets; }
   Vector3D& offsets() { return m_offsets; }
+
+  Vector3D transform_point(int x, int y, int z) const {
+    return Vector3D(x * m_scale_factors.x() + m_offsets.x(),
+                    y * m_scale_factors.y() + m_offsets.y(),
+                    z * m_scale_factors.z() + m_offsets.z());
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const Transform& transform) {
     os << "Scale factors: " << transform.m_scale_factors << std::endl;
@@ -238,6 +246,13 @@ class Bound3D {
       m_min[i] = std::min(m_min[i], pos[i]);
       m_max[i] = std::max(m_max[i], pos[i]);
     }
+  }
+
+  bool contains(const Vector3D& pos) const {
+    for (size_t i = 0; i < 3; ++i) {
+      if (pos[i] < m_min[i] || pos[i] > m_max[i]) return false;
+    }
+    return true;
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Bound3D& bound) {
@@ -384,6 +399,20 @@ class LASHeader {
         m_transform.scale_factors().y() * pos[1] + m_transform.offsets().y(),
         m_transform.scale_factors().z() * pos[2] + m_transform.offsets().z(),
     };
+  }
+
+  std::array<size_t, 15> num_points_by_return() const {
+    std::array<size_t, 15> counts = {0};
+    if (m_legacy_number_of_point_records == 0) {
+      for (size_t i = 0; i < 15; ++i) {
+        counts[i] = static_cast<size_t>(m_number_of_points_by_return[i]);
+      }
+    } else {
+      for (size_t i = 0; i < 5; ++i) {
+        counts[i] = static_cast<size_t>(m_legacy_number_of_points_by_return[i]);
+      }
+    }
+    return counts;
   }
 
   void update_bounds(std::array<int32_t, 3> pos) { m_bounds.update(transform(pos)); }
