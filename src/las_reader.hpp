@@ -374,6 +374,83 @@ class LASReader {
                                          static_cast<int64_t>(data.size())));
     return data;
   }
+
+  // Get chunk indices that contain the given point intervals
+  // Returns a sorted list of unique chunk indices
+  std::vector<size_t> get_chunk_indices_from_intervals(
+      const std::vector<PointInterval>& intervals) const {
+    std::vector<size_t> chunk_indices;
+
+    if (header().is_laz_compressed() && m_laz_reader.has_value()) {
+      const auto& chunk_table = m_laz_reader->chunk_table();
+      const auto& decompressed_offsets = chunk_table.decompressed_chunk_offsets();
+      const auto& points_per_chunk = chunk_table.points_per_chunk();
+
+      for (const auto& interval : intervals) {
+        // Find chunks that overlap with this interval
+        for (size_t chunk_idx = 0; chunk_idx < decompressed_offsets.size(); ++chunk_idx) {
+          size_t chunk_start = decompressed_offsets[chunk_idx];
+          size_t chunk_end = chunk_start + points_per_chunk[chunk_idx] - 1;
+
+          // Check if chunk overlaps with interval
+          if (chunk_start <= static_cast<size_t>(interval.end) &&
+              chunk_end >= static_cast<size_t>(interval.start)) {
+            chunk_indices.push_back(chunk_idx);
+          }
+        }
+      }
+
+      // Remove duplicates and sort
+      std::sort(chunk_indices.begin(), chunk_indices.end());
+      chunk_indices.erase(std::unique(chunk_indices.begin(), chunk_indices.end()),
+                          chunk_indices.end());
+    } else {
+      // For non-LAZ files, there's only one chunk (index 0)
+      if (!intervals.empty()) {
+        chunk_indices.push_back(0);
+      }
+    }
+
+    return chunk_indices;
+  }
+
+  // Read a list of chunks (not necessarily contiguous)
+  template <typename T>
+  std::span<T> read_chunks_list(std::span<T> output_location,
+                                const std::vector<size_t>& chunk_indices) {
+    if (chunk_indices.empty()) {
+      return output_location.subspan(0, 0);
+    }
+
+    if (header().is_laz_compressed()) {
+      // For LAZ files, we need to read chunks individually and place them in the output
+      size_t total_points = 0;
+      const auto& chunk_table = m_laz_reader->chunk_table();
+      const auto& points_per_chunk = chunk_table.points_per_chunk();
+
+      // Calculate total points needed
+      for (size_t chunk_idx : chunk_indices) {
+        total_points += points_per_chunk[chunk_idx];
+      }
+
+      LASPP_ASSERT_GE(output_location.size(), total_points);
+
+      // Read each chunk and place it in the output buffer
+      size_t output_offset = 0;
+      for (size_t chunk_idx : chunk_indices) {
+        size_t n_points = points_per_chunk[chunk_idx];
+        read_chunk<T>(output_location.subspan(output_offset, n_points), chunk_idx);
+        output_offset += n_points;
+      }
+
+      return output_location.subspan(0, total_points);
+    } else {
+      // For non-LAZ files, there's only one chunk
+      LASPP_ASSERT(chunk_indices.size() == 1 && chunk_indices[0] == 0,
+                   "Non-LAZ files should only have chunk index 0");
+      return read_chunk<T>(output_location, 0);
+    }
+  }
 };
 
 }  // namespace laspp
