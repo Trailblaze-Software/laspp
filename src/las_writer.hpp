@@ -442,7 +442,7 @@ class LASWriter {
                 << points.size() << " points." << std::endl;
 
       // Write points
-      write_points<PointType>(points);
+      write_points<PointType>(points, 50000);
 
       // Write spatial index
       write_lastools_spatial_index(spatial_index);
