@@ -303,10 +303,11 @@ class QuadtreeSpatialIndex {
       // Add final interval
       intervals.push_back({interval_start, interval_end});
 
-      add_cell(cell_index, static_cast<uint32_t>(point_indices.size()), intervals);
+      add_cell(cell_index, std::move(intervals));
     }
   }
 
+ private:
   void set_bounds(float min_x, float min_y, float max_x, float max_y) {
     m_quadtree_header.min_x = min_x;
     m_quadtree_header.min_y = min_y;
@@ -316,17 +317,20 @@ class QuadtreeSpatialIndex {
 
   void set_levels(uint32_t levels) { m_quadtree_header.levels = levels; }
 
-  void add_cell(int32_t cell_index, uint32_t number_points,
-                const std::vector<PointInterval>& intervals) {
+  void add_cell(int32_t cell_index, std::vector<PointInterval>&& intervals) {
     CellIntervals cell;
     cell.cell_index = cell_index;
-    cell.number_points = number_points;
-    cell.intervals = intervals;
-    // Use try_emplace to construct in place, avoiding unnecessary copy
-    // try_emplace doesn't move from cell if key already exists
-    m_cells.try_emplace(cell_index, std::move(cell));
+    cell.number_points = 0;
+    for (const auto& interval : intervals) {
+      cell.number_points += (interval.end - interval.start + 1);
+    }
+    cell.intervals = std::move(intervals);
+    LASPP_ASSERT(m_cells.find(cell_index) == m_cells.end(),
+                 "Cell index already exists in spatial index");
+    m_cells.emplace(cell_index, std::move(cell));
   }
 
+ public:
   void write(std::ostream& os) const {
     // Write "LASX" signature
     os.write("LASX", 4);
@@ -506,7 +510,8 @@ class QuadtreeSpatialIndex {
   // The cell_index includes level offset, so we need to determine which level it's at
   // This handles adaptive quadtrees where cells can be at any level
   Bound2D get_cell_bounds(int32_t cell_index) const {
-    if (m_quadtree_header.levels == 0) {
+    if (m_quadtree_header.levels == 0 || cell_index == 0) {
+      // Root cell (index 0) or no levels - return full bounds
       return Bound2D(static_cast<double>(m_quadtree_header.min_x),
                      static_cast<double>(m_quadtree_header.min_y),
                      static_cast<double>(m_quadtree_header.max_x),

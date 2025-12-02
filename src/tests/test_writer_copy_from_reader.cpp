@@ -244,12 +244,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       writer.write_points(std::span<const LASPointFormat0>(points));
 
       // Add an old spatial index
-      QuadtreeSpatialIndex old_index;
-      old_index.set_bounds(0.0f, 0.0f, 100.0f, 100.0f);
-      old_index.set_levels(2);
-      std::vector<PointInterval> intervals;
-      intervals.push_back({0, 49});
-      old_index.add_cell(0, 50, intervals);
+      LASHeader old_header;
+      const_cast<Bound3D&>(old_header.bounds()).update({0.0, 0.0, 0.0});
+      const_cast<Bound3D&>(old_header.bounds()).update({100.0, 100.0, 0.0});
+      QuadtreeSpatialIndex old_index(old_header, points);
       writer.write_lastools_spatial_index(old_index);
     }
 
