@@ -61,8 +61,12 @@ class Vector3D {
   double& y() { return m_data[1]; }
   double& z() { return m_data[2]; }
 
+  const double& x() const { return m_data[0]; }
+  const double& y() const { return m_data[1]; }
+  const double& z() const { return m_data[2]; }
+
   double& operator[](size_t i) { return m_data[i]; }
-  double operator[](size_t i) const { return m_data[i]; }
+  const double& operator[](size_t i) const { return m_data[i]; }
 
   explicit Vector3D(std::istream& in_stream) {
     LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
@@ -72,22 +76,36 @@ class Vector3D {
 
   Vector3D() = default;
 
+  bool operator==(const Vector3D& other) const = default;
+
   friend std::ostream& operator<<(std::ostream& os, const Vector3D& vec) {
     os << "(" << vec.m_data[0] << ", " << vec.m_data[1] << ", " << vec.m_data[2] << ")";
     return os;
   }
 };
 
-struct Transform {
+class Transform {
   Vector3D m_scale_factors = {0.001, 0.001, 0.001};
   Vector3D m_offsets = {0, 0, 0};
 
+ public:
   explicit Transform(std::istream& in_stream) : m_scale_factors(in_stream), m_offsets(in_stream) {}
 
   Transform(const Vector3D& scale_factors, const Vector3D& offsets)
       : m_scale_factors(scale_factors), m_offsets(offsets) {}
 
   Transform() = default;
+
+  const Vector3D& scale_factors() const { return m_scale_factors; }
+  Vector3D& scale_factors() { return m_scale_factors; }
+  const Vector3D& offsets() const { return m_offsets; }
+  Vector3D& offsets() { return m_offsets; }
+
+  Vector3D transform_point(int x, int y, int z) const {
+    return Vector3D(x * m_scale_factors.x() + m_offsets.x(),
+                    y * m_scale_factors.y() + m_offsets.y(),
+                    z * m_scale_factors.z() + m_offsets.z());
+  }
 
   friend std::ostream& operator<<(std::ostream& os, const Transform& transform) {
     os << "Scale factors: " << transform.m_scale_factors << std::endl;
@@ -163,6 +181,45 @@ struct LASPP_PACKED LASHeader14Packed : public LASHeaderPacked {
 static_assert(sizeof(LASHeaderPacked) == 227);
 static_assert(sizeof(LASHeader14Packed) == 375);
 
+class Bound2D {
+  double m_min_x;
+  double m_min_y;
+  double m_max_x;
+  double m_max_y;
+
+ public:
+  Bound2D()
+      : m_min_x(std::numeric_limits<double>::max()),
+        m_min_y(std::numeric_limits<double>::max()),
+        m_max_x(std::numeric_limits<double>::lowest()),
+        m_max_y(std::numeric_limits<double>::lowest()) {}
+
+  Bound2D(double min_x, double min_y, double max_x, double max_y)
+      : m_min_x(min_x), m_min_y(min_y), m_max_x(max_x), m_max_y(max_y) {}
+
+  double min_x() const { return m_min_x; }
+  double min_y() const { return m_min_y; }
+  double max_x() const { return m_max_x; }
+  double max_y() const { return m_max_y; }
+
+  void update(double x, double y) {
+    m_min_x = std::min(m_min_x, x);
+    m_min_y = std::min(m_min_y, y);
+    m_max_x = std::max(m_max_x, x);
+    m_max_y = std::max(m_max_y, y);
+  }
+
+  bool contains(double x, double y) const {
+    return x >= m_min_x && x <= m_max_x && y >= m_min_y && y <= m_max_y;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const Bound2D& bound) {
+    os << "Bounds2D: [" << bound.m_min_x << ", " << bound.m_min_y << "] to [" << bound.m_max_x
+       << ", " << bound.m_max_y << "]" << std::endl;
+    return os;
+  }
+};
+
 class Bound3D {
   Vector3D m_min;
   Vector3D m_max;
@@ -189,6 +246,13 @@ class Bound3D {
       m_min[i] = std::min(m_min[i], pos[i]);
       m_max[i] = std::max(m_max[i], pos[i]);
     }
+  }
+
+  bool contains(const Vector3D& pos) const {
+    for (size_t i = 0; i < 3; ++i) {
+      if (pos[i] < m_min[i] || pos[i] > m_max[i]) return false;
+    }
+    return true;
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Bound3D& bound) {
@@ -331,10 +395,24 @@ class LASHeader {
 
   std::array<double, 3> transform(std::array<int32_t, 3> pos) {
     return {
-        m_transform.m_scale_factors.x() * pos[0] + m_transform.m_offsets.x(),
-        m_transform.m_scale_factors.y() * pos[1] + m_transform.m_offsets.y(),
-        m_transform.m_scale_factors.z() * pos[2] + m_transform.m_offsets.z(),
+        m_transform.scale_factors().x() * pos[0] + m_transform.offsets().x(),
+        m_transform.scale_factors().y() * pos[1] + m_transform.offsets().y(),
+        m_transform.scale_factors().z() * pos[2] + m_transform.offsets().z(),
     };
+  }
+
+  std::array<size_t, 15> num_points_by_return() const {
+    std::array<size_t, 15> counts = {0};
+    if (m_legacy_number_of_point_records == 0) {
+      for (size_t i = 0; i < 15; ++i) {
+        counts[i] = static_cast<size_t>(m_number_of_points_by_return[i]);
+      }
+    } else {
+      for (size_t i = 0; i < 5; ++i) {
+        counts[i] = static_cast<size_t>(m_legacy_number_of_points_by_return[i]);
+      }
+    }
+    return counts;
   }
 
   void update_bounds(std::array<int32_t, 3> pos) { m_bounds.update(transform(pos)); }
@@ -370,7 +448,7 @@ class LASHeader {
   const Transform& transform() const { return m_transform; }
 
   uint8_t point_format() const { return m_point_data_record_format; }
-  int num_extra_bytes() const {
+  uint16_t num_extra_bytes() const {
     return m_point_data_record_length - size_of_point_format(m_point_data_record_format);
   }
 

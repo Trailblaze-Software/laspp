@@ -20,6 +20,7 @@
 #include "las_header.hpp"
 #include "las_reader.hpp"
 #include "las_writer.hpp"
+#include "spatial_index.hpp"
 #include "vlr.hpp"
 using namespace laspp;
 
@@ -257,6 +258,109 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
           }
         }
+      }
+    }
+  }
+
+  // Test get_chunk_indices_from_intervals and read_chunks_list
+  {
+    std::stringstream las_stream;
+    std::stringstream laz_stream;
+
+    // Create a file with 100 points
+    {
+      LASWriter las_writer(las_stream, 0, 0);
+      LASWriter laz_writer(laz_stream, 128, 0);  // LAZ format
+
+      std::vector<LASPointFormat0> points(100);
+      for (size_t i = 0; i < points.size(); i++) {
+        points[i].x = static_cast<int32_t>(i);
+        points[i].y = static_cast<int32_t>(i);
+        points[i].z = static_cast<int32_t>(i);
+      }
+
+      las_writer.write_points(std::span<const LASPointFormat0>(points));
+      laz_writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    // Test with LAZ file (multiple chunks)
+    {
+      laz_stream.seekg(0);
+      LASReader reader(laz_stream);
+
+      // Test get_chunk_indices_from_intervals
+      // Assuming chunks are: [0-19], [20-80], [81-99] (based on typical chunking)
+      std::vector<PointInterval> intervals;
+
+      // Interval that spans only first chunk
+      intervals.push_back({0, 10});
+      auto chunk_indices = reader.get_chunk_indices_from_intervals(intervals);
+      LASPP_ASSERT_GE(chunk_indices.size(), 1u);
+      LASPP_ASSERT_EQ(chunk_indices[0], 0u);
+
+      // Interval that spans multiple chunks
+      intervals.clear();
+      intervals.push_back({10, 50});
+      chunk_indices = reader.get_chunk_indices_from_intervals(intervals);
+      LASPP_ASSERT_GE(chunk_indices.size(), 1u);
+
+      // Multiple intervals
+      intervals.clear();
+      intervals.push_back({0, 5});
+      intervals.push_back({50, 60});
+      intervals.push_back({90, 99});
+      chunk_indices = reader.get_chunk_indices_from_intervals(intervals);
+      LASPP_ASSERT_GE(chunk_indices.size(), 1u);
+
+      // Test read_chunks_list
+      if (chunk_indices.size() > 0) {
+        // Calculate total points needed
+        size_t total_points = 0;
+        const auto& points_per_chunk = reader.points_per_chunk();
+        for (size_t chunk_idx : chunk_indices) {
+          total_points += points_per_chunk[chunk_idx];
+        }
+
+        std::vector<LASPointFormat0> points(total_points);
+        auto result = reader.read_chunks_list<LASPointFormat0>(points, chunk_indices);
+        LASPP_ASSERT_EQ(result.size(), total_points);
+
+        // Verify we got valid points
+        for (size_t i = 0; i < result.size(); ++i) {
+          LASPP_ASSERT_GE(result[i].x, 0);
+        }
+      }
+
+      // Test with empty intervals
+      intervals.clear();
+      chunk_indices = reader.get_chunk_indices_from_intervals(intervals);
+      LASPP_ASSERT_EQ(chunk_indices.size(), 0u);
+
+      std::vector<LASPointFormat0> empty_points(0);
+      auto empty_result = reader.read_chunks_list<LASPointFormat0>(empty_points, chunk_indices);
+      LASPP_ASSERT_EQ(empty_result.size(), 0u);
+    }
+
+    // Test with LAS file (single chunk)
+    {
+      las_stream.seekg(0);
+      LASReader reader(las_stream);
+
+      std::vector<PointInterval> intervals;
+      intervals.push_back({0, 50});
+      intervals.push_back({50, 99});
+
+      auto chunk_indices = reader.get_chunk_indices_from_intervals(intervals);
+      LASPP_ASSERT_EQ(chunk_indices.size(), 1u);
+      LASPP_ASSERT_EQ(chunk_indices[0], 0u);
+
+      std::vector<LASPointFormat0> points(100);
+      auto result = reader.read_chunks_list<LASPointFormat0>(points, chunk_indices);
+      LASPP_ASSERT_EQ(result.size(), 100u);
+
+      // Verify points
+      for (size_t i = 0; i < result.size(); ++i) {
+        LASPP_ASSERT_EQ(result[i].x, static_cast<int32_t>(i));
       }
     }
   }

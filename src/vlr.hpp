@@ -200,10 +200,18 @@ struct LASPP_PACKED LASVariableLengthRecord {
 
   friend std::ostream& operator<<(std::ostream& os, const LASVariableLengthRecord& vlr) {
     os << "Reserved: " << vlr.reserved << std::endl;
-    os << "User ID: " << vlr.user_id << std::endl;
+    // Trim nulls from user_id
+    std::string user_id_str(vlr.user_id, 16);
+    size_t user_id_len = user_id_str.find('\0');
+    if (user_id_len != std::string::npos) user_id_str = user_id_str.substr(0, user_id_len);
+    os << "User ID: \"" << user_id_str << "\"" << std::endl;
     os << "Record ID: " << vlr.record_id << std::endl;
     os << "Record length after header: " << vlr.record_length_after_header << std::endl;
-    os << "Description: " << vlr.description << std::endl;
+    // Trim nulls from description
+    std::string desc_str(vlr.description, 32);
+    size_t desc_len = desc_str.find('\0');
+    if (desc_len != std::string::npos) desc_str = desc_str.substr(0, desc_len);
+    os << "Description: \"" << desc_str << "\"" << std::endl;
     return os;
   }
 
@@ -246,6 +254,10 @@ struct LASPP_PACKED LASVariableLengthRecord {
            (std::string(user_id) == "LAZ encoded" || std::string(user_id) == "laszip encoded") &&
            record_id == 22204;
   }
+
+  bool is_lastools_spatial_index_vlr() const {
+    return std::string(user_id) == "LAStools" && record_id == 30;
+  }
 };
 
 using LASVLR = LASVariableLengthRecord;
@@ -271,11 +283,29 @@ struct LASPP_PACKED LASExtendedVariableLengthRecord {
 
   friend std::ostream& operator<<(std::ostream& os, const LASExtendedVariableLengthRecord& evlr) {
     os << "Reserved: " << evlr.reserved << std::endl;
-    os << "User ID: " << evlr.user_id << std::endl;
+    // Trim nulls from user_id
+    std::string user_id_str(evlr.user_id, 16);
+    size_t user_id_len = user_id_str.find('\0');
+    if (user_id_len != std::string::npos) user_id_str = user_id_str.substr(0, user_id_len);
+    os << "User ID: \"" << user_id_str << "\"" << std::endl;
     os << "Record ID: " << evlr.record_id << std::endl;
     os << "Record length after header: " << evlr.record_length_after_header << std::endl;
-    os << "Description: " << evlr.description << std::endl;
+    // Trim nulls from description
+    std::string desc_str(evlr.description, 32);
+    size_t desc_len = desc_str.find('\0');
+    if (desc_len != std::string::npos) desc_str = desc_str.substr(0, desc_len);
+    os << "Description: \"" << desc_str << "\"" << std::endl;
     return os;
+  }
+
+  bool is_laz_vlr() const {
+    return (reserved == 0 || reserved == 0xAABB) &&
+           (std::string(user_id) == "LAZ encoded" || std::string(user_id) == "laszip encoded") &&
+           record_id == 22204;
+  }
+
+  bool is_lastools_spatial_index_evlr() const {
+    return std::string(user_id) == "LAStools" && record_id == 30;
   }
 };
 

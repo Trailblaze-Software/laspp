@@ -15,89 +15,43 @@
  * trailblaze.software@gmail.com
  */
 
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string>
 
-#include "las_point.hpp"
 #include "las_reader.hpp"
 #include "las_writer.hpp"
-
-class LASPoint {
-  std::array<int32_t, 3> position;
-  double gps_time;
-
- public:
-  void operator=(const laspp::LASPointFormat0& point) {
-    position[0] = point.x;
-    position[1] = point.y;
-    position[2] = point.z;
-  }
-
-  void operator=(const laspp::GPSTime& point) { gps_time = point; }
-
-  operator laspp::LASPointFormat0() const {
-    laspp::LASPointFormat0 point;
-    point.x = position[0];
-    point.y = position[1];
-    point.z = position[2];
-    point.intensity = 0;
-    point.bit_byte = 0;
-    point.classification_byte = 0;
-    point.scan_angle_rank = 0;
-    point.user_data = 0;
-    point.point_source_id = 0;
-    return point;
-  }
-
-  operator laspp::GPSTime() const { return laspp::GPSTime(gps_time); }
-
-  friend std::ostream& operator<<(std::ostream& os, const LASPoint& point) {
-    os << "Position: (" << point.position[0] << ", " << point.position[1] << ", "
-       << point.position[2] << ")";
-    os << " GPS Time: " << point.gps_time;
-    return os;
-  }
-};
-
-template <typename PointType>
-void read_and_write_points(laspp::LASReader& reader, laspp::LASWriter& writer) {
-  std::vector<PointType> points(reader.num_points());
-  reader.read_chunks<PointType>(points, {0, reader.num_chunks()});
-  std::cout << points[0] << std::endl;
-  std::cout << points[points.size() - 1] << std::endl;
-  writer.write_points<PointType>(points);
-}
+#include "utilities/assert.hpp"
 
 int main(int argc, char* argv[]) {
-  if (argc != 3) {
-    std::cerr << "Usage: " << argv[0] << " <in_file> <out_file>" << std::endl;
+  bool add_spatial_index_flag = false;
+  int file_arg_start = 1;
+
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--add-spatial-index" || std::string(argv[i]) == "-s") {
+      add_spatial_index_flag = true;
+      file_arg_start++;
+    }
+  }
+
+  if (argc - file_arg_start != 2) {
+    std::cerr << "Usage: " << argv[0] << " [--add-spatial-index|-s] <in_file> <out_file>"
+              << std::endl;
+    std::cerr
+        << "  --add-spatial-index, -s: Add spatial index to output file (points will be reordered)"
+        << std::endl;
     return 1;
   }
 
-  std::filesystem::path in_file(argv[1]);
-  std::ifstream ifs(in_file, std::ios::binary);
-  LASPP_ASSERT(ifs.is_open(), "Failed to open ", in_file);
-  laspp::LASReader reader(ifs);
+  std::string in_file_str = argv[file_arg_start];
+  std::string out_file_str = argv[file_arg_start + 1];
+
+  std::filesystem::path in_file(in_file_str);
+  laspp::LASReader reader(in_file);
   std::cout << reader.header() << std::endl;
 
-  if (reader.geo_keys()) {
-    std::cout << "GeoTIFF Projection Info:" << std::endl;
-    std::cout << *reader.geo_keys() << std::endl;
-  }
-
-  auto vlrs = reader.vlr_headers();
-  for (const auto& vlr : vlrs) {
-    std::cout << vlr << std::endl;
-  }
-
-  auto evlrs = reader.evlr_headers();
-  for (const auto& evlr : evlrs) {
-    std::cout << evlr << std::endl;
-  }
-
-  std::filesystem::path out_file(argv[2]);
+  std::filesystem::path out_file(out_file_str);
   std::fstream ofs;
   ofs.open(out_file, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
   LASPP_ASSERT(ofs.is_open(), "Failed to open ", out_file);
@@ -121,28 +75,32 @@ int main(int argc, char* argv[]) {
     }
     laspp::LASWriter writer(ofs, point_format);
 
-    for (const auto& vlr : reader.vlr_headers()) {
-      if (vlr.is_laz_vlr()) {
-        continue;
-      }
-      writer.write_vlr(vlr, reader.read_vlr_data(vlr));
-    }
+    // Copy everything from reader to writer
+    writer.copy_from_reader(reader, add_spatial_index_flag);
 
-    writer.header().transform() = reader.header().transform();
+    LASPP_ASSERT_EQ(reader.num_points(), writer.header().num_points(),
+                    "Number of points in output file does not match input file");
+    LASPP_ASSERT_EQ(reader.header().num_points_by_return(), writer.header().num_points_by_return(),
+                    "Number of points by return in output file does not match input file");
+    LASPP_ASSERT_LE(reader.header().bounds().min_x(), writer.header().bounds().min_x(),
+                    "Output file min x is less than input file min x");
+    LASPP_ASSERT_GE(reader.header().bounds().max_x(), writer.header().bounds().max_x(),
+                    "Output file max x is greater than input file max x");
+    LASPP_ASSERT_LE(reader.header().bounds().min_y(), writer.header().bounds().min_y(),
+                    "Output file min y is less than input file min y");
+    LASPP_ASSERT_GE(reader.header().bounds().max_y(), writer.header().bounds().max_y(),
+                    "Output file max y is greater than input file max y");
+    LASPP_ASSERT_LE(reader.header().bounds().min_z(), writer.header().bounds().min_z(),
+                    "Output file min z is less than input file min z");
+    LASPP_ASSERT_GE(reader.header().bounds().max_z(), writer.header().bounds().max_z(),
+                    "Output file max z is greater than input file max z");
+    LASPP_ASSERT_EQ(reader.header().transform().scale_factors(),
+                    writer.header().transform().scale_factors(),
+                    "Scale factors in output file do not match input file");
+    LASPP_ASSERT_EQ(reader.header().transform().offsets(), writer.header().transform().offsets(),
+                    "Offsets in output file do not match input file");
 
-    {
-      std::vector<LASPoint> points(reader.num_points());
-
-      // reader.read_chunks<LASPoint>(points, {0, reader.num_chunks()});
-      // std::cout << points[0] << std::endl;
-      // std::cout << points[1] << std::endl;
-      // std::cout << points[1000] << std::endl;
-      // std::cout << points[points.size() - 1] << std::endl;
-
-      // writer.write_points<LASPoint>(points);
-      LASPP_SWITCH_OVER_POINT_TYPE(reader.header().point_format(), read_and_write_points, reader,
-                                   writer);
-    }
+    std::cout << writer.header() << std::endl;
   }
 
   return 0;
