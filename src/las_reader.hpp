@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -33,6 +33,13 @@
 namespace laspp {
 
 class LASReader {
+ public:
+  LASReader(const LASReader&) = delete;
+  LASReader& operator=(const LASReader&) = delete;
+  LASReader(LASReader&&) = delete;
+  LASReader& operator=(LASReader&&) = delete;
+
+ private:
   std::istream& m_input_stream;
   LASHeader m_header;
   std::optional<LAZReader> m_laz_reader;

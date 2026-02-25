@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -23,8 +23,8 @@ namespace laspp {
 
 inline uint64_t raw_decode(InStream& in_stream, uint8_t n_bits) {
   if (n_bits > 19) {
-    uint64_t raw = raw_decode(in_stream, 16);
-    uint64_t raw2 = raw_decode(in_stream, n_bits - 16);
+    uint64_t raw = raw_decode(in_stream, uint8_t{16});
+    uint64_t raw2 = raw_decode(in_stream, static_cast<uint8_t>(n_bits - 16));
     return raw + (raw2 << 16);
   }
 
@@ -39,8 +39,8 @@ inline uint64_t raw_decode(InStream& in_stream, uint8_t n_bits) {
 
 inline void raw_encode(OutStream& out_stream, uint64_t bits, uint8_t n_bits) {
   if (n_bits > 19) {
-    raw_encode(out_stream, bits % (1u << 16), 16);
-    raw_encode(out_stream, bits >> 16, n_bits - 16);
+    raw_encode(out_stream, bits % (1u << 16), uint8_t{16});
+    raw_encode(out_stream, bits >> 16, static_cast<uint8_t>(n_bits - 16));
     return;
   }
 

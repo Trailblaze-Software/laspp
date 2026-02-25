@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -32,7 +32,8 @@ class ByteEncoder {
   explicit ByteEncoder(std::byte initial_byte) : m_previous_byte(initial_byte) {}
 
   void encode(OutStream& out_stream, std::byte byte) {
-    uint8_t diff = static_cast<uint8_t>(byte) - static_cast<uint8_t>(m_previous_byte);
+    uint8_t diff =
+        static_cast<uint8_t>(static_cast<uint8_t>(byte) - static_cast<uint8_t>(m_previous_byte));
     m_symbol_encoder.encode_symbol(out_stream, diff);
     m_previous_byte = byte;
   }

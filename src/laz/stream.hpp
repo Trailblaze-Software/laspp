@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -48,6 +48,14 @@ struct StreamVariables {
 class InStream : StreamVariables {
   constexpr static size_t BUFFER_SIZE = 1024;
   std::istream& m_stream;
+
+ public:
+  InStream(const InStream&) = delete;
+  InStream& operator=(const InStream&) = delete;
+  InStream(InStream&&) = delete;
+  InStream& operator=(InStream&&) = delete;
+
+ private:
   std::array<std::byte, BUFFER_SIZE> m_buffer;
   size_t buffer_idx;
 
@@ -236,6 +244,13 @@ class OutStream : StreamVariables {
   std::iostream& m_stream;
   bool m_finalized;
 
+ public:
+  OutStream(const OutStream&) = delete;
+  OutStream& operator=(const OutStream&) = delete;
+  OutStream(OutStream&&) = delete;
+  OutStream& operator=(OutStream&&) = delete;
+
+ private:
   void finalize_stream() {
     bool write_two_bytes;
     if (length() > (1u << 25)) {

@@ -1,6 +1,6 @@
 
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -68,7 +68,7 @@ class Vector3D {
     LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
   }
 
-  Vector3D(double x, double y, double z) : m_data{x, y, z} {}
+  Vector3D(double x, double y, double z) : m_data{{x, y, z}} {}
 
   Vector3D() = default;
 
@@ -330,18 +330,19 @@ class LASHeader {
   }
 
   std::array<double, 3> transform(std::array<int32_t, 3> pos) {
-    return {
+    return {{
         m_transform.m_scale_factors.x() * pos[0] + m_transform.m_offsets.x(),
         m_transform.m_scale_factors.y() * pos[1] + m_transform.m_offsets.y(),
         m_transform.m_scale_factors.z() * pos[2] + m_transform.m_offsets.z(),
-    };
+    }};
   }
 
   void update_bounds(std::array<int32_t, 3> pos) { m_bounds.update(transform(pos)); }
 
   void set_point_format(uint8_t point_format, uint16_t num_extra_bytes) {
     m_point_data_record_format = point_format;
-    m_point_data_record_length = size_of_point_format(point_format) + num_extra_bytes;
+    m_point_data_record_length =
+        static_cast<uint16_t>(size_of_point_format(point_format) + num_extra_bytes);
   }
 
   const Bound3D& bounds() const { return m_bounds; }

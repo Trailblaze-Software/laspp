@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -46,7 +46,7 @@ class RGB12Encoder {
     if (changed_values & 1) {
       red_low += static_cast<uint8_t>(m_red_low_encoder.decode_symbol(in_stream));
     }
-    if (changed_values & (1 << 1)) {
+    if (changed_values & (1u << 1u)) {
       red_high += static_cast<uint8_t>(m_red_high_encoder.decode_symbol(in_stream));
     }
   }
@@ -58,29 +58,29 @@ class RGB12Encoder {
     uint8_t blue_low = static_cast<uint8_t>(m_last_value.blue);
     uint8_t blue_high = static_cast<uint8_t>(m_last_value.blue >> 8);
 
-    if (changed_values & (1 << 2)) {
+    if (changed_values & (1u << 2u)) {
       green_low = clamp(green_low, d_red_low) +
                   static_cast<uint8_t>(m_green_low_encoder.decode_symbol(in_stream));
     }
-    if (changed_values & (1 << 3)) {
+    if (changed_values & (1u << 3u)) {
       green_high = clamp(green_high, d_red_high) +
                    static_cast<uint8_t>(m_green_high_encoder.decode_symbol(in_stream));
     }
-    if (changed_values & (1 << 4)) {
+    if (changed_values & (1u << 4u)) {
       int d_green_low = green_low - static_cast<uint8_t>(m_last_value.green);
       int d = (d_red_low + d_green_low) / 2;
       blue_low =
           clamp(blue_low, d) + static_cast<uint8_t>(m_blue_low_encoder.decode_symbol(in_stream));
     }
-    if (changed_values & (1 << 5)) {
+    if (changed_values & (1u << 5u)) {
       int d_green_high = green_high - static_cast<uint8_t>(m_last_value.green >> 8);
       int d = (d_red_high + d_green_high) / 2;
       blue_high =
           clamp(blue_high, d) + static_cast<uint8_t>(m_blue_high_encoder.decode_symbol(in_stream));
     }
 
-    m_last_value.green = green_low | static_cast<uint16_t>(green_high << 8);
-    m_last_value.blue = blue_low | static_cast<uint16_t>(blue_high << 8);
+    m_last_value.green = static_cast<uint16_t>(green_low | static_cast<uint16_t>(green_high << 8u));
+    m_last_value.blue = static_cast<uint16_t>(blue_low | static_cast<uint16_t>(blue_high << 8u));
   }
 
  public:
@@ -91,15 +91,15 @@ class RGB12Encoder {
 
     decode_red_channels(in_stream, changed_values, red_low, red_high);
 
-    if (changed_values & (1 << 6)) {
-      m_last_value.red = red_low | static_cast<uint16_t>(red_high << 8);
+    if (changed_values & (1u << 6u)) {
+      m_last_value.red = static_cast<uint16_t>(red_low | static_cast<uint16_t>(red_high << 8u));
       m_last_value.green = m_last_value.red;
       m_last_value.blue = m_last_value.red;
     } else {
       int d_red_low = red_low - static_cast<uint8_t>(m_last_value.red);
-      int d_red_high = red_high - static_cast<uint8_t>(m_last_value.red >> 8);
+      int d_red_high = red_high - static_cast<uint8_t>(m_last_value.red >> 8u);
       decode_green_blue_channels(in_stream, changed_values, d_red_low, d_red_high);
-      m_last_value.red = red_low | static_cast<uint16_t>(red_high << 8);
+      m_last_value.red = static_cast<uint16_t>(red_low | static_cast<uint16_t>(red_high << 8u));
     }
 
     return m_last_value;
@@ -115,23 +115,23 @@ class RGB12Encoder {
       changed_values |= 1;
     }
     if (d_red_high != 0) {
-      changed_values |= (1 << 1);
+      changed_values |= (1u << 1u);
     }
     if (green_low == red_low && green_high == red_high && blue_low == red_low &&
         blue_high == red_high) {
-      changed_values |= (1 << 6);
+      changed_values |= (1u << 6u);
     } else {
       if (green_low != static_cast<uint8_t>(m_last_value.green)) {
-        changed_values |= (1 << 2);
+        changed_values |= (1u << 2u);
       }
       if (green_high != static_cast<uint8_t>(m_last_value.green >> 8)) {
-        changed_values |= (1 << 3);
+        changed_values |= (1u << 3u);
       }
       if (blue_low != static_cast<uint8_t>(m_last_value.blue)) {
-        changed_values |= (1 << 4);
+        changed_values |= (1u << 4u);
       }
       if (blue_high != static_cast<uint8_t>(m_last_value.blue >> 8)) {
-        changed_values |= (1 << 5);
+        changed_values |= (1u << 5u);
       }
     }
     return changed_values;
@@ -140,20 +140,20 @@ class RGB12Encoder {
   void encode_green_blue_channels(OutStream& out_stream, uint_fast16_t changed_values,
                                   uint8_t green_low, uint8_t green_high, uint8_t blue_low,
                                   uint8_t blue_high, int d_red_low, int d_red_high) {
-    if (changed_values & (1 << 2)) {
+    if (changed_values & (1u << 2u)) {
       uint8_t base = clamp(static_cast<uint8_t>(m_last_value.green), d_red_low);
       m_green_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_low - base));
     }
-    if (changed_values & (1 << 3)) {
+    if (changed_values & (1u << 3u)) {
       uint8_t base = clamp(static_cast<uint8_t>(m_last_value.green >> 8), d_red_high);
       m_green_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(green_high - base));
     }
-    if (changed_values & (1 << 4)) {
+    if (changed_values & (1u << 4u)) {
       int d = (d_red_low + (green_low - static_cast<uint8_t>(m_last_value.green))) / 2;
       uint8_t base = clamp(static_cast<uint8_t>(m_last_value.blue), d);
       m_blue_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_low - base));
     }
-    if (changed_values & (1 << 5)) {
+    if (changed_values & (1u << 5u)) {
       int d = (d_red_high + (green_high - static_cast<uint8_t>(m_last_value.green >> 8))) / 2;
       uint8_t base = clamp(static_cast<uint8_t>(m_last_value.blue >> 8), d);
       m_blue_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(blue_high - base));
@@ -178,10 +178,10 @@ class RGB12Encoder {
     if (changed_values & 1) {
       m_red_low_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_low));
     }
-    if (changed_values & (1 << 1)) {
+    if (changed_values & (1u << 1u)) {
       m_red_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_high));
     }
-    if (!(changed_values & (1 << 6))) {
+    if (!(changed_values & (1u << 6u))) {
       encode_green_blue_channels(out_stream, changed_values, green_low, green_high, blue_low,
                                  blue_high, d_red_low, d_red_high);
     }

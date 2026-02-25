@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -55,6 +55,13 @@ inline std::ostream& operator<<(std::ostream& os, WritingStage stage) {
 }
 
 class LASWriter {
+ public:
+  LASWriter(const LASWriter&) = delete;
+  LASWriter& operator=(const LASWriter&) = delete;
+  LASWriter(LASWriter&&) = delete;
+  LASWriter& operator=(LASWriter&&) = delete;
+
+ private:
   std::iostream& m_output_stream;
 
   LASHeader m_header;
@@ -97,7 +104,7 @@ class LASWriter {
     LASVLR wkt_vlr;
     wkt_vlr.reserved = 0;
     string_to_arr("LASF_Projection", wkt_vlr.user_id);
-    wkt_vlr.record_id = math_transform_wkt ? 2111 : 2112;
+    wkt_vlr.record_id = math_transform_wkt ? uint16_t{2111} : uint16_t{2112};
     wkt_vlr.record_length_after_header = static_cast<uint16_t>(wkt.size() + 1);
     string_to_arr("OGC WKT", wkt_vlr.description);
     write_vlr(wkt_vlr, std::span(reinterpret_cast<const std::byte*>(wkt.c_str()), wkt.size() + 1));
@@ -253,8 +260,8 @@ class LASWriter {
       }
     }
 
-    header().update_bounds({min_pos[0], min_pos[1], min_pos[2]});
-    header().update_bounds({max_pos[0], max_pos[1], max_pos[2]});
+    header().update_bounds(std::array<int32_t, 3>{{min_pos[0], min_pos[1], min_pos[2]}});
+    header().update_bounds(std::array<int32_t, 3>{{max_pos[0], max_pos[1], max_pos[2]}});
 
     if (m_header.is_laz_compressed()) {
       if (chunk_size.has_value()) {

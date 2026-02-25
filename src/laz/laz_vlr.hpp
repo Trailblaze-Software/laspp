@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -163,9 +163,17 @@ inline bool check_size_from_type(LAZItemType type, uint16_t size) {
       return size % 8 == 0;
     case LAZItemType::Byte14:
       return true;
-    default:
+    case LAZItemType::Point10:
+    case LAZItemType::GPSTime11:
+    case LAZItemType::RGB12:
+    case LAZItemType::Wavepacket13:
+    case LAZItemType::Point14:
+    case LAZItemType::RGB14:
+    case LAZItemType::RGBNIR14:
+    case LAZItemType::Wavepacket14:
       return size == default_size(type);
   }
+  LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
 }
 
 inline std::ostream& operator<<(std::ostream& os, const LAZItemType& type) {

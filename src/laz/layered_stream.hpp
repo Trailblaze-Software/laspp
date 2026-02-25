@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -53,6 +53,13 @@ class AlwaysConstructedArray {
 
 template <std::size_t N_STREAMS>
 class LayeredInStreams {
+ public:
+  LayeredInStreams(const LayeredInStreams&) = delete;
+  LayeredInStreams& operator=(const LayeredInStreams&) = delete;
+  LayeredInStreams(LayeredInStreams&&) = delete;
+  LayeredInStreams& operator=(LayeredInStreams&&) = delete;
+
+ private:
   AlwaysConstructedArray<PointerStreamBuffer, N_STREAMS> m_layer_stream_buffers;
   AlwaysConstructedArray<std::istream, N_STREAMS> m_layer_streams;
   AlwaysConstructedArray<InStream, N_STREAMS> m_streams;
@@ -79,6 +86,13 @@ class LayeredInStreams {
 
 template <size_t N_STREAMS>
 class LayeredOutStreams {
+ public:
+  LayeredOutStreams(const LayeredOutStreams&) = delete;
+  LayeredOutStreams& operator=(const LayeredOutStreams&) = delete;
+  LayeredOutStreams(LayeredOutStreams&&) = delete;
+  LayeredOutStreams& operator=(LayeredOutStreams&&) = delete;
+
+ private:
   std::array<std::stringstream, N_STREAMS> m_layer_stringstreams;
   AlwaysConstructedArray<OutStream, N_STREAMS> m_streams;
 

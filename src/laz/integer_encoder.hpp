@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -66,7 +66,7 @@ class IntegerEncoder {
             return encoder_7.decode_symbol(stream);
         }
       }
-      return encoders_8_32.at(k - 8).decode_symbol(stream);
+      return encoders_8_32.at(static_cast<size_t>(k) - 8u).decode_symbol(stream);
     }
 
     void encode(OutStream& stream, uint_fast16_t k, uint_fast16_t val) {
@@ -90,7 +90,7 @@ class IntegerEncoder {
             return encoder_7.encode_symbol(stream, val);
         }
       }
-      return encoders_8_32.at(k - 8).encode_symbol(stream, val);
+      return encoders_8_32.at(static_cast<size_t>(k) - 8u).encode_symbol(stream, val);
     }
   };
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -38,6 +38,13 @@
 namespace laspp {
 
 class LAZWriter {
+ public:
+  LAZWriter(const LAZWriter&) = delete;
+  LAZWriter& operator=(const LAZWriter&) = delete;
+  LAZWriter(LAZWriter&&) = delete;
+  LAZWriter& operator=(LAZWriter&&) = delete;
+
+ private:
   LAZSpecialVLRContent m_special_vlr;
   LAZChunkTable m_chunk_table;
   std::iostream& m_stream;
@@ -150,6 +157,14 @@ class LAZWriter {
                                   static_cast<int64_t>(bytes.size()));
             break;
           }
+          case LAZItemType::Short:
+          case LAZItemType::Integer:
+          case LAZItemType::Long:
+          case LAZItemType::Float:
+          case LAZItemType::Double:
+          case LAZItemType::Wavepacket13:
+          case LAZItemType::RGBNIR14:
+          case LAZItemType::Wavepacket14:
           default:
             LASPP_FAIL("Currently unsupported LAZ item type: ",
                        static_cast<uint16_t>(record.item_type));

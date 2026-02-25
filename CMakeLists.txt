@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+# SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # This library is free software; you can redistribute it and/or modify it under
@@ -55,28 +55,18 @@ if(WIN32)
   else()
     add_compile_options(
       "/openmp:llvm"
-      "/Wall"
-      "/MP"
-      "/wd5045"
-      "/wd4866"
-      "/wd4514"
-      "/wd4820"
-      "/wd4800"
-      "/wd4242"
-      "/wd4244"
-      "/wd4365"
-      "/wd5027"
-      "/wd4626"
-      "/wd5219"
-      "/wd4623"
-      "/wd4267"
-      "/wd4710"
-      "/wd4711"
-      "/wd4625"
-      "/wd5026"
-      "/wd5246"
-      "/wd4127"
-      "/wd4061")
+      "/W4"
+      "/WX"
+      "/wd4514" # Unreferenced inline function removed - unavoidable in
+                # header-only libraries
+      "/wd4267" # size_t narrowing in MSVC STL templates - fires in STL headers
+                # not our code
+      "/wd4244" # Narrowing conversion in MSVC STL templates - fires in STL
+                # headers not our code
+      "/experimental:external" # Enable external header suppression
+      "/external:anglebrackets" # Treat angle-bracket includes as external
+                                # (system) headers
+      "/external:W0") # Suppress all warnings from external/system headers
   endif()
 elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
@@ -168,18 +158,24 @@ if(LASPP_BUILD_TESTS)
     file(GLOB LASZIP_WRAPPER_SOURCES "${laszip_SOURCE_DIR}/src/laszipper.cpp"
          "${laszip_SOURCE_DIR}/src/lasunzipper.cpp")
 
-    # Add wrapper files as sources to the test
-    target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
-
-    # Link against laszip
-    link_target_to_laszip(test_laszip_interop)
-
-    # Suppress warnings from laszip wrapper source files
     if(MSVC)
-      set_source_files_properties(
-        ${LASZIP_WRAPPER_SOURCES} PROPERTIES COMPILE_FLAGS
-                                             "/wd4774 /wd4062 /wd4100")
+      # On MSVC, compile the laszip wrapper files in a separate OBJECT library
+      # so that they get their own intermediate directory (and therefore their
+      # own vc143.pdb). Without this, all three source files in
+      # test_laszip_interop would write to the same compiler PDB simultaneously,
+      # causing C1041.
+      add_library(_test_laszip_wrappers OBJECT ${LASZIP_WRAPPER_SOURCES})
+      # Override global /W4 /WX — these are third-party files, suppress
+      # everything.
+      target_compile_options(_test_laszip_wrappers PRIVATE /W0 /WX-)
+      link_target_to_laszip(_test_laszip_wrappers)
+      # Pull the compiled .obj files into the test executable.
+      target_sources(test_laszip_interop
+                     PRIVATE $<TARGET_OBJECTS:_test_laszip_wrappers>)
     else()
+      # On non-MSVC, add the wrapper files directly and suppress the warnings
+      # they generate (they are third-party code).
+      target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
       set_source_files_properties(
         ${LASZIP_WRAPPER_SOURCES}
         PROPERTIES
@@ -195,6 +191,9 @@ if(LASPP_BUILD_TESTS)
         )
       endif()
     endif()
+
+    # Link against laszip (adds headers + link libraries; works for both paths)
+    link_target_to_laszip(test_laszip_interop)
   endif()
 endif()
 

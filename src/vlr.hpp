@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -98,7 +98,8 @@ struct GeoKeys : sGeoKeys {
   GeoKeys(std::istream& in_stream) {
     in_stream.read(reinterpret_cast<char*>(this), sizeof(sGeoKeys));
     keys.resize(wNumberOfKeys);
-    in_stream.read(reinterpret_cast<char*>(keys.data()), sizeof(sKeyEntry) * wNumberOfKeys);
+    in_stream.read(reinterpret_cast<char*>(keys.data()),
+                   static_cast<std::streamsize>(sizeof(sKeyEntry) * wNumberOfKeys));
   }
 
   friend std::ostream& operator<<(std::ostream& os, const GeoKeys& geo_keys) {

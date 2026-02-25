@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -106,7 +106,7 @@ class SymbolEncoder {
 
       if constexpr (lookup_table_type != LookupTableType::NONE) {
         uint32_t shifted_dist = distribution[s] >> lookup_table.SHIFT;
-        while (lookup_idx < shifted_dist + 1) {
+        while (lookup_idx < shifted_dist + 1u) {
           lookup_table[lookup_idx++] = static_cast<uint16_t>(s - 1);
         }
       }
