@@ -48,7 +48,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -216,7 +216,7 @@ def run_cpp_benchmark(
     env = os.environ.copy()
     # Note: The C++ benchmark sets LASPP_NUM_THREADS internally via ThreadControl,
     # but setting it here ensures it's available if needed
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env, shell=False)
     if proc.returncode != 0:
         raise RuntimeError(
             f"benchmark binary failed (exit {proc.returncode}):\n{proc.stderr}"
@@ -267,41 +267,36 @@ def benchmark_laspy_read(
     # lazrs reads RAYON_NUM_THREADS at library initialization, so we need
     # to run in a subprocess with the env var set before importing
     if backend == laspy.LazBackend.LazrsParallel and num_threads is not None:
-        # Use subprocess to ensure fresh Python process with correct env var
-        script = f"""
-import os
-os.environ['RAYON_NUM_THREADS'] = '{num_threads}'
-import laspy
-import time
-import sys
-
-file_path = r'{file}'
-warmup = {warmup}
-iterations = {iterations}
-
-# Warmup
-for _ in range(warmup):
-    with laspy.open(file_path, laz_backend=laspy.LazBackend.LazrsParallel) as f:
-        f.read()
-
-# Timed iterations
-for it in range(iterations):
-    t0 = time.perf_counter()
-    with laspy.open(file_path, laz_backend=laspy.LazBackend.LazrsParallel) as f:
-        f.read()
-    elapsed = time.perf_counter() - t0
-    print(f"{{it}},{{elapsed}}", flush=True)
-"""
+        # Use subprocess to ensure fresh Python process with correct env var.
+        # Parameters are passed as sys.argv to avoid embedding user-controlled
+        # values (file path, counts) inside the executed script string.
+        script = (
+            "import os, laspy, time, sys\n"
+            "file_path = sys.argv[1]\n"
+            "warmup = int(sys.argv[2])\n"
+            "iterations = int(sys.argv[3])\n"
+            "for _ in range(warmup):\n"
+            "    with laspy.open(file_path,"
+            " laz_backend=laspy.LazBackend.LazrsParallel) as f:\n"
+            "        f.read()\n"
+            "for it in range(iterations):\n"
+            "    t0 = time.perf_counter()\n"
+            "    with laspy.open(file_path,"
+            " laz_backend=laspy.LazBackend.LazrsParallel) as f:\n"
+            "        f.read()\n"
+            "    print(f'{it},{time.perf_counter() - t0}', flush=True)\n"
+        )
         results: List[BenchResult] = []
         env = os.environ.copy()
         env["RAYON_NUM_THREADS"] = str(num_threads)
 
         proc = subprocess.run(
-            [sys.executable, "-c", script],
+            [sys.executable, "-c", script, str(file), str(warmup), str(iterations)],
             env=env,
             capture_output=True,
             text=True,
             cwd=os.getcwd(),
+            shell=False,
         )
 
         if proc.returncode != 0:
@@ -642,14 +637,7 @@ def plot_results(
                     tool_colors[tool] = colors[len(tool_colors) % len(colors)]
                 col = tool_colors[tool]
                 label = "LAS++" if tool == "laspp" else "lazrs (laspy)"
-                # Plot the line
-                ax.plot(xs, ys, "-", label=label, linewidth=2, color=col)
-                # Plot markers, using square for default (threads=0) and circle for others
-                for x, y in tool_pts:
-                    if x == 0:
-                        ax.plot(x, y, "s", color=col, markersize=8, zorder=5)
-                    else:
-                        ax.plot(x, y, "o", color=col, markersize=6, zorder=5)
+                ax.plot(xs, ys, "o-", label=label, linewidth=2, markersize=6, color=col)
 
         # Single-threaded tools as horizontal dashed lines
         single_threaded_tools = ["laszip", "lazperf", "pdal"]

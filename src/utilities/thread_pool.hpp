@@ -44,18 +44,22 @@ inline size_t get_num_threads() {
   size_t len = 0;
   if (_dupenv_s(&env_threads, &len, "LASPP_NUM_THREADS") == 0 && env_threads != nullptr) {
     std::unique_ptr<char, decltype(&free)> guard(env_threads, &free);
+    constexpr long MAX_THREADS = 1024;
     char* end = nullptr;
     long num_threads = std::strtol(env_threads, &end, 10);
-    if (end != env_threads && *end == '\0' && num_threads > 0) {
+    // Check: valid conversion, no trailing chars, positive, and within bounds
+    if (end != env_threads && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
       return static_cast<size_t>(num_threads);
     }
   }
 #else
   const char* env_threads = std::getenv("LASPP_NUM_THREADS");
   if (env_threads != nullptr) {
+    constexpr long MAX_THREADS = 1024;
     char* end = nullptr;
     long num_threads = std::strtol(env_threads, &end, 10);
-    if (end != env_threads && *end == '\0' && num_threads > 0) {
+    // Check: valid conversion, no trailing chars, positive, and within bounds
+    if (end != env_threads && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
       return static_cast<size_t>(num_threads);
     }
   }

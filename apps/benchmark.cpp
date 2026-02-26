@@ -147,7 +147,6 @@ struct ThreadControl {
     } else {
       // We set a new value, so unset it if it wasn't there before
 #ifdef _WIN32
-      // Use _dupenv_s on Windows to avoid deprecation warning
       char* current = nullptr;
       size_t len = 0;
       bool has_current =
