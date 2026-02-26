@@ -19,6 +19,8 @@ option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
 option(LASPP_BUILD_TESTS "Build tests" ON)
 option(LASPP_BUILD_BENCHMARK "Build benchmark" ON)
 option(LASPP_BUILD_APPS "Build apps" ON)
+option(LASPP_AGGRESSIVE_OPTIMIZATIONS
+       "Enable aggressive performance optimizations (-march=native, etc.)" ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -50,6 +52,74 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# ── Detect AVX2 support for MSVC
+# ──────────────────────────────────────────────────────────
+set(HAVE_AVX2 FALSE)
+if(MSVC
+   AND CMAKE_BUILD_TYPE MATCHES "Release"
+   AND LASPP_AGGRESSIVE_OPTIMIZATIONS)
+  # Check if compiler supports /arch:AVX2 flag and if AVX2 intrinsics compile
+  include(CheckCXXCompilerFlag)
+  include(CheckCXXSourceCompiles)
+  check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2_FLAG)
+  if(COMPILER_SUPPORTS_AVX2_FLAG)
+    # Test if AVX2 intrinsics actually compile with /arch:AVX2
+    set(CMAKE_REQUIRED_FLAGS "/arch:AVX2")
+    check_cxx_source_compiles(
+      "
+      #include <immintrin.h>
+      int main() {
+        __m256i a = _mm256_setzero_si256();
+        __m256i b = _mm256_add_epi32(a, a);
+        (void)b;
+        return 0;
+      }
+    "
+      AVX2_INTRINSICS_WORK)
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(AVX2_INTRINSICS_WORK)
+      set(HAVE_AVX2 TRUE)
+      message(STATUS "AVX2 support detected and enabled")
+    else()
+      message(STATUS "AVX2 not available (AVX2 intrinsics don't compile)")
+    endif()
+  else()
+    message(STATUS "AVX2 not available (compiler doesn't support /arch:AVX2)")
+  endif()
+endif()
+
+# ── Performance optimization flags for aggressive Release builds
+# ──────────────────────────
+if(CMAKE_BUILD_TYPE MATCHES "Release" AND LASPP_AGGRESSIVE_OPTIMIZATIONS)
+  if(MSVC)
+    # Apply only to Release configuration using generator expressions
+    add_compile_options("$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/Ob2>"
+                        "$<$<CONFIG:Release>:/GL>")
+    add_link_options("$<$<CONFIG:Release>:/LTCG>")
+    if(HAVE_AVX2)
+      add_compile_options("$<$<CONFIG:Release>:/arch:AVX2>")
+      message(STATUS "AVX2 optimizations enabled for Release builds")
+    endif()
+    message(
+      STATUS "Aggressive performance optimizations enabled for Release builds")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # For single-config generators (Unix Makefiles), CMAKE_BUILD_TYPE check is
+    # sufficient
+    add_compile_options("-O3" "-march=native" "-flto" "-funroll-loops")
+    add_link_options("-flto")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      add_compile_options("-fomit-frame-pointer" "-fno-semantic-interposition")
+    endif()
+    message(
+      STATUS "Aggressive performance optimizations enabled for Release builds")
+  endif()
+elseif(CMAKE_BUILD_TYPE MATCHES "Release")
+  message(
+    STATUS
+      "Using standard Release optimizations (LASPP_AGGRESSIVE_OPTIMIZATIONS=OFF)"
+  )
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
