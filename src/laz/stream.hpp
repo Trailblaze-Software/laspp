@@ -55,11 +55,15 @@ struct StreamVariables {
 // callers that work with file streams.
 class InStream : StreamVariables {
   const std::byte* m_ptr = nullptr;
+  const std::byte* m_end = nullptr;  // End of buffer for bounds checking
 
   // Owned buffer used only by the std::istream& constructor.
   std::vector<std::byte> m_owned_data;
 
-  [[nodiscard]] std::byte read_byte() noexcept { return *m_ptr++; }
+  [[nodiscard]] std::byte read_byte() noexcept {
+    LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer");
+    return *m_ptr++;
+  }
 
  public:
   InStream(const InStream&) = delete;
@@ -68,8 +72,9 @@ class InStream : StreamVariables {
   InStream& operator=(InStream&&) = delete;
 
   // Fast path: construct directly from in-memory data.  No copies, no virtual dispatch.
-  // `size` is accepted for documentation / potential debug-mode bounds checking.
-  InStream(const std::byte* data, [[maybe_unused]] size_t size) noexcept : m_ptr(data) {
+  // Requires at least 4 bytes to initialize the range coder state.
+  InStream(const std::byte* data, size_t size) noexcept : m_ptr(data), m_end(data + size) {
+    LASPP_ASSERT_GE(size, 4u, "InStream: buffer too small (need at least 4 bytes)");
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
       m_value |= static_cast<uint32_t>(static_cast<uint8_t>(read_byte()));
@@ -85,9 +90,11 @@ class InStream : StreamVariables {
     auto end_pos = stream.tellg();
     stream.seekg(cur);
     size_t sz = static_cast<size_t>(end_pos - cur);
+    LASPP_ASSERT_GE(sz, 4u, "InStream: stream too small (need at least 4 bytes)");
     m_owned_data.resize(sz);
     stream.read(reinterpret_cast<char*>(m_owned_data.data()), static_cast<std::streamsize>(sz));
     m_ptr = m_owned_data.data();
+    m_end = m_owned_data.data() + sz;
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
       m_value |= static_cast<uint32_t>(static_cast<uint8_t>(read_byte()));
@@ -107,6 +114,7 @@ class InStream : StreamVariables {
   // is very cheap on average.
   uint32_t get_value() noexcept {
     if (m_length < (1u << 8)) {
+      LASPP_ASSERT(m_ptr + 3 <= m_end, "InStream: read past end of buffer (need 3 bytes)");
       m_value <<= 24;
       m_length <<= 24;
       // Read 3 bytes big-endian.
@@ -115,6 +123,7 @@ class InStream : StreamVariables {
                  static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2]));
       m_ptr += 3;
     } else if (m_length < (1u << 16)) {
+      LASPP_ASSERT(m_ptr + 2 <= m_end, "InStream: read past end of buffer (need 2 bytes)");
       m_value <<= 16;
       m_length <<= 16;
       // Read 2 bytes big-endian.
@@ -122,6 +131,7 @@ class InStream : StreamVariables {
                  static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1]));
       m_ptr += 2;
     } else if (m_length < (1u << 24)) {
+      LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer (need 1 byte)");
       m_value <<= 8;
       m_length <<= 8;
       m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
