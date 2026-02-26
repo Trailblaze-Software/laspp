@@ -48,7 +48,8 @@ jobs:
         run: sudo apt-get install lcov
       - name: lcov
         run: |
-          lcov --capture --directory . --output-file coverage.info
+          lcov --capture --directory . --output-file coverage.info \
+            --ignore-errors gcov,negative,source
           lcov --remove coverage.info '/usr/*' --output-file coverage.info
           lcov --list coverage.info
       - name: Upload coverage to codecov
