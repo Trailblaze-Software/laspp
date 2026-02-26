@@ -70,19 +70,18 @@ if(LASPP_BUILD_TESTS)
     endif()
   endif()
 
-  # Try to find TBB on Windows for thread control in benchmarks (TBB is required
-  # on Unix via the main library, but optional on Windows)
-  if(WIN32)
-    find_package(TBB QUIET)
-    if(TBB_FOUND)
-      target_link_libraries(${BENCHMARK_EXE_NAME} PRIVATE TBB::tbb)
-      message(
-        STATUS "TBB found for benchmark: thread control enabled on Windows")
-    else()
-      message(
-        STATUS "TBB not found for benchmark: thread control disabled on Windows"
-      )
-    endif()
+  # TBB is optional for thread control in benchmarks. If found, enables
+  # tbb::global_control for precise thread count control. Otherwise, uses
+  # std::execution with OS default thread count.
+  find_package(TBB QUIET)
+  if(TBB_FOUND)
+    target_link_libraries(${BENCHMARK_EXE_NAME} PRIVATE TBB::tbb)
+    message(STATUS "TBB found for benchmark: thread control enabled")
+  else()
+    message(
+      STATUS
+        "TBB not found for benchmark: using std::execution (OS default threads)"
+    )
   endif()
 
   # benchmark.cpp reads file paths / timing only – no LASPP_DEBUG_ASSERTS

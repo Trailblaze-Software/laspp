@@ -106,19 +106,15 @@ if(LASPP_DEBUG_ASSERTS)
   target_compile_definitions(${LIBRARY_NAME} INTERFACE LASPP_DEBUG_ASSERTS)
 endif()
 
-# TBB is required on Unix, optional on Windows (for thread control in
-# benchmarks)
-if(UNIX)
-  find_package(TBB REQUIRED)
+# TBB is optional everywhere - the code uses std::execution::par_unseq
+# (C++17/C++20) when TBB is not available. TBB provides tbb::global_control for
+# thread count control in benchmarks, but is not required for the core library
+# functionality.
+find_package(TBB QUIET)
+if(TBB_FOUND)
   target_link_libraries(${LIBRARY_NAME} INTERFACE TBB::tbb)
-elseif(WIN32)
-  # On Windows, try to find TBB for better thread control If found, the library
-  # will use TBB parallel_for instead of std::execution
-  find_package(TBB QUIET)
-  if(TBB_FOUND)
-    target_link_libraries(${LIBRARY_NAME} INTERFACE TBB::tbb)
-  endif()
 endif()
+
 target_compile_definitions(${LIBRARY_NAME}
                            INTERFACE LASPP_VERSION="${PROJECT_VERSION}")
 
