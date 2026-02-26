@@ -19,8 +19,15 @@
 
 #include <cstdint>
 #include <iostream>
-#include <optional>
 #include <vector>
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4389)  // signed/unsigned mismatch in MSVC std::optional implementation
+#endif
+#include <optional>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"

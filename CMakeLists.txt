@@ -30,6 +30,8 @@ set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 if(LASPP_BUILD_TESTS)
   include(cmake/SetupLaszip.cmake)
   setup_laszip()
+  include(cmake/SetupLazperf.cmake)
+  setup_lazperf()
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
@@ -54,19 +56,12 @@ if(WIN32)
                         "-Werror")
   else()
     add_compile_options(
-      "/openmp:llvm"
       "/W4"
       "/WX"
-      "/wd4514" # Unreferenced inline function removed - unavoidable in
-                # header-only libraries
-      "/wd4267" # size_t narrowing in MSVC STL templates - fires in STL headers
-                # not our code
-      "/wd4244" # Narrowing conversion in MSVC STL templates - fires in STL
-                # headers not our code
-      "/experimental:external" # Enable external header suppression
-      "/external:anglebrackets" # Treat angle-bracket includes as external
-                                # (system) headers
-      "/external:W0") # Suppress all warnings from external/system headers
+      # C4267/C4244: size_t/type narrowing inside MSVC STL template bodies.
+      "/wd4267" # size_t narrowing in MSVC STL <xutility> template
+                # instantiations
+      "/wd4244") # type narrowing in MSVC STL <xutility> template instantiations
   endif()
 elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
@@ -111,9 +106,19 @@ if(LASPP_DEBUG_ASSERTS)
   target_compile_definitions(${LIBRARY_NAME} INTERFACE LASPP_DEBUG_ASSERTS)
 endif()
 
-find_package(OpenMP REQUIRED)
-
-target_link_libraries(${LIBRARY_NAME} INTERFACE OpenMP::OpenMP_CXX)
+# TBB is required on Unix, optional on Windows (for thread control in
+# benchmarks)
+if(UNIX)
+  find_package(TBB REQUIRED)
+  target_link_libraries(${LIBRARY_NAME} INTERFACE TBB::tbb)
+elseif(WIN32)
+  # On Windows, try to find TBB for better thread control If found, the library
+  # will use TBB parallel_for instead of std::execution
+  find_package(TBB QUIET)
+  if(TBB_FOUND)
+    target_link_libraries(${LIBRARY_NAME} INTERFACE TBB::tbb)
+  endif()
+endif()
 target_compile_definitions(${LIBRARY_NAME}
                            INTERFACE LASPP_VERSION="${PROJECT_VERSION}")
 
@@ -158,41 +163,26 @@ if(LASPP_BUILD_TESTS)
     file(GLOB LASZIP_WRAPPER_SOURCES "${laszip_SOURCE_DIR}/src/laszipper.cpp"
          "${laszip_SOURCE_DIR}/src/lasunzipper.cpp")
 
+    # Add wrapper files as sources to the test and suppress their warnings:
+    # these are third-party laszip files, not laspp code.
+    target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
     if(MSVC)
-      # On MSVC, compile the laszip wrapper files in a separate OBJECT library
-      # so that they get their own intermediate directory (and therefore their
-      # own vc143.pdb). Without this, all three source files in
-      # test_laszip_interop would write to the same compiler PDB simultaneously,
-      # causing C1041.
-      add_library(_test_laszip_wrappers OBJECT ${LASZIP_WRAPPER_SOURCES})
-      # Override global /W4 /WX — these are third-party files, suppress
-      # everything.
-      target_compile_options(_test_laszip_wrappers PRIVATE /W0 /WX-)
-      link_target_to_laszip(_test_laszip_wrappers)
-      # Pull the compiled .obj files into the test executable.
-      target_sources(test_laszip_interop
-                     PRIVATE $<TARGET_OBJECTS:_test_laszip_wrappers>)
-    else()
-      # On non-MSVC, add the wrapper files directly and suppress the warnings
-      # they generate (they are third-party code).
-      target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
+      set_source_files_properties(${LASZIP_WRAPPER_SOURCES}
+                                  PROPERTIES COMPILE_FLAGS "/W0")
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       set_source_files_properties(
         ${LASZIP_WRAPPER_SOURCES}
-        PROPERTIES
-          COMPILE_FLAGS
-          "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion"
-      )
-      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set_source_files_properties(
-          ${LASZIP_WRAPPER_SOURCES}
-          PROPERTIES
-            COMPILE_FLAGS
-            "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion -Wno-useless-cast"
-        )
-      endif()
+        PROPERTIES COMPILE_FLAGS
+                   "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion \
+-Wno-conversion -Wno-useless-cast")
+    else()
+      set_source_files_properties(
+        ${LASZIP_WRAPPER_SOURCES}
+        PROPERTIES COMPILE_FLAGS
+                   "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion \
+-Wno-conversion")
     endif()
 
-    # Link against laszip (adds headers + link libraries; works for both paths)
     link_target_to_laszip(test_laszip_interop)
   endif()
 endif()

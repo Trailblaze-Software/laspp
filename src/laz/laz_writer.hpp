@@ -17,8 +17,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstring>
+#include <execution>
+#include <future>
 #include <memory>
+#include <numeric>
 #include <span>
 #include <sstream>
 #include <string>
@@ -276,22 +280,52 @@ class LAZWriter {
       while (index.value() > m_chunk_table.num_chunks()) {
       }
     }
-#pragma omp critical
-    {
-      m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
-                              static_cast<uint32_t>(compressed_chunk_size));
-      m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
-      m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
-                                     ? m_chunk_table.constant_chunk_size().value()
-                                     : std::numeric_limits<uint32_t>::max();
-    }
+    m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
+                            static_cast<uint32_t>(compressed_chunk_size));
+    m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
+    m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
+                                   ? m_chunk_table.constant_chunk_size().value()
+                                   : std::numeric_limits<uint32_t>::max();
   }
 
   template <typename T>
   void write_chunks(const std::span<std::span<T>> chunks) {
-    // #pragma omp parallel for
+    // Pipeline: launch all compressions asynchronously, then write chunks in order
+    // as soon as each one completes. This overlaps compression (CPU) with I/O.
+    struct ChunkResult {
+      std::string payload;
+      uint32_t compressed_size;
+      uint32_t points_count;
+    };
+
+    std::vector<std::future<ChunkResult>> compression_futures;
+    compression_futures.reserve(chunks.size());
+
+    // Launch all compressions asynchronously
     for (size_t i = 0; i < chunks.size(); i++) {
-      write_chunk(chunks[i], i);
+      compression_futures.push_back(
+          std::async(std::launch::async, [this, chunk = chunks[i]]() -> ChunkResult {
+            std::stringstream compressed_chunk = compress_chunk(chunk);
+            int64_t compressed_chunk_size = compressed_chunk.tellp();
+            LASPP_ASSERT_LT(chunk.size(), std::numeric_limits<uint32_t>::max());
+            LASPP_ASSERT_LT(compressed_chunk_size, std::numeric_limits<uint32_t>::max());
+
+            ChunkResult result;
+            result.payload = compressed_chunk.str();
+            result.compressed_size = static_cast<uint32_t>(compressed_chunk_size);
+            result.points_count = static_cast<uint32_t>(chunk.size());
+            return result;
+          }));
+    }
+
+    // Write chunks in order as they become ready (pipelined I/O)
+    for (size_t i = 0; i < chunks.size(); i++) {
+      ChunkResult result = compression_futures[i].get();
+      m_chunk_table.add_chunk(result.points_count, result.compressed_size);
+      m_stream.write(result.payload.data(), static_cast<std::streamsize>(result.compressed_size));
+      m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
+                                     ? m_chunk_table.constant_chunk_size().value()
+                                     : std::numeric_limits<uint32_t>::max();
     }
   }
 

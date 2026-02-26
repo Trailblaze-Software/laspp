@@ -17,10 +17,19 @@
 
 #pragma once
 
+#include <algorithm>
+#include <execution>
+#include <numeric>
 #include <optional>
 #include <span>
 #include <type_traits>
 #include <vector>
+
+// TBB parallel_for for better thread control (if available)
+#if __has_include(<tbb/parallel_for.h>)
+#include <tbb/parallel_for.h>
+#define LASPP_HAS_TBB_PARALLEL 1
+#endif
 
 #include "example_custom_las_point.hpp"
 #include "las_header.hpp"
@@ -271,9 +280,14 @@ class LASReader {
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(compressed_data.data()),
                                            static_cast<int64_t>(compressed_data.size())));
 
-#pragma omp parallel for schedule(dynamic)
-      for (size_t chunk_index = chunk_indexes.first; chunk_index < chunk_indexes.second;
-           chunk_index++) {
+      std::vector<size_t> chunk_indices(chunk_indexes.second - chunk_indexes.first);
+      std::iota(chunk_indices.begin(), chunk_indices.end(), chunk_indexes.first);
+
+      // Use TBB parallel_for if available for better thread control (respects global_control),
+      // otherwise fall back to std::execution::par_unseq
+#ifdef LASPP_HAS_TBB_PARALLEL
+      tbb::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
+        size_t chunk_index = chunk_indices[idx];
         size_t start_offset =
             m_laz_reader->chunk_table().chunk_offset(chunk_index) - compressed_start_offset;
         size_t compressed_chunk_size =
@@ -290,7 +304,29 @@ class LASReader {
         }
         m_laz_reader->decompress_chunk(compressed_chunk,
                                        output_location.subspan(point_offset, n_points));
-      }
+      });
+#else
+      std::for_each(
+          std::execution::par_unseq, chunk_indices.begin(), chunk_indices.end(),
+          [&](size_t chunk_index) {
+            size_t start_offset =
+                m_laz_reader->chunk_table().chunk_offset(chunk_index) - compressed_start_offset;
+            size_t compressed_chunk_size =
+                m_laz_reader->chunk_table().compressed_chunk_size(chunk_index);
+            std::span<std::byte> compressed_chunk =
+                std::span<std::byte>(compressed_data).subspan(start_offset, compressed_chunk_size);
+
+            size_t point_offset =
+                m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_index] -
+                m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_indexes.first];
+            size_t n_points = m_laz_reader->chunk_table().points_per_chunk()[chunk_index];
+            if (chunk_index == 0) {
+              LASPP_ASSERT_EQ(point_offset, 0u);
+            }
+            m_laz_reader->decompress_chunk(compressed_chunk,
+                                           output_location.subspan(point_offset, n_points));
+          });
+#endif
       return output_location.subspan(0, total_n_points);
     }
     LASPP_ASSERT(chunk_indexes.first == 0);
