@@ -18,16 +18,18 @@
 #pragma once
 
 #include <array>
-#include <bit>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <istream>
 #include <limits>
+#include <vector>
 
 #include "utilities/assert.hpp"
 
 namespace laspp {
 
+// Kept for backward-compatibility; no longer used in the hot decompression path.
 class PointerStreamBuffer : public std::streambuf {
  public:
   PointerStreamBuffer(std::byte* data, size_t size) {
@@ -36,18 +38,28 @@ class PointerStreamBuffer : public std::streambuf {
   }
 };
 
-#define BORING_VERSION
-
 struct StreamVariables {
   uint32_t m_base = 0;
   uint32_t m_value = 0;
   uint32_t m_length = std::numeric_limits<uint32_t>::max();
 };
 
-#ifdef BORING_VERSION
+// Arithmetic-coding input stream.
+//
+// The fast constructor takes a raw pointer to already-in-memory compressed data and reads
+// directly from it — no virtual dispatch, no intermediate buffer.  This is the path used
+// by all LAZ chunk decompression.
+//
+// The legacy std::istream& constructor slurps all remaining stream data into an owned
+// buffer and then uses the same pointer-based read path; it exists for tests and any
+// callers that work with file streams.
 class InStream : StreamVariables {
-  constexpr static size_t BUFFER_SIZE = 1024;
-  std::istream& m_stream;
+  const std::byte* m_ptr = nullptr;
+
+  // Owned buffer used only by the std::istream& constructor.
+  std::vector<std::byte> m_owned_data;
+
+  [[nodiscard]] std::byte read_byte() noexcept { return *m_ptr++; }
 
  public:
   InStream(const InStream&) = delete;
@@ -55,190 +67,68 @@ class InStream : StreamVariables {
   InStream(InStream&&) = delete;
   InStream& operator=(InStream&&) = delete;
 
- private:
-  std::array<std::byte, BUFFER_SIZE> m_buffer;
-  size_t buffer_idx;
-
-  std::byte read_byte() {
-    if (buffer_idx == BUFFER_SIZE) {
-      m_stream.read(reinterpret_cast<char*>(m_buffer.data()), BUFFER_SIZE);
-      if (!m_stream) {
-        m_stream.clear();
-      }
-      buffer_idx = 0;
-    }
-    return m_buffer[buffer_idx++];
-  }
-
-  template <size_t Extent>
-  void read_bytes(std::span<std::byte, Extent> bytes) {
-    if constexpr (Extent == 1) {
-      bytes[0] = read_byte();
-      return;
-    } else if constexpr (Extent == 2) {
-      if (buffer_idx + 2 < BUFFER_SIZE) {
-        bytes[0] = m_buffer[buffer_idx++];
-        bytes[1] = m_buffer[buffer_idx++];
-      } else {
-        bytes[0] = read_byte();
-        bytes[1] = read_byte();
-      }
-      return;
-    } else if constexpr (Extent == 3) {
-      if (buffer_idx + 3 < BUFFER_SIZE) {
-        bytes[0] = m_buffer[buffer_idx++];
-        bytes[1] = m_buffer[buffer_idx++];
-        bytes[2] = m_buffer[buffer_idx++];
-      } else {
-        bytes[0] = read_byte();
-        bytes[1] = read_byte();
-        bytes[2] = read_byte();
-      }
-      return;
-    } else {
-      static_assert(Extent == 1);
-    }
-  }
-
- public:
-  explicit InStream(std::istream& stream) : m_stream(stream), m_buffer(), buffer_idx(BUFFER_SIZE) {
+  // Fast path: construct directly from in-memory data.  No copies, no virtual dispatch.
+  // `size` is accepted for documentation / potential debug-mode bounds checking.
+  InStream(const std::byte* data, [[maybe_unused]] size_t size) noexcept : m_ptr(data) {
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
+      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(read_byte()));
     }
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  uint32_t length() const { return m_length; }
-
-  void update_range(uint32_t lower, uint32_t upper) {
-    m_value -= lower;
-    m_length = upper - lower;
-  }
-
-  uint32_t get_value() {
-    if (length() < (1 << 8)) {
-      m_value <<= 24;
-      m_length <<= 24;
-      uint32_t new_3_bytes = 0;
-      std::array<std::byte, 3>& bla = *reinterpret_cast<std::array<std::byte, 3>*>(&new_3_bytes);
-      read_bytes(std::span<std::byte, 3>(bla));
-      std::swap(bla[0], bla[2]);
-      m_value |= new_3_bytes;
-    } else if (length() < (1 << 16)) {
-      m_value <<= 16;
-      m_length <<= 16;
-      uint16_t new_2_bytes;
-      read_bytes(std::span<std::byte, 2>(reinterpret_cast<std::array<std::byte, 2>&>(new_2_bytes)));
-      m_value |= std::rotl(new_2_bytes, 8);
-    } else if (length() < (1 << 24)) {
-      m_value <<= 8;
-      m_length <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
-    }
-    return m_value;
-  }
-};
-
-#else
-class InStream : StreamVariables {
-  constexpr static size_t BUFFER_SIZE = 256;
-  std::istream& m_stream;
-  std::array<uint32_t, BUFFER_SIZE> m_buffer;
-  uint64_t current_big_chunk;
-  uint32_t num_bytes_valid;
-  uint32_t buffer_idx;
-  int64_t valid_elements = std::numeric_limits<uint32_t>::max();
-
-  uint32_t read_chunk() {
-    if (buffer_idx == BUFFER_SIZE) {
-      m_stream.read(reinterpret_cast<char*>(m_buffer.data()), sizeof(m_buffer));
-      if (!m_stream) {
-        valid_elements = (m_stream.gcount() + 3) / 4;
-        m_stream.clear();
-      }
-      buffer_idx = 0;
-    }
-    LASPP_ASSERT_GE(valid_elements, buffer_idx);
-    return m_buffer[buffer_idx++];
-  }
-
-  static_assert(std::endian::native == std::endian::little);
-
-  void update_chunk() {
-    if (num_bytes_valid < 4) {
-      uint64_t new_chunk = read_chunk();
-      current_big_chunk |= (new_chunk << (num_bytes_valid * 8));
-      num_bytes_valid += 4;
-    }
-  }
-
-  std::byte read_byte() {
-    update_chunk();
-    uint8_t byte = static_cast<uint8_t>(current_big_chunk);
-    current_big_chunk >>= 8;
-    num_bytes_valid--;
-    return static_cast<std::byte>(byte);
-  }
-
-  template <uint32_t NumBytes>
-  uint32_t read_bytes() {
-    static_assert(NumBytes > 0 && NumBytes < 4);
-    update_chunk();
-    uint32_t new_bytes = current_big_chunk & ((1u << (NumBytes * 8)) - 1);
-    current_big_chunk >>= NumBytes * 8;
-    num_bytes_valid -= NumBytes;
-    if constexpr (NumBytes == 2) {
-      std::array<uint8_t, 4>& new_bytes_32 = reinterpret_cast<std::array<uint8_t, 4>&>(new_bytes);
-      std::swap(new_bytes_32[0], new_bytes_32[1]);
-    } else if constexpr (NumBytes == 3) {
-      std::array<uint8_t, 4>& new_bytes_32 = reinterpret_cast<std::array<uint8_t, 4>&>(new_bytes);
-      std::swap(new_bytes_32[0], new_bytes_32[2]);
-    }
-    return new_bytes;
-  }
-
- public:
-  explicit InStream(std::istream& stream)
-      : m_stream(stream),
-        m_buffer(),
-        current_big_chunk(0),
-        num_bytes_valid(0),
-        buffer_idx(BUFFER_SIZE) {
+  // Legacy path for tests and streaming callers: reads all remaining data from `stream`
+  // into an owned buffer, then proceeds as the pointer constructor.
+  explicit InStream(std::istream& stream) {
+    auto cur = stream.tellg();
+    stream.seekg(0, std::ios::end);
+    auto end_pos = stream.tellg();
+    stream.seekg(cur);
+    size_t sz = static_cast<size_t>(end_pos - cur);
+    m_owned_data.resize(sz);
+    stream.read(reinterpret_cast<char*>(m_owned_data.data()), static_cast<std::streamsize>(sz));
+    m_ptr = m_owned_data.data();
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
+      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(read_byte()));
     }
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  uint32_t length() const { return m_length; }
+  uint32_t length() const noexcept { return m_length; }
 
-  void update_range(uint32_t lower, uint32_t upper) {
+  void update_range(uint32_t lower, uint32_t upper) noexcept {
     m_value -= lower;
     m_length = upper - lower;
   }
 
-  uint32_t get_value() {
-    if (length() < (1 << 8)) {
+  // Renormalise the range coder and return the current value.  Reads 0, 1, 2 or 3 bytes
+  // from the in-memory pointer — the common case (length >= 2^24) reads nothing, so this
+  // is very cheap on average.
+  uint32_t get_value() noexcept {
+    if (m_length < (1u << 8)) {
       m_value <<= 24;
       m_length <<= 24;
-      m_value |= read_bytes<3>();
-    } else if (length() < (1 << 16)) {
+      // Read 3 bytes big-endian.
+      m_value |= (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) << 16) |
+                 (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1])) << 8) |
+                 static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2]));
+      m_ptr += 3;
+    } else if (m_length < (1u << 16)) {
       m_value <<= 16;
       m_length <<= 16;
-      m_value |= read_bytes<2>();
-    } else if (length() < (1 << 24)) {
+      // Read 2 bytes big-endian.
+      m_value |= (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) << 8) |
+                 static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1]));
+      m_ptr += 2;
+    } else if (m_length < (1u << 24)) {
       m_value <<= 8;
       m_length <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
+      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
     }
     return m_value;
   }
-
-  std::istream& stream() { return m_stream; }
 };
-#endif
 
 class OutStream : StreamVariables {
   std::iostream& m_stream;

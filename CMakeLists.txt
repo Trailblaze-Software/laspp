@@ -17,6 +17,7 @@ cmake_minimum_required(VERSION 3.20)
 
 option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
 option(LASPP_BUILD_TESTS "Build tests" ON)
+option(LASPP_BUILD_BENCHMARK "Build benchmark" ON)
 option(LASPP_BUILD_APPS "Build apps" ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -27,11 +28,13 @@ project(
   LANGUAGES CXX)
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
-if(LASPP_BUILD_TESTS)
+if(LASPP_BUILD_TESTS OR LASPP_BUILD_BENCHMARK)
   include(cmake/SetupLaszip.cmake)
   setup_laszip()
-  include(cmake/SetupLazperf.cmake)
-  setup_lazperf()
+  if(LASPP_BUILD_BENCHMARK)
+    include(cmake/SetupLazperf.cmake)
+    setup_lazperf()
+  endif()
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
@@ -104,15 +107,6 @@ target_include_directories(${LIBRARY_NAME} INTERFACE src)
 if(LASPP_DEBUG_ASSERTS)
   message(WARNING "Enabling LAS++ debugging asserts. May be slow.")
   target_compile_definitions(${LIBRARY_NAME} INTERFACE LASPP_DEBUG_ASSERTS)
-endif()
-
-# TBB is optional everywhere - the code uses std::execution::par_unseq
-# (C++17/C++20) when TBB is not available. TBB provides tbb::global_control for
-# thread count control in benchmarks, but is not required for the core library
-# functionality.
-find_package(TBB QUIET)
-if(TBB_FOUND)
-  target_link_libraries(${LIBRARY_NAME} INTERFACE TBB::tbb)
 endif()
 
 target_compile_definitions(${LIBRARY_NAME}

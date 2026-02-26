@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstring>
+#include <sstream>
 
 #include "stream.hpp"
 
@@ -60,8 +61,8 @@ class LayeredInStreams {
   LayeredInStreams& operator=(LayeredInStreams&&) = delete;
 
  private:
-  AlwaysConstructedArray<PointerStreamBuffer, N_STREAMS> m_layer_stream_buffers;
-  AlwaysConstructedArray<std::istream, N_STREAMS> m_layer_streams;
+  // Each InStream reads directly from its slice of the in-memory compressed data —
+  // no PointerStreamBuffer or std::istream wrapper needed.
   AlwaysConstructedArray<InStream, N_STREAMS> m_streams;
   std::array<bool, N_STREAMS> m_non_empty{};
 
@@ -72,9 +73,7 @@ class LayeredInStreams {
       std::memcpy(&layer_size, layer_sizes.data(), sizeof(layer_size));
       m_non_empty[i] = layer_size > 0;
       layer_sizes = layer_sizes.subspan(sizeof(layer_size));
-      m_layer_stream_buffers.construct(i, compressed_layer_data.data(), layer_size);
-      m_layer_streams.construct(i, &m_layer_stream_buffers[i]);
-      m_streams.construct(i, m_layer_streams[i]);
+      m_streams.construct(i, compressed_layer_data.data(), static_cast<size_t>(layer_size));
       compressed_layer_data = compressed_layer_data.subspan(layer_size);
     }
   }

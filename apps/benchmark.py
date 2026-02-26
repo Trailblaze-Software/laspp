@@ -193,6 +193,9 @@ def run_cpp_benchmark(
     Invoke the C++ benchmark binary and parse its JSON output.
 
     Returns (metadata_dict, list_of_BenchResult).
+
+    Note: The C++ benchmark sets LASPP_NUM_THREADS internally for each thread count,
+    but we also set it here in the environment for consistency.
     """
     cmd = [
         str(binary),
@@ -209,7 +212,11 @@ def run_cpp_benchmark(
     if not include_lazperf:
         cmd.append("--no-lazperf")
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # Set LASPP_NUM_THREADS in environment (C++ benchmark will override per-thread-count internally)
+    env = os.environ.copy()
+    # Note: The C++ benchmark sets LASPP_NUM_THREADS internally via ThreadControl,
+    # but setting it here ensures it's available if needed
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if proc.returncode != 0:
         raise RuntimeError(
             f"benchmark binary failed (exit {proc.returncode}):\n{proc.stderr}"
@@ -622,9 +629,10 @@ def plot_results(
 
         # Plot thread-scaling tools as lines
         for tool in scaling_tools:
+            # Get all points including default (threads=0)
             tool_pts = sorted(
                 [(s.threads, s.mb_per_s)
-                 for s in op_results if s.tool == tool and s.threads > 0],
+                 for s in op_results if s.tool == tool and s.threads >= 0],
                 key=lambda x: x[0],
             )
             if tool_pts:
@@ -634,10 +642,17 @@ def plot_results(
                     tool_colors[tool] = colors[len(tool_colors) % len(colors)]
                 col = tool_colors[tool]
                 label = "LAS++" if tool == "laspp" else "lazrs (laspy)"
-                ax.plot(xs, ys, "o-", label=label, linewidth=2, markersize=6, color=col)
+                # Plot the line
+                ax.plot(xs, ys, "-", label=label, linewidth=2, color=col)
+                # Plot markers, using square for default (threads=0) and circle for others
+                for x, y in tool_pts:
+                    if x == 0:
+                        ax.plot(x, y, "s", color=col, markersize=8, zorder=5)
+                    else:
+                        ax.plot(x, y, "o", color=col, markersize=6, zorder=5)
 
         # Single-threaded tools as horizontal dashed lines
-        single_threaded_tools = ["laszip", "lazperf"]
+        single_threaded_tools = ["laszip", "lazperf", "pdal"]
 
         for tool in single_threaded_tools:
             tool_results = [s for s in op_results if s.tool == tool]
@@ -757,7 +772,11 @@ def main() -> int:
         else:
             print(f"Using C++ benchmark binary: {binary}")
             include_laszip = "laszip" in tools
-            include_laspp_threads = thread_counts if "laspp" in tools else [1]
+            if "laspp" in tools:
+                # Add "default" (0 = unset LASPP_NUM_THREADS) to thread counts
+                include_laspp_threads = [0] + thread_counts
+            else:
+                include_laspp_threads = [1]
             try:
                 meta, cpp_results = run_cpp_benchmark(
                     binary=binary,

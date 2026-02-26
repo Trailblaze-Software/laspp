@@ -228,9 +228,7 @@ class LAZReader {
         }
       }
     } else {
-      PointerStreamBuffer compressed_buffer(compressed_data.data(), compressed_data.size());
-      std::istream compressed_stream(&compressed_buffer);
-      InStream compressed_in_stream(compressed_stream);
+      InStream compressed_in_stream(compressed_data.data(), compressed_data.size());
       for (size_t i = 0; i < decompressed_data.size(); i++) {
         for (LAZEncoder& laz_encoder : encoders) {
           std::visit(

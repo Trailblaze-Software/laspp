@@ -35,14 +35,24 @@ function(setup_lazperf)
     lazperf
     GIT_REPOSITORY https://github.com/hobuinc/laz-perf.git
     GIT_TAG master)
-  FetchContent_MakeAvailable(lazperf)
+
+  # Populate lazperf and set WITH_TESTS before its CMakeLists.txt processes
+  FetchContent_GetProperties(lazperf)
+  if(NOT lazperf_POPULATED)
+    FetchContent_Populate(lazperf)
+    set(WITH_TESTS
+        FALSE
+        CACHE BOOL "Choose if LAZPERF unit tests should be built" FORCE)
+    add_subdirectory(${lazperf_SOURCE_DIR} ${lazperf_BINARY_DIR}
+                     EXCLUDE_FROM_ALL)
+  endif()
 
   # LAZperf creates a target named 'lazperf' (or similar). Check what was
   # created.
   if(NOT TARGET lazperf)
     message(
       FATAL_ERROR
-        "LAZperf target 'lazperf' not found after FetchContent_MakeAvailable()")
+        "LAZperf target 'lazperf' not found after FetchContent_Populate()")
   endif()
 
   # Create a consistent alias

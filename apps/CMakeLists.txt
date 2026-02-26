@@ -42,7 +42,9 @@ if(LASPP_BUILD_TESTS)
     TARGETS ${TEST_LASPP_LASZIP_EXE_NAME}
     DESTINATION bin
     COMPONENT applications)
+endif()
 
+if(LASPP_BUILD_BENCHMARK)
   # Performance benchmark comparing LAS++ (multi-threaded) vs laszip, with JSON
   # output consumed by the companion benchmark.py Python script.
   set(BENCHMARK_EXE_NAME benchmark)
@@ -69,27 +71,6 @@ if(LASPP_BUILD_TESTS)
           $<TARGET_FILE_DIR:${BENCHMARK_EXE_NAME}>)
     endif()
   endif()
-
-  # TBB is optional for thread control in benchmarks. If found, enables
-  # tbb::global_control for precise thread count control. Otherwise, uses
-  # std::execution with OS default thread count.
-  find_package(TBB QUIET)
-  if(TBB_FOUND)
-    target_link_libraries(${BENCHMARK_EXE_NAME} PRIVATE TBB::tbb)
-    message(STATUS "TBB found for benchmark: thread control enabled")
-  else()
-    message(
-      STATUS
-        "TBB not found for benchmark: using std::execution (OS default threads)"
-    )
-  endif()
-
-  # benchmark.cpp reads file paths / timing only – no LASPP_DEBUG_ASSERTS
-  # overhead wanted here.  The library interface adds LASPP_DEBUG_ASSERTS if the
-  # option is ON, but we want to compile the benchmark without it for accurate
-  # performance measurements. We can't easily remove interface definitions, so
-  # we'll just note that benchmarks should be run with -DLASPP_DEBUG_ASSERTS=OFF
-  # for best performance.
 
   install(
     TARGETS ${BENCHMARK_EXE_NAME}

@@ -39,13 +39,7 @@
 #endif
 #endif
 
-// ── TBB global thread-count control ────────────────────────────────────────
-// TBB provides cross-platform thread control. On Windows, if TBB is available,
-// we use it. Otherwise, we fall back to no control (all cores used).
-#if __has_include(<tbb/global_control.h>)
-#include <tbb/global_control.h>
-#define LASPP_HAS_TBB_CONTROL 1
-#endif
+// ── Thread count control via LASPP_NUM_THREADS environment variable ─────────
 
 // ── LASzip C API ─────────────────────────────────────────────────────────────
 #include <laszip_api.h>
@@ -64,6 +58,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -75,6 +70,10 @@
 #include <string>
 #include <thread>
 #include <vector>
+#ifdef _WIN32
+#include <cstdlib>
+#include <memory>
+#endif
 
 #include "las_point.hpp"
 #include "las_reader.hpp"
@@ -92,22 +91,78 @@ static double elapsed_since(std::chrono::time_point<Clock> t0) {
   return std::chrono::duration_cast<Seconds>(Clock::now() - t0).count();
 }
 
-// ── Thread control RAII ───────────────────────────────────────────────────────
+// ── Thread control via environment variable ──────────────────────────────────
 
 struct ThreadControl {
-#ifdef LASPP_HAS_TBB_CONTROL
-  std::unique_ptr<tbb::global_control> ctrl;
-#endif
+  std::string old_value;
+  bool had_old_value;
+  bool should_unset;
 
-  explicit ThreadControl(int n_threads) {
-#ifdef LASPP_HAS_TBB_CONTROL
-    if (n_threads > 0) {
-      ctrl = std::make_unique<tbb::global_control>(tbb::global_control::max_allowed_parallelism,
-                                                   static_cast<std::size_t>(n_threads));
+  explicit ThreadControl(int n_threads) : had_old_value(false), should_unset(false) {
+#ifdef _WIN32
+    // Use _dupenv_s on Windows to avoid deprecation warning
+    char* old = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&old, &len, "LASPP_NUM_THREADS") == 0 && old != nullptr) {
+      std::unique_ptr<char, decltype(&free)> guard(old, &free);
+      old_value = old;
+      had_old_value = true;
     }
 #else
-    (void)n_threads;
+    const char* old = std::getenv("LASPP_NUM_THREADS");
+    if (old != nullptr) {
+      old_value = old;
+      had_old_value = true;
+    }
 #endif
+    if (n_threads > 0) {
+      std::string new_value = std::to_string(n_threads);
+#ifdef _WIN32
+      _putenv_s("LASPP_NUM_THREADS", new_value.c_str());
+#else
+      setenv("LASPP_NUM_THREADS", new_value.c_str(), 1);
+#endif
+    } else if (n_threads == 0 && had_old_value) {
+      // n_threads == 0 means use default, so unset the environment variable
+#ifdef _WIN32
+      _putenv_s("LASPP_NUM_THREADS", "");
+#else
+      unsetenv("LASPP_NUM_THREADS");
+#endif
+      should_unset = true;
+    }
+  }
+
+  ~ThreadControl() {
+    if (had_old_value) {
+      // Restore the original value
+#ifdef _WIN32
+      _putenv_s("LASPP_NUM_THREADS", old_value.c_str());
+#else
+      setenv("LASPP_NUM_THREADS", old_value.c_str(), 1);
+#endif
+    } else if (should_unset) {
+      // We unset it, so keep it unset (nothing to restore)
+      // No action needed
+    } else {
+      // We set a new value, so unset it if it wasn't there before
+#ifdef _WIN32
+      // Use _dupenv_s on Windows to avoid deprecation warning
+      char* current = nullptr;
+      size_t len = 0;
+      bool has_current =
+          (_dupenv_s(&current, &len, "LASPP_NUM_THREADS") == 0 && current != nullptr);
+      if (has_current) {
+        std::unique_ptr<char, decltype(&free)> guard(current, &free);
+        _putenv_s("LASPP_NUM_THREADS", "");
+      }
+#else
+      const char* current = std::getenv("LASPP_NUM_THREADS");
+      if (current != nullptr) {
+        unsetenv("LASPP_NUM_THREADS");
+      }
+#endif
+    }
   }
 };
 
@@ -499,12 +554,7 @@ int main(int argc, char* argv[]) {
 #endif
   std::cout << "\",\n";
 
-  std::cout << "  \"has_thread_control\": ";
-#ifdef LASPP_HAS_TBB_CONTROL
-  std::cout << "true";
-#else
-  std::cout << "false";
-#endif
+  std::cout << "  \"has_thread_control\": true";  // Always available via LASPP_NUM_THREADS
   std::cout << ",\n";
 
   std::cout << "  \"hardware_threads\": " << hw_threads << ",\n";

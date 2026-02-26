@@ -61,8 +61,9 @@ int main(int argc, char* argv[]) {
     pt.y = coord_dist(rng);
     pt.z = coord_dist(rng);
     pt.intensity = intensity_dist(rng);
-    pt.bit_byte.return_number = static_cast<uint8_t>(return_num_dist(rng));
-    pt.bit_byte.number_of_returns = static_cast<uint8_t>(return_num_dist(rng));
+    // Mask to 3 bits (0-7) to avoid conversion warnings for bitfields
+    pt.bit_byte.return_number = static_cast<uint8_t>(return_num_dist(rng) & 0x7);
+    pt.bit_byte.number_of_returns = static_cast<uint8_t>(return_num_dist(rng) & 0x7);
     pt.bit_byte.scan_direction_flag = 0;
     pt.bit_byte.edge_of_flight_line = 0;
     pt.classification_byte.classification = LASClassification::Unclassified;
