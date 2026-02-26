@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -75,6 +75,17 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
   throw std::runtime_error(ss.str());
 }
 
+#ifdef _MSC_VER
+#define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)                                            \
+  {                                                                                        \
+    const auto A = a;                                                                      \
+    const auto B = b;                                                                      \
+    __pragma(warning(push)) __pragma(warning(disable : 4127)) if (!((A)op(B)))             \
+        __pragma(warning(pop)) laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop),       \
+                                                       laspp::OptionalString(__VA_ARGS__), \
+                                                       std::source_location::current());   \
+  }
+#else
 #define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)                                                 \
   {                                                                                             \
     const auto A = a;                                                                           \
@@ -83,6 +94,7 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
       laspp::_LASPP_FAILBinOp((A), (B), (#a), (#b), (#nop), laspp::OptionalString(__VA_ARGS__), \
                               std::source_location::current());                                 \
   }
+#endif
 
 template <typename A, typename B>
 inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
@@ -163,8 +175,8 @@ class RawString {
 #define NOBRACKET
 
 constexpr int32_t f_arr([[maybe_unused]] std::array<int, 2> arr) { return 1; }
-static_assert(f_arr({4, 4}));
-static_assert(f_arr(DEBRACKET(({4, 4}))));
+static_assert(f_arr(std::array<int, 2>{{4, 4}}));
+static_assert(f_arr(DEBRACKET((std::array<int, 2>{{4, 4}}))));
 
 #define LASPP_ASSERT_RAW_STR_EQ(expr, val) \
   LASPP_ASSERT_EQ(laspp::RawString(DEBRACKET(expr)), laspp::RawString(DEBRACKET(val)))

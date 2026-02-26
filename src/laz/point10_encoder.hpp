@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -89,8 +89,8 @@ class LASPointFormat0Encoder {
             m_prev_intensities[m_m] + m_intensity_encoder.decode_int(m_m, stream));
       } else {
         m_last_las_point.intensity =
-            m_prev_intensities[m_m] +
-            static_cast<uint16_t>(m_intensity_encoder.decode_int(3, stream));
+            static_cast<uint16_t>(m_prev_intensities[m_m] +
+                                  static_cast<uint16_t>(m_intensity_encoder.decode_int(3, stream)));
       }
       m_prev_intensities[m_m] = m_last_las_point.intensity;
     } else {

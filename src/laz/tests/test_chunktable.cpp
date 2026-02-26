@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -73,7 +73,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPP_ASSERT_EQ(read_chunktable.compressed_chunk_size(i), 40u + i);
       LASPP_ASSERT_EQ(read_chunktable.points_per_chunk()[i], 30u * i);
     }
-    LASPP_ASSERT_EQ(read_chunktable.constant_chunk_size(), std::optional<uint32_t>());
+    LASPP_ASSERT(!read_chunktable.constant_chunk_size().has_value(), "Expected empty optional");
   }
 
   return 0;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -19,8 +19,15 @@
 
 #include <cstdint>
 #include <iostream>
-#include <optional>
 #include <vector>
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4389)  // signed/unsigned mismatch in MSVC std::optional implementation
+#endif
+#include <optional>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"

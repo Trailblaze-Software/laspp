@@ -1,6 +1,6 @@
 
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -34,7 +34,7 @@ class StreamingMedian {
   bool m_remove_largest;
 
  public:
-  StreamingMedian() : m_vals{0, 0, 0, 0, 0}, m_remove_largest(true) {}
+  StreamingMedian() : m_vals{}, m_remove_largest(true) {}
 
   void insert(const T val) {
     bool next_remove_largest;
@@ -47,14 +47,14 @@ class StreamingMedian {
     }
     if (m_remove_largest) {
       m_vals[4] = val;
-      uint8_t idx = 4;
+      size_t idx = 4;
       while (idx > 0 && m_vals[idx] < m_vals[idx - 1]) {
         std::swap(m_vals[idx - 1], m_vals[idx]);
         idx--;
       }
     } else {
       m_vals[0] = val;
-      uint8_t idx = 0;
+      size_t idx = 0;
       while (idx < 4 && m_vals[idx] > m_vals[idx + 1]) {
         std::swap(m_vals[idx + 1], m_vals[idx]);
         idx++;

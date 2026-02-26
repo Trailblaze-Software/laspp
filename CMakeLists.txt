@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+# SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # This library is free software; you can redistribute it and/or modify it under
@@ -17,7 +17,10 @@ cmake_minimum_required(VERSION 3.20)
 
 option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
 option(LASPP_BUILD_TESTS "Build tests" ON)
+option(LASPP_BUILD_BENCHMARK "Build benchmark" ON)
 option(LASPP_BUILD_APPS "Build apps" ON)
+option(LASPP_AGGRESSIVE_OPTIMIZATIONS
+       "Enable aggressive performance optimizations (-march=native, etc.)" ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -27,9 +30,13 @@ project(
   LANGUAGES CXX)
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
-if(LASPP_BUILD_TESTS)
+if(LASPP_BUILD_TESTS OR LASPP_BUILD_BENCHMARK)
   include(cmake/SetupLaszip.cmake)
   setup_laszip()
+  if(LASPP_BUILD_BENCHMARK)
+    include(cmake/SetupLazperf.cmake)
+    setup_lazperf()
+  endif()
 endif()
 
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -pg")
@@ -46,6 +53,74 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
+# ── Detect AVX2 support for MSVC
+# ──────────────────────────────────────────────────────────
+set(HAVE_AVX2 FALSE)
+if(MSVC
+   AND CMAKE_BUILD_TYPE MATCHES "Release"
+   AND LASPP_AGGRESSIVE_OPTIMIZATIONS)
+  # Check if compiler supports /arch:AVX2 flag and if AVX2 intrinsics compile
+  include(CheckCXXCompilerFlag)
+  include(CheckCXXSourceCompiles)
+  check_cxx_compiler_flag("/arch:AVX2" COMPILER_SUPPORTS_AVX2_FLAG)
+  if(COMPILER_SUPPORTS_AVX2_FLAG)
+    # Test if AVX2 intrinsics actually compile with /arch:AVX2
+    set(CMAKE_REQUIRED_FLAGS "/arch:AVX2")
+    check_cxx_source_compiles(
+      "
+      #include <immintrin.h>
+      int main() {
+        __m256i a = _mm256_setzero_si256();
+        __m256i b = _mm256_add_epi32(a, a);
+        (void)b;
+        return 0;
+      }
+    "
+      AVX2_INTRINSICS_WORK)
+    unset(CMAKE_REQUIRED_FLAGS)
+    if(AVX2_INTRINSICS_WORK)
+      set(HAVE_AVX2 TRUE)
+      message(STATUS "AVX2 support detected and enabled")
+    else()
+      message(STATUS "AVX2 not available (AVX2 intrinsics don't compile)")
+    endif()
+  else()
+    message(STATUS "AVX2 not available (compiler doesn't support /arch:AVX2)")
+  endif()
+endif()
+
+# ── Performance optimization flags for aggressive Release builds
+# ──────────────────────────
+if(CMAKE_BUILD_TYPE MATCHES "Release" AND LASPP_AGGRESSIVE_OPTIMIZATIONS)
+  if(MSVC)
+    # Apply only to Release configuration using generator expressions
+    add_compile_options("$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/Ob2>"
+                        "$<$<CONFIG:Release>:/GL>")
+    add_link_options("$<$<CONFIG:Release>:/LTCG>")
+    if(HAVE_AVX2)
+      add_compile_options("$<$<CONFIG:Release>:/arch:AVX2>")
+      message(STATUS "AVX2 optimizations enabled for Release builds")
+    endif()
+    message(
+      STATUS "Aggressive performance optimizations enabled for Release builds")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # For single-config generators (Unix Makefiles), CMAKE_BUILD_TYPE check is
+    # sufficient
+    add_compile_options("-O3" "-march=native" "-flto" "-funroll-loops")
+    add_link_options("-flto")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      add_compile_options("-fomit-frame-pointer" "-fno-semantic-interposition")
+    endif()
+    message(
+      STATUS "Aggressive performance optimizations enabled for Release builds")
+  endif()
+elseif(CMAKE_BUILD_TYPE MATCHES "Release")
+  message(
+    STATUS
+      "Using standard Release optimizations (LASPP_AGGRESSIVE_OPTIMIZATIONS=OFF)"
+  )
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(WIN32)
@@ -54,29 +129,12 @@ if(WIN32)
                         "-Werror")
   else()
     add_compile_options(
-      "/openmp:llvm"
-      "/Wall"
-      "/MP"
-      "/wd5045"
-      "/wd4866"
-      "/wd4514"
-      "/wd4820"
-      "/wd4800"
-      "/wd4242"
-      "/wd4244"
-      "/wd4365"
-      "/wd5027"
-      "/wd4626"
-      "/wd5219"
-      "/wd4623"
-      "/wd4267"
-      "/wd4710"
-      "/wd4711"
-      "/wd4625"
-      "/wd5026"
-      "/wd5246"
-      "/wd4127"
-      "/wd4061")
+      "/W4"
+      "/WX"
+      # C4267/C4244: size_t/type narrowing inside MSVC STL template bodies.
+      "/wd4267" # size_t narrowing in MSVC STL <xutility> template
+                # instantiations
+      "/wd4244") # type narrowing in MSVC STL <xutility> template instantiations
   endif()
 elseif(UNIX)
   if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
@@ -121,9 +179,6 @@ if(LASPP_DEBUG_ASSERTS)
   target_compile_definitions(${LIBRARY_NAME} INTERFACE LASPP_DEBUG_ASSERTS)
 endif()
 
-find_package(OpenMP REQUIRED)
-
-target_link_libraries(${LIBRARY_NAME} INTERFACE OpenMP::OpenMP_CXX)
 target_compile_definitions(${LIBRARY_NAME}
                            INTERFACE LASPP_VERSION="${PROJECT_VERSION}")
 
@@ -168,33 +223,27 @@ if(LASPP_BUILD_TESTS)
     file(GLOB LASZIP_WRAPPER_SOURCES "${laszip_SOURCE_DIR}/src/laszipper.cpp"
          "${laszip_SOURCE_DIR}/src/lasunzipper.cpp")
 
-    # Add wrapper files as sources to the test
+    # Add wrapper files as sources to the test and suppress their warnings:
+    # these are third-party laszip files, not laspp code.
     target_sources(test_laszip_interop PRIVATE ${LASZIP_WRAPPER_SOURCES})
-
-    # Link against laszip
-    link_target_to_laszip(test_laszip_interop)
-
-    # Suppress warnings from laszip wrapper source files
     if(MSVC)
+      set_source_files_properties(${LASZIP_WRAPPER_SOURCES}
+                                  PROPERTIES COMPILE_FLAGS "/W0")
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       set_source_files_properties(
-        ${LASZIP_WRAPPER_SOURCES} PROPERTIES COMPILE_FLAGS
-                                             "/wd4774 /wd4062 /wd4100")
+        ${LASZIP_WRAPPER_SOURCES}
+        PROPERTIES COMPILE_FLAGS
+                   "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion \
+-Wno-conversion -Wno-useless-cast")
     else()
       set_source_files_properties(
         ${LASZIP_WRAPPER_SOURCES}
-        PROPERTIES
-          COMPILE_FLAGS
-          "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion"
-      )
-      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set_source_files_properties(
-          ${LASZIP_WRAPPER_SOURCES}
-          PROPERTIES
-            COMPILE_FLAGS
-            "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion -Wno-conversion -Wno-useless-cast"
-        )
-      endif()
+        PROPERTIES COMPILE_FLAGS
+                   "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion \
+-Wno-conversion")
     endif()
+
+    link_target_to_laszip(test_laszip_interop)
   endif()
 endif()
 

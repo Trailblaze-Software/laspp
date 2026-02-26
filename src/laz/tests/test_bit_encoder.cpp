@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -52,7 +52,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   std::vector<std::vector<bool>> multi_bits;
   multi_bits.emplace_back(1 << 14);
   for (size_t i = 0; i < multi_bits[0].size(); i++) {
-    multi_bits[0][i] = i % 2 + i % 3 + i % 5 + i % 7 + i % 11 + i % 13;
+    multi_bits[0][i] = static_cast<bool>(i % 2 + i % 3 + i % 5 + i % 7 + i % 11 + i % 13);
   }
   multi_bits.emplace_back(1 << 14);
   for (size_t i = 0; i < multi_bits[1].size(); i++) {

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <execution>
+#include <numeric>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -55,6 +58,13 @@ inline std::ostream& operator<<(std::ostream& os, WritingStage stage) {
 }
 
 class LASWriter {
+ public:
+  LASWriter(const LASWriter&) = delete;
+  LASWriter& operator=(const LASWriter&) = delete;
+  LASWriter(LASWriter&&) = delete;
+  LASWriter& operator=(LASWriter&&) = delete;
+
+ private:
   std::iostream& m_output_stream;
 
   LASHeader m_header;
@@ -97,7 +107,7 @@ class LASWriter {
     LASVLR wkt_vlr;
     wkt_vlr.reserved = 0;
     string_to_arr("LASF_Projection", wkt_vlr.user_id);
-    wkt_vlr.record_id = math_transform_wkt ? 2111 : 2112;
+    wkt_vlr.record_id = math_transform_wkt ? uint16_t{2111} : uint16_t{2112};
     wkt_vlr.record_length_after_header = static_cast<uint16_t>(wkt.size() + 1);
     string_to_arr("OGC WKT", wkt_vlr.description);
     write_vlr(wkt_vlr, std::span(reinterpret_cast<const std::byte*>(wkt.c_str()), wkt.size() + 1));
@@ -186,50 +196,60 @@ class LASWriter {
     int32_t max_pos[3] = {std::numeric_limits<int32_t>::lowest(),
                           std::numeric_limits<int32_t>::lowest(),
                           std::numeric_limits<int32_t>::lowest()};
-#pragma omp parallel
-    {
-      size_t local_points_by_return[15] = {0};
-      int32_t local_min_pos[3] = {std::numeric_limits<int32_t>::max(),
-                                  std::numeric_limits<int32_t>::max(),
-                                  std::numeric_limits<int32_t>::max()};
-      int32_t local_max_pos[3] = {std::numeric_limits<int32_t>::lowest(),
-                                  std::numeric_limits<int32_t>::lowest(),
-                                  std::numeric_limits<int32_t>::lowest()};
-#pragma omp for
-      for (size_t i = 0; i < points.size(); i++) {
-        static_assert(is_copy_assignable<LASPointFormat0, ExampleFullLASPoint>());
-        static_assert(is_copy_fromable<GPSTime, ExampleFullLASPoint>());
 
-        copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
-        copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
-        copy_if_possible<GPSTime>(points_to_write[i], points[i]);
-        copy_if_possible<ColorData>(points_to_write[i], points[i]);
-        copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
-        if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
-          if (points_to_write[i].bit_byte.return_number < 16 &&
-              points_to_write[i].bit_byte.return_number > 0) {
-            local_points_by_return[points_to_write[i].bit_byte.return_number - 1]++;
-          }
-          PointType point = points_to_write[i];
-          local_min_pos[0] = std::min(local_min_pos[0], point.x);
-          local_min_pos[1] = std::min(local_min_pos[1], point.y);
-          local_min_pos[2] = std::min(local_min_pos[2], point.z);
-          local_max_pos[0] = std::max(local_max_pos[0], point.x);
-          local_max_pos[1] = std::max(local_max_pos[1], point.y);
-          local_max_pos[2] = std::max(local_max_pos[2], point.z);
-        }
-      }
-#pragma omp critical
-      {
-        for (int i = 0; i < 15; i++) {
-          points_by_return[i] += local_points_by_return[i];
-        }
-        min_pos[0] = std::min(min_pos[0], local_min_pos[0]);
-        min_pos[1] = std::min(min_pos[1], local_min_pos[1]);
-        min_pos[2] = std::min(min_pos[2], local_min_pos[2]);
-        max_pos[0] = std::max(max_pos[0], local_max_pos[0]);
-        max_pos[1] = std::max(max_pos[1], local_max_pos[1]);
-        max_pos[2] = std::max(max_pos[2], local_max_pos[2]);
+    static_assert(is_copy_assignable<LASPointFormat0, ExampleFullLASPoint>());
+    static_assert(is_copy_fromable<GPSTime, ExampleFullLASPoint>());
+
+    std::vector<size_t> point_indices(points.size());
+    std::iota(point_indices.begin(), point_indices.end(), size_t{0});
+
+    // Parallel copy from user point type into the serialisable PointType buffer.
+    std::for_each(std::execution::par_unseq, point_indices.begin(), point_indices.end(),
+                  [&](size_t i) {
+                    copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
+                    copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
+                    copy_if_possible<GPSTime>(points_to_write[i], points[i]);
+                    copy_if_possible<ColorData>(points_to_write[i], points[i]);
+                    copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
+                  });
+
+    // Parallel reduction to accumulate per-return counts and bounding box.
+    if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+      struct PointStats {
+        size_t points_by_return[15]{};
+        int32_t min_pos[3]{std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max(),
+                           std::numeric_limits<int32_t>::max()};
+        int32_t max_pos[3]{std::numeric_limits<int32_t>::lowest(),
+                           std::numeric_limits<int32_t>::lowest(),
+                           std::numeric_limits<int32_t>::lowest()};
+      };
+
+      PointStats result = std::transform_reduce(
+          std::execution::par_unseq, point_indices.begin(), point_indices.end(), PointStats{},
+          [](PointStats a, const PointStats& b) {
+            for (size_t j = 0; j < 15; j++) a.points_by_return[j] += b.points_by_return[j];
+            for (size_t j = 0; j < 3; j++) {
+              a.min_pos[j] = std::min(a.min_pos[j], b.min_pos[j]);
+              a.max_pos[j] = std::max(a.max_pos[j], b.max_pos[j]);
+            }
+            return a;
+          },
+          [&](size_t i) {
+            PointStats s;
+            if (points_to_write[i].bit_byte.return_number < 16 &&
+                points_to_write[i].bit_byte.return_number > 0) {
+              s.points_by_return[points_to_write[i].bit_byte.return_number - 1] = 1;
+            }
+            s.min_pos[0] = s.max_pos[0] = points_to_write[i].x;
+            s.min_pos[1] = s.max_pos[1] = points_to_write[i].y;
+            s.min_pos[2] = s.max_pos[2] = points_to_write[i].z;
+            return s;
+          });
+
+      for (size_t j = 0; j < 15; j++) points_by_return[j] = result.points_by_return[j];
+      for (size_t j = 0; j < 3; j++) {
+        min_pos[j] = result.min_pos[j];
+        max_pos[j] = result.max_pos[j];
       }
     }
 
@@ -253,8 +273,8 @@ class LASWriter {
       }
     }
 
-    header().update_bounds({min_pos[0], min_pos[1], min_pos[2]});
-    header().update_bounds({max_pos[0], max_pos[1], max_pos[2]});
+    header().update_bounds(std::array<int32_t, 3>{{min_pos[0], min_pos[1], min_pos[2]}});
+    header().update_bounds(std::array<int32_t, 3>{{max_pos[0], max_pos[1], max_pos[2]}});
 
     if (m_header.is_laz_compressed()) {
       if (chunk_size.has_value()) {

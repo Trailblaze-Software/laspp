@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <execution>
+#include <numeric>
 #include <optional>
 #include <span>
 #include <type_traits>
@@ -28,11 +31,19 @@
 #include "laz/chunktable.hpp"
 #include "laz/laz_reader.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/thread_pool.hpp"
 #include "vlr.hpp"
 
 namespace laspp {
 
 class LASReader {
+ public:
+  LASReader(const LASReader&) = delete;
+  LASReader& operator=(const LASReader&) = delete;
+  LASReader(LASReader&&) = delete;
+  LASReader& operator=(LASReader&&) = delete;
+
+ private:
   std::istream& m_input_stream;
   LASHeader m_header;
   std::optional<LAZReader> m_laz_reader;
@@ -264,9 +275,12 @@ class LASReader {
       LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(compressed_data.data()),
                                            static_cast<int64_t>(compressed_data.size())));
 
-#pragma omp parallel for schedule(dynamic)
-      for (size_t chunk_index = chunk_indexes.first; chunk_index < chunk_indexes.second;
-           chunk_index++) {
+      std::vector<size_t> chunk_indices(chunk_indexes.second - chunk_indexes.first);
+      std::iota(chunk_indices.begin(), chunk_indices.end(), chunk_indexes.first);
+
+      // Use thread pool for parallel execution (respects LASPP_NUM_THREADS environment variable)
+      utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
+        size_t chunk_index = chunk_indices[idx];
         size_t start_offset =
             m_laz_reader->chunk_table().chunk_offset(chunk_index) - compressed_start_offset;
         size_t compressed_chunk_size =
@@ -283,7 +297,7 @@ class LASReader {
         }
         m_laz_reader->decompress_chunk(compressed_chunk,
                                        output_location.subspan(point_offset, n_points));
-      }
+      });
       return output_location.subspan(0, total_n_points);
     }
     LASPP_ASSERT(chunk_indexes.first == 0);

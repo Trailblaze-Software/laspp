@@ -1,6 +1,6 @@
 
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -205,7 +205,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           LASReader reader(*stream);
           std::cout << reader.header() << std::endl;
           LASPP_ASSERT_EQ(reader.header().num_points(), 100);
-          LASPP_ASSERT_EQ(reader.header().point_format(), stream == &las_stream ? 1 : 129);
+          LASPP_ASSERT_EQ(reader.header().point_format(),
+                          stream == &las_stream ? uint8_t{1} : uint8_t{129});
           LASPP_ASSERT_EQ(reader.header().point_data_record_length(), 28);
 
           const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();

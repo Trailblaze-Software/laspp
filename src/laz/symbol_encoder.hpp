@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * This library is free software; you can redistribute it and/or modify it under
@@ -106,7 +106,7 @@ class SymbolEncoder {
 
       if constexpr (lookup_table_type != LookupTableType::NONE) {
         uint32_t shifted_dist = distribution[s] >> lookup_table.SHIFT;
-        while (lookup_idx < shifted_dist + 1) {
+        while (lookup_idx < shifted_dist + 1u) {
           lookup_table[lookup_idx++] = static_cast<uint16_t>(s - 1);
         }
       }
@@ -120,8 +120,11 @@ class SymbolEncoder {
     symbols_until_update = update_cycle;
   }
 
- public:
-  SymbolEncoder()
+ private:
+  // Tag type for the prototype constructor that does the real initialization work.
+  struct PrototypeTag {};
+
+  explicit SymbolEncoder(PrototypeTag)
       : symbol_count(), distribution(), lookup_table(), update_cycle(), symbols_until_update() {
     for (size_t s = 0; s < NSymbols; s++) {
       symbol_count[s] = 1;
@@ -130,6 +133,20 @@ class SymbolEncoder {
     update_cycle = (NSymbols + 6) / 2;
     symbols_until_update = update_cycle;
   }
+
+  // Returns a reference to the one-time-initialized prototype.  Constructing from this
+  // prototype (via copy) is significantly cheaper than running update_distribution() from
+  // scratch, especially for large NSymbols where update_distribution() is O(N).
+  static const SymbolEncoder& get_prototype() noexcept {
+    static const SymbolEncoder proto{PrototypeTag{}};
+    return proto;
+  }
+
+ public:
+  // Default-construct by copying from the pre-built prototype.  For NSymbols <= 256 all
+  // storage is on the stack, so this compiles down to a plain memcpy.  For larger NSymbols
+  // (heap-allocated lookup table) this still avoids re-running update_distribution().
+  SymbolEncoder() : SymbolEncoder(get_prototype()) {}
 
   uint_fast16_t decode_symbol(InStream& stream) {
     uint32_t value = stream.get_value();
