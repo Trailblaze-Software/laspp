@@ -18,10 +18,16 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <execution>
+#include <filesystem>
+#include <fstream>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <type_traits>
 #include <vector>
 
@@ -31,6 +37,7 @@
 #include "laz/chunktable.hpp"
 #include "laz/laz_reader.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/memory_mapped_file.hpp"
 #include "utilities/thread_pool.hpp"
 #include "vlr.hpp"
 
@@ -44,7 +51,10 @@ class LASReader {
   LASReader& operator=(LASReader&&) = delete;
 
  private:
-  std::istream& m_input_stream;
+  // Support both stream-based and memory-mapped I/O
+  std::optional<std::ifstream> m_owned_stream;  // Owned stream (when constructed from path)
+  std::istream* m_input_stream = nullptr;       // Pointer to stream (either owned or external)
+  std::optional<utilities::MemoryMappedFile> m_mapped_file;  // Memory-mapped file (faster path)
   LASHeader m_header;
   std::optional<LAZReader> m_laz_reader;
   std::optional<std::string> m_math_wkt;
@@ -53,65 +63,118 @@ class LASReader {
   std::vector<LASVLRWithGlobalOffset> m_vlr_headers;
   std::vector<LASEVLRWithGlobalOffset> m_evlr_headers;
 
+  // Helper to read from either memory-mapped file or stream
+  void read_from_source(void* dest, size_t offset, size_t size) const {
+    if (m_mapped_file.has_value()) {
+      // Fast path: direct memory copy from mapped file
+      std::memcpy(dest, m_mapped_file->data().data() + offset, size);
+    } else {
+      // Fallback: read from stream
+      LASPP_ASSERT(m_input_stream != nullptr);
+      m_input_stream->seekg(static_cast<int64_t>(offset));
+      LASPP_CHECK_READ(
+          m_input_stream->read(reinterpret_cast<char*>(dest), static_cast<int64_t>(size)));
+    }
+  }
+
+  // Helper to get a span from memory-mapped file (fast path) or read into buffer (slow path)
+  std::span<const std::byte> get_data_span(size_t offset, size_t size) const {
+    if (m_mapped_file.has_value()) {
+      // Fast path: return span directly into mapped memory
+      return m_mapped_file->subspan(offset, size);
+    } else {
+      // Slow path: not available for stream-based I/O (caller must use read_from_source)
+      LASPP_FAIL("get_data_span() only available with memory-mapped files");
+    }
+  }
+
   static LASHeader read_header(std::istream& input_stream) {
     input_stream.seekg(0);
     return LASHeader(input_stream);
   }
 
+  static LASHeader read_header_from_mapped(const utilities::MemoryMappedFile& mapped_file) {
+    // Read header directly from mapped memory
+    LASPP_ASSERT_GE(mapped_file.size(), 375u);  // Minimum LAS header size
+    std::stringstream header_stream;
+    header_stream.write(reinterpret_cast<const char*>(mapped_file.data().data()), 375);
+    header_stream.seekg(0);
+    return LASHeader(header_stream);
+  }
+
   template <typename T>
   std::vector<T> read_record_headers(int64_t initial_offset, size_t n_records) {
     std::vector<T> record_headers;
-    m_input_stream.seekg(initial_offset);
+    // For VLR reading, create a stream view from mapped memory if available
+    // This is less critical (only runs once during construction) but still benefits from mapping
+    std::unique_ptr<std::stringstream> mapped_stream;
+    std::istream* stream_to_use = m_input_stream;
+
+    if (m_mapped_file.has_value()) {
+      // Create stringstream from mapped memory for VLR reading
+      auto header_data =
+          m_mapped_file->subspan(static_cast<size_t>(initial_offset),
+                                 m_mapped_file->size() - static_cast<size_t>(initial_offset));
+      mapped_stream = std::make_unique<std::stringstream>(
+          std::string(reinterpret_cast<const char*>(header_data.data()), header_data.size()));
+      stream_to_use = mapped_stream.get();
+    } else {
+      m_input_stream->seekg(initial_offset);
+    }
+
     std::optional<GeoKeys> geo_keys;
     std::optional<std::vector<double>> geo_doubles;
     std::optional<std::vector<char>> geo_ascii;
     for (unsigned int i = 0; i < n_records; ++i) {
       typename T::record_type record;
-      LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&record),
+      LASPP_CHECK_READ(stream_to_use->read(reinterpret_cast<char*>(&record),
                                            static_cast<int64_t>(sizeof(typename T::record_type))));
-      record_headers.emplace_back(record, m_input_stream.tellg());
-      int64_t end_of_header_offset = m_input_stream.tellg();
+      record_headers.emplace_back(record, stream_to_use->tellg());
+      int64_t end_of_header_offset = stream_to_use->tellg();
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
         if (record.is_laz_vlr()) {
-          LAZSpecialVLRContent laz_vlr(m_input_stream);
+          LAZSpecialVLRContent laz_vlr(*stream_to_use);
           m_laz_reader.emplace(LAZReader(laz_vlr));
         }
         if (record.is_projection()) {
           if (record.is_ogc_math_transform_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
-            LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
+            LASPP_CHECK_READ(stream_to_use->read(wkt.data(), record.record_length_after_header));
             std::string wkt_string(wkt.begin(), wkt.end());
             LASPP_ASSERT(!m_math_wkt.has_value(), "Multiple math WKTs found in header");
             m_math_wkt.emplace(wkt_string);
           }
           if (record.is_ogc_coordinate_system_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
-            LASPP_CHECK_READ(m_input_stream.read(wkt.data(), record.record_length_after_header));
+            LASPP_CHECK_READ(stream_to_use->read(wkt.data(), record.record_length_after_header));
             std::string wkt_string(wkt.data(), wkt.size() - 1);
             LASPP_ASSERT(!m_coordinate_wkt.has_value(), "Multiple coordinate WKTs found in header");
             m_coordinate_wkt.emplace(wkt_string);
           }
           if (record.is_geo_key_directory()) {
-            geo_keys.emplace(m_input_stream);
-            LASPP_ASSERT_EQ(m_input_stream.tellg(),
+            geo_keys.emplace(*stream_to_use);
+            LASPP_ASSERT_EQ(stream_to_use->tellg(),
                             end_of_header_offset + record.record_length_after_header);
           }
           if (record.is_geo_double_params()) {
             LASPP_ASSERT_EQ(record.record_length_after_header % sizeof(double), 0);
             geo_doubles.emplace(record.record_length_after_header / sizeof(double));
-            LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(geo_doubles->data()),
+            LASPP_CHECK_READ(stream_to_use->read(reinterpret_cast<char*>(geo_doubles->data()),
                                                  record.record_length_after_header));
           }
           if (record.is_geo_ascii_params()) {
             geo_ascii.emplace(uint64_t(record.record_length_after_header));
             LASPP_CHECK_READ(
-                m_input_stream.read(geo_ascii->data(), record.record_length_after_header));
+                stream_to_use->read(geo_ascii->data(), record.record_length_after_header));
           }
         }
       }
-      m_input_stream.seekg(static_cast<int64_t>(record.record_length_after_header) +
-                           end_of_header_offset);
-      LASPP_ASSERT_NE(m_input_stream.tellg(), -1);
+      if (!m_mapped_file.has_value()) {
+        // Only seek if using stream (mapped file uses stringstream which auto-advances)
+        m_input_stream->seekg(static_cast<int64_t>(record.record_length_after_header) +
+                              end_of_header_offset);
+        LASPP_ASSERT_NE(m_input_stream->tellg(), -1);
+      }
     }
 
     if (geo_keys.has_value()) {
@@ -149,15 +212,107 @@ class LASReader {
   }
 
  public:
+  // Constructor from file path - uses memory mapping for optimal performance
+  explicit LASReader(const std::filesystem::path& file_path) {
+    // Allow forcing stream-based I/O via environment variable (for benchmarking/comparison)
+    const char* disable_mmap_env = nullptr;
+#ifdef _MSC_VER
+    // Use _dupenv_s on MSVC to avoid deprecated getenv warning treated as error
+    char* env_buf = nullptr;
+    size_t env_len = 0;
+    if (_dupenv_s(&env_buf, &env_len, "LASPP_DISABLE_MMAP") == 0 && env_buf != nullptr) {
+      disable_mmap_env = env_buf;
+    }
+#else
+    disable_mmap_env = std::getenv("LASPP_DISABLE_MMAP");
+#endif
+
+    bool force_stream_io =
+        (disable_mmap_env != nullptr && disable_mmap_env[0] != '\0' && disable_mmap_env[0] != '0');
+
+    if (!force_stream_io) {
+      try {
+        // Try memory mapping first (fastest)
+        m_mapped_file.emplace(file_path.string());
+        m_header = read_header_from_mapped(*m_mapped_file);
+        // Create a dummy stream for backward compatibility (won't be used for reads)
+        m_owned_stream.emplace(file_path, std::ios::binary);
+        m_input_stream = &m_owned_stream.value();
+      } catch (const std::exception&) {
+        // Fallback to stream-based I/O if memory mapping fails
+      }
+    }
+
+    if (!m_mapped_file.has_value()) {
+      // Stream-based I/O path (either forced or fallback)
+      m_owned_stream.emplace(file_path, std::ios::binary);
+      if (!m_owned_stream->is_open()) {
+        throw std::runtime_error("Failed to open file: " + file_path.string());
+      }
+      m_input_stream = &m_owned_stream.value();
+      m_header = read_header(*m_input_stream);
+    }
+
+#ifdef _MSC_VER
+    if (env_buf) {
+      std::free(env_buf);
+    }
+#endif
+    m_vlr_headers = read_vlr_headers();
+    m_evlr_headers = read_evlr_headers();
+    if (m_header.is_laz_compressed()) {
+      LASPP_ASSERT(m_laz_reader.has_value(), "LASReader: LAZ point format without LAZ VLR");
+      if (m_mapped_file.has_value()) {
+        // Read chunk table from mapped memory
+        // read_chunk_table expects: first 8 bytes = offset to chunk table, then seeks there
+        size_t chunk_table_start = header().offset_to_point_data();
+
+        // Read the 8-byte absolute offset from the file
+        int64_t chunk_table_absolute_offset;
+        std::memcpy(&chunk_table_absolute_offset, m_mapped_file->data().data() + chunk_table_start,
+                    sizeof(chunk_table_absolute_offset));
+        if (chunk_table_absolute_offset == -1) {
+          LASPP_UNIMPLEMENTED("Reading chunk table from LAS file");
+        }
+
+        // Calculate how much chunk table data we need
+        size_t chunk_table_file_offset = static_cast<size_t>(chunk_table_absolute_offset);
+        size_t remaining_file_size = m_mapped_file->size() - chunk_table_file_offset;
+        size_t chunk_table_buffer_size = std::min(remaining_file_size, size_t{1024 * 1024});
+
+        // Create stringstream that mimics what read_chunk_table expects:
+        // First 8 bytes: relative offset (0, since chunk table data follows immediately)
+        // Then: the actual chunk table data
+        std::stringstream chunk_table_stream(std::ios::binary | std::ios::in | std::ios::out);
+        int64_t relative_offset = 8;  // Chunk table data starts 8 bytes into our stream
+        chunk_table_stream.write(reinterpret_cast<const char*>(&relative_offset),
+                                 sizeof(relative_offset));
+        auto chunk_table_data =
+            m_mapped_file->subspan(chunk_table_file_offset, chunk_table_buffer_size);
+        chunk_table_stream.write(reinterpret_cast<const char*>(chunk_table_data.data()),
+                                 static_cast<std::streamsize>(chunk_table_data.size()));
+        if (!chunk_table_stream.good()) {
+          throw std::runtime_error("Failed to write chunk table data to stream");
+        }
+        chunk_table_stream.seekg(0);
+        m_laz_reader->read_chunk_table(chunk_table_stream, header().num_points());
+      } else {
+        m_input_stream->seekg(header().offset_to_point_data());
+        m_laz_reader->read_chunk_table(*m_input_stream, header().num_points());
+      }
+    }
+  }
+
+  // Constructor from istream - uses stream-based I/O (backward compatibility)
   explicit LASReader(std::istream& input_stream)
-      : m_input_stream(input_stream),
-        m_header(read_header(m_input_stream)),
+      : m_input_stream(&input_stream),
+        m_header(read_header(*m_input_stream)),
         m_vlr_headers(read_vlr_headers()),
         m_evlr_headers(read_evlr_headers()) {
     if (m_header.is_laz_compressed()) {
       LASPP_ASSERT(m_laz_reader.has_value(), "LASReader: LAZ point format without LAZ VLR");
-      m_input_stream.seekg(header().offset_to_point_data());
-      m_laz_reader->read_chunk_table(m_input_stream, header().num_points());
+      m_input_stream->seekg(header().offset_to_point_data());
+      m_laz_reader->read_chunk_table(*m_input_stream, header().num_points());
     }
   }
 
@@ -166,11 +321,22 @@ class LASReader {
   const std::vector<LASVLRWithGlobalOffset>& vlr_headers() const { return m_vlr_headers; }
   const std::vector<LASEVLRWithGlobalOffset>& evlr_headers() const { return m_evlr_headers; }
 
+  // Check if memory mapping is being used (for debugging/verification)
+  bool is_using_memory_mapping() const noexcept { return m_mapped_file.has_value(); }
+
   std::vector<std::byte> read_point_data(const LASHeader& header) {
     std::vector<std::byte> point_data(header.point_data_record_length() * header.num_points());
-    m_input_stream.seekg(header.offset_to_point_data());
-    LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(point_data.data()),
-                                         static_cast<int64_t>(point_data.size())));
+    if (m_mapped_file.has_value()) {
+      // Fast path: copy directly from mapped memory
+      auto point_data_span =
+          m_mapped_file->subspan(header.offset_to_point_data(), point_data.size());
+      std::memcpy(point_data.data(), point_data_span.data(), point_data.size());
+    } else {
+      // Slow path: read from stream
+      m_input_stream->seekg(header.offset_to_point_data());
+      LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(point_data.data()),
+                                            static_cast<int64_t>(point_data.size())));
+    }
     return point_data;
   }
 
@@ -205,21 +371,42 @@ class LASReader {
   template <typename PointType, typename T>
   void read_points(std::span<T> points) {
     LASPP_ASSERT_EQ(sizeof(PointType), m_header.point_data_record_length());
-    for (size_t i = 0; i < points.size(); i++) {
-      PointType las_point;
-      LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(&las_point),
-                                           static_cast<int64_t>(sizeof(PointType))));
-      static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
-      static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
-      static_assert(is_copy_fromable<ExampleFullLASPoint, GPSTime>());
-      static_assert(is_convertable<T, LASPointFormat0>() || is_convertable<T, LASPointFormat6>() ||
-                        is_convertable<T, GPSTime>(),
-                    "PointType should use data from LAS file");
-      copy_if_possible<LASPointFormat0>(las_point, points[i]);
-      copy_if_possible<GPSTime>(las_point, points[i]);
-      m_input_stream.seekg(
-          static_cast<int64_t>(header().point_data_record_length() - sizeof(PointType)),
-          std::ios_base::cur);
+    size_t point_data_offset = header().offset_to_point_data();
+    size_t point_record_length = header().point_data_record_length();
+
+    if (m_mapped_file.has_value()) {
+      // Fast path: read directly from mapped memory
+      for (size_t i = 0; i < points.size(); i++) {
+        size_t point_offset = point_data_offset + i * point_record_length;
+        const PointType* las_point =
+            reinterpret_cast<const PointType*>(m_mapped_file->data().data() + point_offset);
+        static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
+        static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
+        static_assert(is_copy_fromable<ExampleFullLASPoint, GPSTime>());
+        static_assert(is_convertable<T, LASPointFormat0>() ||
+                          is_convertable<T, LASPointFormat6>() || is_convertable<T, GPSTime>(),
+                      "PointType should use data from LAS file");
+        copy_if_possible<LASPointFormat0>(*las_point, points[i]);
+        copy_if_possible<GPSTime>(*las_point, points[i]);
+      }
+    } else {
+      // Slow path: read from stream
+      m_input_stream->seekg(static_cast<int64_t>(point_data_offset));
+      for (size_t i = 0; i < points.size(); i++) {
+        PointType las_point;
+        LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(&las_point),
+                                              static_cast<int64_t>(sizeof(PointType))));
+        static_assert(is_copy_assignable<ExampleMinimalLASPoint, LASPointFormat0>());
+        static_assert(is_copy_assignable<ExampleFullLASPoint, LASPointFormat0>());
+        static_assert(is_copy_fromable<ExampleFullLASPoint, GPSTime>());
+        static_assert(is_convertable<T, LASPointFormat0>() ||
+                          is_convertable<T, LASPointFormat6>() || is_convertable<T, GPSTime>(),
+                      "PointType should use data from LAS file");
+        copy_if_possible<LASPointFormat0>(las_point, points[i]);
+        copy_if_possible<GPSTime>(las_point, points[i]);
+        m_input_stream->seekg(static_cast<int64_t>(point_record_length - sizeof(PointType)),
+                              std::ios_base::cur);
+      }
     }
   }
 
@@ -235,17 +422,36 @@ class LASReader {
   std::span<T> read_chunk(std::span<T> output_location, size_t chunk_index) {
     if (header().is_laz_compressed()) {
       size_t start_offset = m_laz_reader->chunk_table().chunk_offset(chunk_index);
-      m_input_stream.seekg(static_cast<int64_t>(header().offset_to_point_data() + start_offset));
-      std::vector<std::byte> compressed_data(
-          m_laz_reader->chunk_table().compressed_chunk_size(chunk_index));
-      LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(compressed_data.data()),
-                                           static_cast<int64_t>(compressed_data.size())));
+      size_t compressed_chunk_size = m_laz_reader->chunk_table().compressed_chunk_size(chunk_index);
+      size_t file_data_offset = header().offset_to_point_data() + start_offset;
       size_t n_points = m_laz_reader->chunk_table().points_per_chunk()[chunk_index];
-      return m_laz_reader->decompress_chunk(compressed_data, output_location.subspan(0, n_points));
+
+      std::span<std::byte> compressed_data_span;
+      std::vector<std::byte> compressed_data_buffer;  // Only allocated if needed
+
+      if (m_mapped_file.has_value()) {
+        // Fast path: use span directly from memory-mapped file (no copy!)
+        std::span<const std::byte> const_span =
+            m_mapped_file->subspan(file_data_offset, compressed_chunk_size);
+        // Safe const_cast: decompress_chunk only reads from the data
+        compressed_data_span =
+            std::span<std::byte>(const_cast<std::byte*>(const_span.data()), const_span.size());
+      } else {
+        // Slow path: read into buffer from stream
+        compressed_data_buffer.resize(compressed_chunk_size);
+        m_input_stream->seekg(static_cast<int64_t>(file_data_offset));
+        LASPP_CHECK_READ(
+            m_input_stream->read(reinterpret_cast<char*>(compressed_data_buffer.data()),
+                                 static_cast<int64_t>(compressed_chunk_size)));
+        compressed_data_span = std::span<std::byte>(compressed_data_buffer);
+      }
+
+      return m_laz_reader->decompress_chunk(compressed_data_span,
+                                            output_location.subspan(0, n_points));
     }
     LASPP_ASSERT(chunk_index == 0);
     size_t n_points = num_points();
-    m_input_stream.seekg(header().offset_to_point_data());
+    // read_points handles both memory-mapped and stream-based I/O
     if constexpr (std::is_base_of_v<LASPointFormat0, T> || std::is_base_of_v<LASPointFormat6, T>) {
       read_points<T>(output_location);
     } else {
@@ -269,11 +475,27 @@ class LASReader {
                : m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_indexes.second]) -
           m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_indexes.first];
       LASPP_ASSERT_GE(output_location.size(), total_n_points);
-      std::vector<std::byte> compressed_data(total_compressed_size);
-      m_input_stream.seekg(
-          static_cast<int64_t>(header().offset_to_point_data() + compressed_start_offset));
-      LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(compressed_data.data()),
-                                           static_cast<int64_t>(compressed_data.size())));
+
+      size_t file_data_offset = header().offset_to_point_data() + compressed_start_offset;
+      std::span<std::byte> compressed_data_span;
+      std::vector<std::byte> compressed_data_buffer;  // Only allocated for stream-based I/O
+
+      if (m_mapped_file.has_value()) {
+        // Fast path: use span directly from memory-mapped file (no copy!)
+        std::span<const std::byte> const_span =
+            m_mapped_file->subspan(file_data_offset, total_compressed_size);
+        // Safe const_cast: decompress_chunk only reads from the data
+        compressed_data_span =
+            std::span<std::byte>(const_cast<std::byte*>(const_span.data()), const_span.size());
+      } else {
+        // Slow path: read into buffer from stream
+        compressed_data_buffer.resize(total_compressed_size);
+        m_input_stream->seekg(static_cast<int64_t>(file_data_offset));
+        LASPP_CHECK_READ(
+            m_input_stream->read(reinterpret_cast<char*>(compressed_data_buffer.data()),
+                                 static_cast<int64_t>(compressed_data_buffer.size())));
+        compressed_data_span = std::span<std::byte>(compressed_data_buffer);
+      }
 
       std::vector<size_t> chunk_indices(chunk_indexes.second - chunk_indexes.first);
       std::iota(chunk_indices.begin(), chunk_indices.end(), chunk_indexes.first);
@@ -286,7 +508,7 @@ class LASReader {
         size_t compressed_chunk_size =
             m_laz_reader->chunk_table().compressed_chunk_size(chunk_index);
         std::span<std::byte> compressed_chunk =
-            std::span<std::byte>(compressed_data).subspan(start_offset, compressed_chunk_size);
+            compressed_data_span.subspan(start_offset, compressed_chunk_size);
 
         size_t point_offset =
             m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_index] -
@@ -307,17 +529,33 @@ class LASReader {
 
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
     std::vector<std::byte> data(vlr.record_length_after_header);
-    m_input_stream.seekg(static_cast<int64_t>(vlr.global_offset()));
-    LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(data.data()),
-                                         static_cast<int64_t>(data.size())));
+    if (m_mapped_file.has_value()) {
+      // Fast path: copy directly from mapped memory
+      auto vlr_span = m_mapped_file->subspan(static_cast<size_t>(vlr.global_offset()),
+                                             vlr.record_length_after_header);
+      std::memcpy(data.data(), vlr_span.data(), vlr_span.size());
+    } else {
+      // Slow path: read from stream
+      m_input_stream->seekg(static_cast<int64_t>(vlr.global_offset()));
+      LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(data.data()),
+                                            static_cast<int64_t>(data.size())));
+    }
     return data;
   }
 
   std::vector<std::byte> read_evlr_data(const LASEVLRWithGlobalOffset& evlr) {
     std::vector<std::byte> data(evlr.record_length_after_header);
-    m_input_stream.seekg(static_cast<int64_t>(evlr.global_offset()));
-    LASPP_CHECK_READ(m_input_stream.read(reinterpret_cast<char*>(data.data()),
-                                         static_cast<int64_t>(data.size())));
+    if (m_mapped_file.has_value()) {
+      // Fast path: copy directly from mapped memory
+      auto evlr_span = m_mapped_file->subspan(static_cast<size_t>(evlr.global_offset()),
+                                              evlr.record_length_after_header);
+      std::memcpy(data.data(), evlr_span.data(), evlr_span.size());
+    } else {
+      // Slow path: read from stream
+      m_input_stream->seekg(static_cast<int64_t>(evlr.global_offset()));
+      LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(data.data()),
+                                            static_cast<int64_t>(data.size())));
+    }
     return data;
   }
 };

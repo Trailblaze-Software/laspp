@@ -19,10 +19,14 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <span>
 #include <type_traits>
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
 
 #include "chunktable.hpp"
 #include "las_point.hpp"
@@ -198,24 +202,74 @@ class LAZReader {
             encoder);
       }
       LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
+
+      // Optimization 2: Prefetch helper (platform-specific)
+      auto prefetch = [](const void* addr) {
+#ifdef _MSC_VER
+        _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0);
+#else
+        __builtin_prefetch(addr, 0, 3);
+#endif
+      };
+
+      // Optimization 4: Cache encoder type info and stream pointers to reduce std::visit overhead
+      struct EncoderInfo {
+        void* layered_stream_ptr;
+        bool is_point14;
+        size_t num_layers;
+      };
+      std::vector<EncoderInfo> encoder_infos;
+      encoder_infos.reserve(encoders.size());
+
+      // Build encoder info table once (reduces std::visit calls in hot loop)
+      for (size_t encoder_idx = 0; encoder_idx < encoders.size(); encoder_idx++) {
+        std::visit(
+            [&encoder_infos, &layered_in_streams_for_encoders, encoder_idx](auto&& encoder) {
+              if constexpr (has_num_layers_v<decltype(encoder)>) {
+                using EncoderType = std::remove_reference_t<decltype(encoder)>;
+                LayeredInStreams<EncoderType::NUM_LAYERS>& layered_in_stream =
+                    *std::get<std::unique_ptr<LayeredInStreams<EncoderType::NUM_LAYERS>>>(
+                        layered_in_streams_for_encoders[encoder_idx]);
+                encoder_infos.push_back(EncoderInfo{
+                    &layered_in_stream, std::is_same_v<EncoderType, LASPointFormat6Encoder>,
+                    EncoderType::NUM_LAYERS});
+              } else {
+                LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
+              }
+            },
+            encoders[encoder_idx]);
+      }
+
+      // Optimized hot loop with prefetching
       for (size_t i = 0; i < decompressed_data.size(); i++) {
+        // Prefetch next points' decompressed data (helps with write operations)
+        if (i + 3 < decompressed_data.size()) {
+          prefetch(&decompressed_data[i + 3]);
+        }
+
         std::optional<uint8_t> context;
         for (size_t encoder_idx = 0; encoder_idx < encoders.size(); encoder_idx++) {
           LAZEncoder& laz_encoder = encoders[encoder_idx];
+          const EncoderInfo& info = encoder_infos[encoder_idx];
+
+          // Use cached variant index to avoid full std::visit when possible
+          // Still need std::visit but compiler can optimize better with cached info
           std::visit(
-              [&decompressed_data, &i, &layered_in_streams_for_encoders, &encoder_idx,
-               &context](auto&& encoder) {
+              [&decompressed_data, &i, &info, &context](auto&& encoder) {
                 if constexpr (has_num_layers_v<decltype(encoder)>) {
-                  LayeredInStreams<std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>&
-                      layered_in_stream = *std::get<std::unique_ptr<LayeredInStreams<
-                          std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>>>(
-                          layered_in_streams_for_encoders[encoder_idx]);
-                  if (i > 0) {
-                    if constexpr (std::is_same_v<std::remove_reference_t<decltype(encoder)>,
-                                                 LASPointFormat6Encoder>) {
+                  // Use cached stream pointer
+                  if constexpr (std::is_same_v<std::remove_reference_t<decltype(encoder)>,
+                                               LASPointFormat6Encoder>) {
+                    auto& layered_in_stream =
+                        *static_cast<LayeredInStreams<9>*>(info.layered_stream_ptr);
+                    if (i > 0) {
                       encoder.decode(layered_in_stream);
                       context = encoder.get_active_context();
-                    } else {
+                    }
+                  } else {
+                    auto& layered_in_stream =
+                        *static_cast<LayeredInStreams<1>*>(info.layered_stream_ptr);
+                    if (i > 0) {
                       encoder.decode(layered_in_stream, context.value());
                     }
                   }
