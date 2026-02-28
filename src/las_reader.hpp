@@ -18,6 +18,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <execution>
@@ -67,6 +68,11 @@ class LASReader {
   void read_from_source(void* dest, size_t offset, size_t size) const {
     if (m_mapped_file.has_value()) {
       // Fast path: direct memory copy from mapped file
+      if (offset + size > m_mapped_file->size()) {
+        throw std::runtime_error("read_from_source: offset + size exceeds mapped file bounds");
+      }
+      LASPP_ASSERT_LE(offset + size, m_mapped_file->size(),
+                      "read_from_source: offset + size exceeds mapped file bounds");
       std::memcpy(dest, m_mapped_file->data().data() + offset, size);
     } else {
       // Fallback: read from stream
@@ -330,7 +336,13 @@ class LASReader {
       // Fast path: copy directly from mapped memory
       auto point_data_span =
           m_mapped_file->subspan(header.offset_to_point_data(), point_data.size());
-      std::memcpy(point_data.data(), point_data_span.data(), point_data.size());
+      size_t copy_size = std::min(point_data_span.size(), point_data.size());
+      if (copy_size < point_data.size()) {
+        throw std::runtime_error("read_point_data: mapped span smaller than destination buffer");
+      }
+      LASPP_ASSERT_GE(point_data_span.size(), point_data.size(),
+                      "read_point_data: mapped span smaller than destination buffer");
+      std::memcpy(point_data.data(), point_data_span.data(), copy_size);
     } else {
       // Slow path: read from stream
       m_input_stream->seekg(header.offset_to_point_data());
@@ -531,9 +543,14 @@ class LASReader {
     std::vector<std::byte> data(vlr.record_length_after_header);
     if (m_mapped_file.has_value()) {
       // Fast path: copy directly from mapped memory
-      auto vlr_span = m_mapped_file->subspan(static_cast<size_t>(vlr.global_offset()),
-                                             vlr.record_length_after_header);
-      std::memcpy(data.data(), vlr_span.data(), vlr_span.size());
+      auto vlr_span = m_mapped_file->subspan(vlr.global_offset(), vlr.record_length_after_header);
+      size_t copy_size = std::min(data.size(), vlr.record_length_after_header);
+      if (copy_size < vlr.record_length_after_header) {
+        throw std::runtime_error("read_vlr_data: destination buffer smaller than VLR data");
+      }
+      LASPP_ASSERT_GE(data.size(), vlr.record_length_after_header,
+                      "read_vlr_data: destination buffer smaller than VLR data");
+      std::memcpy(data.data(), vlr_span.data(), copy_size);
     } else {
       // Slow path: read from stream
       m_input_stream->seekg(static_cast<int64_t>(vlr.global_offset()));
@@ -547,9 +564,15 @@ class LASReader {
     std::vector<std::byte> data(evlr.record_length_after_header);
     if (m_mapped_file.has_value()) {
       // Fast path: copy directly from mapped memory
-      auto evlr_span = m_mapped_file->subspan(static_cast<size_t>(evlr.global_offset()),
-                                              evlr.record_length_after_header);
-      std::memcpy(data.data(), evlr_span.data(), evlr_span.size());
+      auto evlr_span =
+          m_mapped_file->subspan(evlr.global_offset(), evlr.record_length_after_header);
+      size_t copy_size = std::min(data.size(), evlr.record_length_after_header);
+      if (copy_size < evlr.record_length_after_header) {
+        throw std::runtime_error("read_evlr_data: destination buffer smaller than EVLR data");
+      }
+      LASPP_ASSERT_GE(data.size(), evlr.record_length_after_header,
+                      "read_evlr_data: destination buffer smaller than EVLR data");
+      std::memcpy(data.data(), evlr_span.data(), copy_size);
     } else {
       // Slow path: read from stream
       m_input_stream->seekg(static_cast<int64_t>(evlr.global_offset()));

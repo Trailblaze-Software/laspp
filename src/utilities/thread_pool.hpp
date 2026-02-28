@@ -22,6 +22,7 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <functional>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -110,6 +111,7 @@ class ThreadPool {
   ThreadPool& operator=(ThreadPool&&) = delete;
 
   // Execute a function for each index in [begin, end)
+  // Uses std::latch for lock-free completion waiting (no spinwait)
   template <typename Func>
   void parallel_for(size_t begin, size_t end, Func func) {
     if (begin >= end) {
@@ -120,11 +122,14 @@ class ThreadPool {
     const size_t num_tasks = std::min(m_num_threads, range);
     const size_t chunk_size = std::max(size_t{1}, range / num_tasks);
     std::atomic<size_t> next_index{begin};
-    std::atomic<size_t> completed_tasks{0};
+
+    // Use std::latch for lock-free completion synchronization
+    // Latch count is num_tasks (one countdown per task completion)
+    std::latch completion_latch{static_cast<ptrdiff_t>(num_tasks)};
 
     // Launch tasks
     for (size_t i = 0; i < num_tasks; ++i) {
-      enqueue([&next_index, end, chunk_size, &func, &completed_tasks] {
+      enqueue([&next_index, end, chunk_size, &func, &completion_latch] {
         while (true) {
           size_t idx = next_index.fetch_add(chunk_size);
           if (idx >= end) {
@@ -135,14 +140,14 @@ class ThreadPool {
             func(j);
           }
         }
-        completed_tasks++;
+        // Count down latch when task completes (lock-free atomic operation)
+        completion_latch.count_down();
       });
     }
 
-    // Wait for all tasks to complete
-    while (completed_tasks.load() < num_tasks) {
-      std::this_thread::yield();
-    }
+    // Wait for all tasks to complete (blocks efficiently, no spinwait)
+    // This will park the thread on a condition variable internally
+    completion_latch.wait();
   }
 
  private:
@@ -163,22 +168,43 @@ class ThreadPool {
 };
 
 // Global thread pool instance (lazy-initialized, respects LASPP_NUM_THREADS changes)
+// Uses lock-free fast path check + mutex for recreation when thread count changes
 inline ThreadPool& get_thread_pool() {
-  static std::unique_ptr<ThreadPool> pool_ptr;
-  static std::mutex pool_mutex;
-  static size_t last_thread_count = 0;
-
-  std::lock_guard<std::mutex> lock(pool_mutex);
+  // Fast path: lock-free check if pool exists and thread count matches
+  static std::atomic<ThreadPool*> pool_ptr{nullptr};
+  static std::atomic<size_t> cached_thread_count{0};
+  static std::mutex pool_mutex;                   // Only used for initialization/recreation
+  static std::unique_ptr<ThreadPool> owned_pool;  // Owns the pool lifetime
 
   size_t current_thread_count = get_num_threads();
+  ThreadPool* current_pool = pool_ptr.load(std::memory_order_acquire);
+  size_t cached_count = cached_thread_count.load(std::memory_order_acquire);
 
-  // Recreate pool if thread count changed or if it doesn't exist
-  if (!pool_ptr || last_thread_count != current_thread_count) {
-    pool_ptr = std::make_unique<ThreadPool>(current_thread_count);
-    last_thread_count = current_thread_count;
+  // Fast path: pool exists and thread count matches (no lock needed)
+  if (current_pool != nullptr && cached_count == current_thread_count) {
+    return *current_pool;
   }
 
-  return *pool_ptr;
+  // Slow path: need to create or recreate pool (acquire lock)
+  std::lock_guard<std::mutex> lock(pool_mutex);
+
+  // Double-check after acquiring lock (another thread might have created it)
+  current_pool = pool_ptr.load(std::memory_order_acquire);
+  cached_count = cached_thread_count.load(std::memory_order_acquire);
+
+  if (current_pool != nullptr && cached_count == current_thread_count) {
+    return *current_pool;
+  }
+
+  // Create new pool (old one will be destroyed automatically via unique_ptr)
+  owned_pool = std::make_unique<ThreadPool>(current_thread_count);
+  current_pool = owned_pool.get();
+
+  // Publish with release semantics (ensures pool is fully constructed)
+  pool_ptr.store(current_pool, std::memory_order_release);
+  cached_thread_count.store(current_thread_count, std::memory_order_release);
+
+  return *current_pool;
 }
 
 // Convenience function for parallel_for using the global thread pool
