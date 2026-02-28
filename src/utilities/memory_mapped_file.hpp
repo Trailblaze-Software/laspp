@@ -240,10 +240,8 @@ inline void MemoryMappedFile::unmap_file() noexcept {
   }
 
 #ifdef _WIN32
-  if (m_data != nullptr) {
-    UnmapViewOfFile(m_data);
-    m_data = nullptr;
-  }
+  UnmapViewOfFile(m_data);
+  m_data = nullptr;
   if (m_mapping_handle != nullptr) {
     CloseHandle(m_mapping_handle);
     m_mapping_handle = nullptr;
@@ -253,7 +251,7 @@ inline void MemoryMappedFile::unmap_file() noexcept {
     m_file_handle = nullptr;
   }
 #else
-  if (m_data != nullptr && m_data != MAP_FAILED) {
+  if (m_data != MAP_FAILED) {
     munmap(const_cast<std::byte*>(m_data), m_size);
     m_data = nullptr;
   }

@@ -16,12 +16,35 @@
  * trailblaze.software@gmail.com
  */
 
+#include <chrono>
+#include <filesystem>
+
 #include "example_custom_las_point.hpp"
 #include "las_header.hpp"
 #include "las_reader.hpp"
 #include "las_writer.hpp"
 #include "vlr.hpp"
 using namespace laspp;
+
+class TempFile {
+ public:
+  explicit TempFile(const std::string& prefix) {
+    auto base_dir = std::filesystem::temp_directory_path() / "laspp_tests";
+    std::filesystem::create_directories(base_dir);
+    auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    path_ = base_dir / (prefix + "_" + std::to_string(timestamp) + ".las");
+  }
+
+  ~TempFile() {
+    std::error_code ec;
+    std::filesystem::remove(path_, ec);
+  }
+
+  const std::filesystem::path& path() const { return path_; }
+
+ private:
+  std::filesystem::path path_;
+};
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   {
@@ -258,6 +281,127 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
           }
         }
+      }
+    }
+  }
+
+  // Test memory-mapped file path (file path constructor)
+  {
+    TempFile temp_file("test_mmap");
+    {
+      // Write a test file
+      std::fstream ofs(temp_file.path(),
+                       std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+      LASWriter writer(ofs, 1);
+
+      std::vector<LASPointFormat1> points;
+      points.reserve(50);
+      for (size_t i = 0; i < points.capacity(); i++) {
+        points.emplace_back();
+        points.back().x = static_cast<int32_t>(i);
+        points.back().gps_time.f64 = static_cast<double>(i) * 32.0;
+      }
+
+      writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
+      writer.write_points(std::span<const LASPointFormat1>(points));
+    }
+
+    {
+      // Read using file path constructor (uses memory mapping)
+      LASReader reader(temp_file.path());
+      LASPP_ASSERT(reader.is_using_memory_mapping(), "Reader should be using memory mapping");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 50);
+      LASPP_ASSERT_EQ(reader.header().point_format(), 1);
+
+      const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
+      LASPP_ASSERT_EQ(vlrs.size(), 1);
+      LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
+
+      std::vector<LASPointFormat1> points(50);
+      reader.read_chunk(std::span<LASPointFormat1>(points), 0);
+
+      for (size_t i = 0; i < points.size(); i++) {
+        LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
+        LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
+      }
+    }
+  }
+
+  // Test memory-mapped file path with EVLR
+  {
+    TempFile temp_file("test_mmap_evlr");
+    {
+      // Write a test file with EVLR
+      std::fstream ofs(temp_file.path(),
+                       std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+      LASWriter writer(ofs, 1);
+
+      std::vector<LASPointFormat1> points;
+      points.reserve(30);
+      for (size_t i = 0; i < points.capacity(); i++) {
+        points.emplace_back();
+        points.back().x = static_cast<int32_t>(i);
+      }
+
+      writer.write_points(std::span<const LASPointFormat1>(points));
+      writer.write_evlr(LASEVLR{.reserved = 23,
+                                .user_id = "test",
+                                .record_id = 7,
+                                .record_length_after_header = 5,
+                                .description = "test evlr"},
+                        std::vector<std::byte>({std::byte(10), std::byte(20), std::byte(30),
+                                                std::byte(40), std::byte(50)}));
+    }
+
+    {
+      // Read using file path constructor (uses memory mapping)
+      LASReader reader(temp_file.path());
+      LASPP_ASSERT(reader.is_using_memory_mapping(), "Reader should be using memory mapping");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 30);
+
+      const std::vector<LASEVLRWithGlobalOffset>& evlrs = reader.evlr_headers();
+      LASPP_ASSERT_EQ(evlrs.size(), 1);
+      std::vector<std::byte> evlr_data = reader.read_evlr_data(evlrs[0]);
+      LASPP_ASSERT_EQ(evlr_data.size(), 5);
+      LASPP_ASSERT_EQ(evlr_data[0], std::byte(10));
+      LASPP_ASSERT_EQ(evlr_data[4], std::byte(50));
+    }
+  }
+
+  // Test memory-mapped file path with compressed LAZ
+  {
+    TempFile temp_file("test_mmap_laz");
+    {
+      // Write a compressed LAZ file
+      std::fstream ofs(temp_file.path(),
+                       std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+      LASWriter writer(ofs, 1 | 128);  // Format 1 with compression
+
+      std::vector<LASPointFormat1> points;
+      points.reserve(100);
+      for (size_t i = 0; i < points.capacity(); i++) {
+        points.emplace_back();
+        points.back().x = static_cast<int32_t>(i);
+        points.back().gps_time.f64 = static_cast<double>(i) * 32.0;
+      }
+
+      writer.write_points(std::span<const LASPointFormat1>(points));
+    }
+
+    {
+      // Read using file path constructor (uses memory mapping)
+      LASReader reader(temp_file.path());
+      LASPP_ASSERT(reader.is_using_memory_mapping(), "Reader should be using memory mapping");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 100);
+      LASPP_ASSERT_EQ(reader.header().point_format(), 129);  // Format 1 with compression
+      LASPP_ASSERT_GE(reader.num_chunks(), 1);               // Should have at least one chunk
+
+      std::vector<LASPointFormat1> points(100);
+      reader.read_chunks(std::span<LASPointFormat1>(points), {0, reader.num_chunks()});
+
+      for (size_t i = 0; i < points.size(); i++) {
+        LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
+        LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
       }
     }
   }

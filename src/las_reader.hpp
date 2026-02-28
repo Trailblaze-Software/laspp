@@ -64,34 +64,10 @@ class LASReader {
   std::vector<LASVLRWithGlobalOffset> m_vlr_headers;
   std::vector<LASEVLRWithGlobalOffset> m_evlr_headers;
 
-  // Helper to read from either memory-mapped file or stream
-  void read_from_source(void* dest, size_t offset, size_t size) const {
-    if (m_mapped_file.has_value()) {
-      // Fast path: direct memory copy from mapped file
-      if (offset + size > m_mapped_file->size()) {
-        throw std::runtime_error("read_from_source: offset + size exceeds mapped file bounds");
-      }
-      LASPP_ASSERT_LE(offset + size, m_mapped_file->size(),
-                      "read_from_source: offset + size exceeds mapped file bounds");
-      std::memcpy(dest, m_mapped_file->data().data() + offset, size);
-    } else {
-      // Fallback: read from stream
-      LASPP_ASSERT(m_input_stream != nullptr);
-      m_input_stream->seekg(static_cast<int64_t>(offset));
-      LASPP_CHECK_READ(
-          m_input_stream->read(reinterpret_cast<char*>(dest), static_cast<int64_t>(size)));
-    }
-  }
-
-  // Helper to get a span from memory-mapped file (fast path) or read into buffer (slow path)
+  // Helper to get a span from memory-mapped file
   std::span<const std::byte> get_data_span(size_t offset, size_t size) const {
-    if (m_mapped_file.has_value()) {
-      // Fast path: return span directly into mapped memory
-      return m_mapped_file->subspan(offset, size);
-    } else {
-      // Slow path: not available for stream-based I/O (caller must use read_from_source)
-      LASPP_FAIL("get_data_span() only available with memory-mapped files");
-    }
+    LASPP_ASSERT(m_mapped_file.has_value(), "get_data_span: not available with stream-based I/O");
+    return m_mapped_file->subspan(offset, size);
   }
 
   static LASHeader read_header(std::istream& input_stream) {
@@ -135,7 +111,12 @@ class LASReader {
       typename T::record_type record;
       LASPP_CHECK_READ(stream_to_use->read(reinterpret_cast<char*>(&record),
                                            static_cast<int64_t>(sizeof(typename T::record_type))));
-      record_headers.emplace_back(record, stream_to_use->tellg());
+      // Calculate absolute file offset: if using memory mapping, tellg() is relative to subspan
+      // start
+      int64_t relative_offset = stream_to_use->tellg();
+      int64_t absolute_offset =
+          m_mapped_file.has_value() ? initial_offset + relative_offset : relative_offset;
+      record_headers.emplace_back(record, static_cast<uint64_t>(absolute_offset));
       int64_t end_of_header_offset = stream_to_use->tellg();
       if constexpr (std::is_same_v<typename T::record_type, LASVLR>) {
         if (record.is_laz_vlr()) {
@@ -221,16 +202,30 @@ class LASReader {
   // Constructor from file path - uses memory mapping for optimal performance
   explicit LASReader(const std::filesystem::path& file_path) {
     // Allow forcing stream-based I/O via environment variable (for benchmarking/comparison)
+    // Validate environment variable: only accept "0" or non-empty non-zero string
     const char* disable_mmap_env = nullptr;
 #ifdef _MSC_VER
     // Use _dupenv_s on MSVC to avoid deprecated getenv warning treated as error
     char* env_buf = nullptr;
     size_t env_len = 0;
     if (_dupenv_s(&env_buf, &env_len, "LASPP_DISABLE_MMAP") == 0 && env_buf != nullptr) {
-      disable_mmap_env = env_buf;
+      // Validate: only use if it's a reasonable length (prevent DoS)
+      if (env_len > 0 && env_len < 1024) {
+        disable_mmap_env = env_buf;
+      } else {
+        std::free(env_buf);
+        env_buf = nullptr;
+      }
     }
 #else
-    disable_mmap_env = std::getenv("LASPP_DISABLE_MMAP");
+    const char* raw_env = std::getenv("LASPP_DISABLE_MMAP");
+    // Validate: only use if it exists and has reasonable length (prevent DoS)
+    if (raw_env != nullptr) {
+      size_t env_len = strnlen_s(raw_env, 1024);
+      if (env_len > 0 && env_len < 1024) {
+        disable_mmap_env = raw_env;
+      }
+    }
 #endif
 
     bool force_stream_io =
@@ -329,28 +324,6 @@ class LASReader {
 
   // Check if memory mapping is being used (for debugging/verification)
   bool is_using_memory_mapping() const noexcept { return m_mapped_file.has_value(); }
-
-  std::vector<std::byte> read_point_data(const LASHeader& header) {
-    std::vector<std::byte> point_data(header.point_data_record_length() * header.num_points());
-    if (m_mapped_file.has_value()) {
-      // Fast path: copy directly from mapped memory
-      auto point_data_span =
-          m_mapped_file->subspan(header.offset_to_point_data(), point_data.size());
-      size_t copy_size = std::min(point_data_span.size(), point_data.size());
-      if (copy_size < point_data.size()) {
-        throw std::runtime_error("read_point_data: mapped span smaller than destination buffer");
-      }
-      LASPP_ASSERT_GE(point_data_span.size(), point_data.size(),
-                      "read_point_data: mapped span smaller than destination buffer");
-      std::memcpy(point_data.data(), point_data_span.data(), copy_size);
-    } else {
-      // Slow path: read from stream
-      m_input_stream->seekg(header.offset_to_point_data());
-      LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(point_data.data()),
-                                            static_cast<int64_t>(point_data.size())));
-    }
-    return point_data;
-  }
 
   size_t num_points() const { return m_header.num_points(); }
   size_t num_chunks() const {
@@ -542,17 +515,11 @@ class LASReader {
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
     std::vector<std::byte> data(vlr.record_length_after_header);
     if (m_mapped_file.has_value()) {
-      // Fast path: copy directly from mapped memory
       auto vlr_span = m_mapped_file->subspan(vlr.global_offset(), vlr.record_length_after_header);
-      size_t copy_size = std::min(data.size(), vlr.record_length_after_header);
-      if (copy_size < vlr.record_length_after_header) {
-        throw std::runtime_error("read_vlr_data: destination buffer smaller than VLR data");
+      if (data.size() > 0) {
+        std::memcpy(data.data(), vlr_span.data(), data.size());
       }
-      LASPP_ASSERT_GE(data.size(), vlr.record_length_after_header,
-                      "read_vlr_data: destination buffer smaller than VLR data");
-      std::memcpy(data.data(), vlr_span.data(), copy_size);
     } else {
-      // Slow path: read from stream
       m_input_stream->seekg(static_cast<int64_t>(vlr.global_offset()));
       LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(data.data()),
                                             static_cast<int64_t>(data.size())));
@@ -563,18 +530,12 @@ class LASReader {
   std::vector<std::byte> read_evlr_data(const LASEVLRWithGlobalOffset& evlr) {
     std::vector<std::byte> data(evlr.record_length_after_header);
     if (m_mapped_file.has_value()) {
-      // Fast path: copy directly from mapped memory
       auto evlr_span =
           m_mapped_file->subspan(evlr.global_offset(), evlr.record_length_after_header);
-      size_t copy_size = std::min(data.size(), evlr.record_length_after_header);
-      if (copy_size < evlr.record_length_after_header) {
-        throw std::runtime_error("read_evlr_data: destination buffer smaller than EVLR data");
+      if (data.size() > 0) {
+        std::memcpy(data.data(), evlr_span.data(), data.size());
       }
-      LASPP_ASSERT_GE(data.size(), evlr.record_length_after_header,
-                      "read_evlr_data: destination buffer smaller than EVLR data");
-      std::memcpy(data.data(), evlr_span.data(), copy_size);
     } else {
-      // Slow path: read from stream
       m_input_stream->seekg(static_cast<int64_t>(evlr.global_offset()));
       LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(data.data()),
                                             static_cast<int64_t>(data.size())));
