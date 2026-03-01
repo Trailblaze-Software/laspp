@@ -22,6 +22,7 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <functional>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -38,22 +39,19 @@ namespace utilities {
 // Get the number of threads to use from LASPP_NUM_THREADS environment variable,
 // or return hardware_concurrency() if not set or invalid.
 inline size_t get_num_threads() {
+  const char* env_threads = nullptr;
 #ifdef _WIN32
   // Use _dupenv_s on Windows to avoid deprecation warning
-  char* env_threads = nullptr;
+  char* env_threads_raw = nullptr;
   size_t len = 0;
-  if (_dupenv_s(&env_threads, &len, "LASPP_NUM_THREADS") == 0 && env_threads != nullptr) {
-    std::unique_ptr<char, decltype(&free)> guard(env_threads, &free);
-    constexpr long MAX_THREADS = 1024;
-    char* end = nullptr;
-    long num_threads = std::strtol(env_threads, &end, 10);
-    // Check: valid conversion, no trailing chars, positive, and within bounds
-    if (end != env_threads && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
-      return static_cast<size_t>(num_threads);
-    }
+  std::unique_ptr<char, decltype(&free)> guard(nullptr, &free);
+  if (_dupenv_s(&env_threads_raw, &len, "LASPP_NUM_THREADS") == 0 && env_threads_raw != nullptr) {
+    guard.reset(env_threads_raw);
+    env_threads = env_threads_raw;
   }
 #else
-  const char* env_threads = std::getenv("LASPP_NUM_THREADS");
+  env_threads = std::getenv("LASPP_NUM_THREADS");
+#endif
   if (env_threads != nullptr) {
     constexpr long MAX_THREADS = 1024;
     char* end = nullptr;
@@ -63,7 +61,6 @@ inline size_t get_num_threads() {
       return static_cast<size_t>(num_threads);
     }
   }
-#endif
   return std::max(size_t{1}, static_cast<size_t>(std::thread::hardware_concurrency()));
 }
 
@@ -116,31 +113,27 @@ class ThreadPool {
       return;
     }
 
-    const size_t range = end - begin;
-    const size_t num_tasks = std::min(m_num_threads, range);
-    const size_t chunk_size = std::max(size_t{1}, range / num_tasks);
-    std::atomic<size_t> next_index{begin};
-    std::atomic<size_t> completed_tasks{0};
+    // Use shared_ptr to ensure atomics live long enough for all threads
+    auto next_index = std::make_shared<std::atomic<size_t>>(begin);
+    auto completed_count = std::make_shared<std::atomic<size_t>>(0);
+    const size_t total_work = end - begin;
 
-    // Launch tasks
-    for (size_t i = 0; i < num_tasks; ++i) {
-      enqueue([&next_index, end, chunk_size, &func, &completed_tasks] {
+    // Wake all worker threads to grab work dynamically
+    for (size_t i = 0; i < m_num_threads; ++i) {
+      enqueue([next_index, end, func, completed_count] {
         while (true) {
-          size_t idx = next_index.fetch_add(chunk_size);
+          size_t idx = next_index->fetch_add(1);
           if (idx >= end) {
             break;
           }
-          size_t end_idx = std::min(idx + chunk_size, end);
-          for (size_t j = idx; j < end_idx; ++j) {
-            func(j);
-          }
+          func(idx);
+          completed_count->fetch_add(1);
         }
-        completed_tasks++;
       });
     }
 
-    // Wait for all tasks to complete
-    while (completed_tasks.load() < num_tasks) {
+    // Wait for all work to complete
+    while (completed_count->load() < total_work) {
       std::this_thread::yield();
     }
   }
@@ -162,23 +155,14 @@ class ThreadPool {
   std::atomic<bool> m_stop;
 };
 
-// Global thread pool instance (lazy-initialized, respects LASPP_NUM_THREADS changes)
+// Global thread pool instance (lazy-initialized)
 inline ThreadPool& get_thread_pool() {
-  static std::unique_ptr<ThreadPool> pool_ptr;
-  static std::mutex pool_mutex;
-  static size_t last_thread_count = 0;
+  static std::once_flag init_flag;
+  static std::unique_ptr<ThreadPool> pool;
 
-  std::lock_guard<std::mutex> lock(pool_mutex);
+  std::call_once(init_flag, []() { pool = std::make_unique<ThreadPool>(); });
 
-  size_t current_thread_count = get_num_threads();
-
-  // Recreate pool if thread count changed or if it doesn't exist
-  if (!pool_ptr || last_thread_count != current_thread_count) {
-    pool_ptr = std::make_unique<ThreadPool>(current_thread_count);
-    last_thread_count = current_thread_count;
-  }
-
-  return *pool_ptr;
+  return *pool;
 }
 
 // Convenience function for parallel_for using the global thread pool

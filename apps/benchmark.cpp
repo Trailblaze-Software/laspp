@@ -192,6 +192,25 @@ static std::string json_escape(const std::string& s) {
   return out;
 }
 
+// ── Raw file read (roofline): read entire file into memory without decompression ───
+
+static double raw_file_read_once(const std::filesystem::path& path) {
+  auto t0 = Clock::now();
+  {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+      throw std::runtime_error("Cannot open file: " + path.string());
+    }
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::vector<char> buffer(static_cast<std::size_t>(size));
+    if (!file.read(buffer.data(), size)) {
+      throw std::runtime_error("Failed to read file: " + path.string());
+    }
+  }
+  return elapsed_since(t0);
+}
+
 // ── LAZperf: single-threaded read ────────────────────────────────────────────
 
 #ifdef LASPP_HAS_LAZPERF
@@ -256,8 +275,18 @@ static double laspp_read_once(const std::filesystem::path& path, int n_threads) 
   ThreadControl ctrl(n_threads);
   auto t0 = Clock::now();
   {
-    std::ifstream ifs(path, std::ios::binary);
-    LASReader reader(ifs);
+    // Use file path constructor - automatically uses memory mapping for optimal performance
+    LASReader reader(path);
+    if (!reader.is_using_memory_mapping()) {
+      std::cerr << "WARNING: LASReader is NOT using memory mapping (fell back to streams)\n";
+    } else {
+      // Only print once per benchmark run, not per iteration
+      static bool printed = false;
+      if (!printed) {
+        std::cerr << "INFO: LASReader is using memory-mapped file I/O\n";
+        printed = true;
+      }
+    }
     std::vector<PointType> points(reader.num_points());
     reader.read_chunks<PointType>(points, {0, reader.num_chunks()});
   }
@@ -323,8 +352,8 @@ static void run_benchmark(const std::filesystem::path& path, bool do_read, bool 
   // Pre-read points into memory for the write benchmark (not timed).
   std::vector<PointType> cached_points;
   if (do_write) {
-    std::ifstream ifs(path, std::ios::binary);
-    LASReader rdr(ifs);
+    // Use file path constructor - automatically uses memory mapping for optimal performance
+    LASReader rdr(path);
     cached_points.resize(rdr.num_points());
     rdr.read_chunks<PointType>(cached_points, {0, rdr.num_chunks()});
   }
@@ -383,6 +412,17 @@ static void run_benchmark(const std::filesystem::path& path, bool do_read, bool 
     }
   }
 #endif
+
+  // ── Raw file read (roofline) ─────────────────────────────────────────────
+  if (do_read) {
+    for (int w = 0; w < warmup; ++w) {
+      raw_file_read_once(path);
+    }
+    for (int it = 0; it < iterations; ++it) {
+      double t = raw_file_read_once(path);
+      results.push_back({"roofline", "read", 0, it, t});
+    }
+  }
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -479,17 +519,11 @@ int main(int argc, char* argv[]) {
 
   // ── Probe file header ─────────────────────────────────────────────────────
 
-  std::ifstream probe(path, std::ios::binary);
-  if (!probe.is_open()) {
-    std::cerr << "Error: cannot open: " << file_str << "\n";
-    return 1;
-  }
-  LASReader probe_reader(probe);
+  LASReader probe_reader(path);
   uint8_t point_format_byte = probe_reader.header().point_format();
   uint8_t base_format = static_cast<uint8_t>(point_format_byte & 0x7Fu);
   bool is_compressed = (point_format_byte & 0x80u) != 0u;
   std::size_t num_points = probe_reader.num_points();
-  probe.close();
 
   std::uintmax_t file_size_bytes = std::filesystem::file_size(path);
   int hw_threads = static_cast<int>(std::thread::hardware_concurrency());

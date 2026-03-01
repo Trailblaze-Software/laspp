@@ -22,3 +22,11 @@
 #else
 #define LASPP_PACKED
 #endif
+
+// Platform-specific memory prefetch macro
+#ifdef _MSC_VER
+#include <intrin.h>
+#define LASPP_PREFETCH(addr) _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
+#else
+#define LASPP_PREFETCH(addr) __builtin_prefetch(addr, 0, 3)
+#endif
