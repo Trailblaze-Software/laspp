@@ -219,10 +219,19 @@ class LASReader {
     }
 #else
     const char* raw_env = std::getenv("LASPP_DISABLE_MMAP");
-    // Validate: only use if it exists and has reasonable length (prevent DoS)
     if (raw_env != nullptr) {
-      size_t env_len = strnlen_s(raw_env, 1024);
-      if (env_len > 0 && env_len < 1024) {
+      size_t env_len = 0;
+      const char* p = raw_env;
+      bool is_null_terminated = false;
+      while (env_len < 1024) {
+        if (*p == '\0') {
+          is_null_terminated = true;
+          break;
+        }
+        ++env_len;
+        ++p;
+      }
+      if (is_null_terminated && env_len > 0 && env_len < 1024) {
         disable_mmap_env = raw_env;
       }
     }
