@@ -285,9 +285,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
   }
 
-  // Test memory-mapped file path (file path constructor)
+  // Test both memory-mapped and stream-based I/O paths
   {
-    TempFile temp_file("test_mmap");
+    TempFile temp_file("test_io_paths");
     {
       // Write a test file
       std::fstream ofs(temp_file.path(),
@@ -306,8 +306,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       writer.write_points(std::span<const LASPointFormat1>(points));
     }
 
+    // Test memory-mapped path (file path constructor)
     {
-      // Read using file path constructor (uses memory mapping)
       LASReader reader(temp_file.path());
       LASPP_ASSERT(reader.is_using_memory_mapping(), "Reader should be using memory mapping");
       LASPP_ASSERT_EQ(reader.header().num_points(), 50);
@@ -325,11 +325,32 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
       }
     }
+
+    // Test stream-based path (istream constructor)
+    {
+      std::ifstream ifs(temp_file.path(), std::ios::binary);
+      LASReader reader(ifs);
+      LASPP_ASSERT(!reader.is_using_memory_mapping(), "Reader should be using stream I/O");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 50);
+      LASPP_ASSERT_EQ(reader.header().point_format(), 1);
+
+      const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
+      LASPP_ASSERT_EQ(vlrs.size(), 1);
+      LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
+
+      std::vector<LASPointFormat1> points(50);
+      reader.read_chunk(std::span<LASPointFormat1>(points), 0);
+
+      for (size_t i = 0; i < points.size(); i++) {
+        LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
+        LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
+      }
+    }
   }
 
-  // Test memory-mapped file path with EVLR
+  // Test both I/O paths with EVLR
   {
-    TempFile temp_file("test_mmap_evlr");
+    TempFile temp_file("test_io_paths_evlr");
     {
       // Write a test file with EVLR
       std::fstream ofs(temp_file.path(),
@@ -353,8 +374,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                                                 std::byte(40), std::byte(50)}));
     }
 
+    // Test memory-mapped path with EVLR
     {
-      // Read using file path constructor (uses memory mapping)
       LASReader reader(temp_file.path());
       LASPP_ASSERT(reader.is_using_memory_mapping(), "Reader should be using memory mapping");
       LASPP_ASSERT_EQ(reader.header().num_points(), 30);
@@ -366,11 +387,26 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       LASPP_ASSERT_EQ(evlr_data[0], std::byte(10));
       LASPP_ASSERT_EQ(evlr_data[4], std::byte(50));
     }
+
+    // Test stream-based path with EVLR
+    {
+      std::ifstream ifs(temp_file.path(), std::ios::binary);
+      LASReader reader(ifs);
+      LASPP_ASSERT(!reader.is_using_memory_mapping(), "Reader should be using stream I/O");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 30);
+
+      const std::vector<LASEVLRWithGlobalOffset>& evlrs = reader.evlr_headers();
+      LASPP_ASSERT_EQ(evlrs.size(), 1);
+      std::vector<std::byte> evlr_data = reader.read_evlr_data(evlrs[0]);
+      LASPP_ASSERT_EQ(evlr_data.size(), 5);
+      LASPP_ASSERT_EQ(evlr_data[0], std::byte(10));
+      LASPP_ASSERT_EQ(evlr_data[4], std::byte(50));
+    }
   }
 
-  // Test memory-mapped file path with compressed LAZ
+  // Test both I/O paths with compressed LAZ
   {
-    TempFile temp_file("test_mmap_laz");
+    TempFile temp_file("test_io_paths_laz");
     {
       // Write a compressed LAZ file
       std::fstream ofs(temp_file.path(),
@@ -388,10 +424,28 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       writer.write_points(std::span<const LASPointFormat1>(points));
     }
 
+    // Test memory-mapped path with compressed LAZ
     {
-      // Read using file path constructor (uses memory mapping)
       LASReader reader(temp_file.path());
       LASPP_ASSERT(reader.is_using_memory_mapping(), "Reader should be using memory mapping");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 100);
+      LASPP_ASSERT_EQ(reader.header().point_format(), 129);  // Format 1 with compression
+      LASPP_ASSERT_GE(reader.num_chunks(), 1);               // Should have at least one chunk
+
+      std::vector<LASPointFormat1> points(100);
+      reader.read_chunks(std::span<LASPointFormat1>(points), {0, reader.num_chunks()});
+
+      for (size_t i = 0; i < points.size(); i++) {
+        LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
+        LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
+      }
+    }
+
+    // Test stream-based path with compressed LAZ
+    {
+      std::ifstream ifs(temp_file.path(), std::ios::binary);
+      LASReader reader(ifs);
+      LASPP_ASSERT(!reader.is_using_memory_mapping(), "Reader should be using stream I/O");
       LASPP_ASSERT_EQ(reader.header().num_points(), 100);
       LASPP_ASSERT_EQ(reader.header().point_format(), 129);  // Format 1 with compression
       LASPP_ASSERT_GE(reader.num_chunks(), 1);               // Should have at least one chunk
