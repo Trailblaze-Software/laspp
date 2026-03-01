@@ -17,6 +17,7 @@
  */
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 
 #include "example_custom_las_point.hpp"
@@ -457,6 +458,97 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
         LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
       }
+    }
+  }
+
+  // Test LASPP_DISABLE_MMAP environment variable
+  {
+    TempFile temp_file("test_disable_mmap");
+    {
+      // Write a test file
+      std::fstream ofs(temp_file.path(),
+                       std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+      LASWriter writer(ofs, 1);
+
+      std::vector<LASPointFormat1> points;
+      points.reserve(25);
+      for (size_t i = 0; i < points.capacity(); i++) {
+        points.emplace_back();
+        points.back().x = static_cast<int32_t>(i);
+        points.back().gps_time.f64 = static_cast<double>(i) * 32.0;
+      }
+
+      writer.write_vlr(LASVLR(), std::vector<std::byte>(0));
+      writer.write_points(std::span<const LASPointFormat1>(points));
+    }
+
+    // Test with LASPP_DISABLE_MMAP set to "1" (should force stream I/O)
+    {
+#ifdef _WIN32
+      _putenv_s("LASPP_DISABLE_MMAP", "1");
+#else
+      setenv("LASPP_DISABLE_MMAP", "1", 1);
+#endif
+
+      LASReader reader(temp_file.path());
+      LASPP_ASSERT(!reader.is_using_memory_mapping(),
+                   "Reader should be using stream I/O when LASPP_DISABLE_MMAP=1");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 25);
+      LASPP_ASSERT_EQ(reader.header().point_format(), 1);
+
+      const std::vector<LASVLRWithGlobalOffset>& vlrs = reader.vlr_headers();
+      LASPP_ASSERT_EQ(vlrs.size(), 1);
+      LASPP_ASSERT_EQ(reader.read_vlr_data(vlrs[0]).size(), 0);
+
+      std::vector<LASPointFormat1> points(25);
+      reader.read_chunk(std::span<LASPointFormat1>(points), 0);
+
+      for (size_t i = 0; i < points.size(); i++) {
+        LASPP_ASSERT_EQ(points[i].x, static_cast<int32_t>(i));
+        LASPP_ASSERT_EQ(points[i].gps_time.f64, static_cast<double>(i) * 32.0);
+      }
+
+      // Clean up environment variable
+#ifdef _WIN32
+      _putenv_s("LASPP_DISABLE_MMAP", "");
+#else
+      unsetenv("LASPP_DISABLE_MMAP");
+#endif
+    }
+
+    // Test with LASPP_DISABLE_MMAP set to "0" (should use memory mapping)
+    {
+#ifdef _WIN32
+      _putenv_s("LASPP_DISABLE_MMAP", "0");
+#else
+      setenv("LASPP_DISABLE_MMAP", "0", 1);
+#endif
+
+      LASReader reader(temp_file.path());
+      LASPP_ASSERT(reader.is_using_memory_mapping(),
+                   "Reader should be using memory mapping when LASPP_DISABLE_MMAP=0");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 25);
+
+      // Clean up environment variable
+#ifdef _WIN32
+      _putenv_s("LASPP_DISABLE_MMAP", "");
+#else
+      unsetenv("LASPP_DISABLE_MMAP");
+#endif
+    }
+
+    // Test with LASPP_DISABLE_MMAP unset (should use memory mapping by default)
+    {
+#ifdef _WIN32
+      _putenv_s("LASPP_DISABLE_MMAP", "");
+#else
+      unsetenv("LASPP_DISABLE_MMAP");
+#endif
+
+      LASReader reader(temp_file.path());
+      LASPP_ASSERT(reader.is_using_memory_mapping(),
+                   "Reader should be using memory mapping by default");
+      LASPP_ASSERT_EQ(reader.header().num_points(), 25);
     }
   }
 
