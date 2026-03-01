@@ -92,7 +92,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use Point10 encoder with layered compression");
             }
-            encoders.emplace_back(LASPointFormat0Encoder(point));
+            encoders.emplace_back(std::make_unique<LASPointFormat0Encoder>(point));
             compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat0));
             break;
           }
@@ -101,8 +101,9 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(point), T>()) {
               point = points[0];
             }
-            encoders.emplace_back(LASPointFormat6Encoder(point));
-            context = std::get<LASPointFormat6Encoder>(encoders.back()).get_active_context();
+            encoders.emplace_back(std::make_unique<LASPointFormat6Encoder>(point));
+            context = std::get<std::unique_ptr<LASPointFormat6Encoder>>(encoders.back())
+                          ->get_active_context();
             compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat6));
             layered_streams.emplace_back(
                 std::make_unique<LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS>>());
@@ -118,7 +119,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use GPSTime11 encoder with layered compression");
             }
-            encoders.emplace_back(GPSTime11Encoder(gps_time));
+            encoders.emplace_back(std::make_unique<GPSTime11Encoder>(gps_time));
             compressed_data.write(reinterpret_cast<const char*>(&gps_time), sizeof(GPSTime));
             break;
           }
@@ -130,7 +131,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use RGB12 encoder with layered compression");
             }
-            encoders.emplace_back(RGB12Encoder(color_data));
+            encoders.emplace_back(std::make_unique<RGB12Encoder>(color_data));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             break;
           }
@@ -139,7 +140,7 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(color_data), T>()) {
               color_data = points[0];
             }
-            encoders.emplace_back(RGB14Encoder(color_data, context.value()));
+            encoders.emplace_back(std::make_unique<RGB14Encoder>(color_data, context.value()));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             layered_streams.emplace_back(
                 std::make_unique<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>());
@@ -156,7 +157,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use Byte encoder with layered compression");
             }
-            encoders.emplace_back(BytesEncoder(bytes));
+            encoders.emplace_back(std::make_unique<BytesEncoder>(bytes));
             compressed_data.write(reinterpret_cast<const char*>(bytes.data()),
                                   static_cast<int64_t>(bytes.size()));
             break;
@@ -198,7 +199,8 @@ class LAZWriter {
           for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
             LAZEncoder& laz_encoder = encoders[encoder_index];
             std::visit(
-                [&](auto&& encoder) {
+                [&](auto&& enc_ptr) {
+                  auto& encoder = *enc_ptr;
                   if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
                                                        decltype(encoder.last_value())>>,
                                                    T>()) {
@@ -234,7 +236,8 @@ class LAZWriter {
       layer_sizes.reserve(total_layer_count);
       for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
         std::visit(
-            [&](auto&& encoder) {
+            [&](auto&& enc_ptr) {
+              auto& encoder = *enc_ptr;
               if constexpr (has_num_layers_v<decltype(encoder)>) {
                 auto& streams = *std::get<std::unique_ptr<
                     LayeredOutStreams<std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>>>(

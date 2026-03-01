@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <memory>
 #include <variant>
 
 #include "laz/byte_encoder.hpp"
@@ -28,8 +29,10 @@
 
 namespace laspp {
 
-// FIXME: Inefficient use of memory
-typedef std::variant<LASPointFormat0Encoder, GPSTime11Encoder, RGB12Encoder, RGB14Encoder,
-                     BytesEncoder, LASPointFormat6Encoder>
+// Each encoder lives on the heap via unique_ptr so the variant is pointer-sized
+// regardless of which (potentially large) encoder type is active.
+typedef std::variant<std::unique_ptr<LASPointFormat0Encoder>, std::unique_ptr<GPSTime11Encoder>,
+                     std::unique_ptr<RGB12Encoder>, std::unique_ptr<RGB14Encoder>,
+                     std::unique_ptr<BytesEncoder>, std::unique_ptr<LASPointFormat6Encoder>>
     LAZEncoder;
 }  // namespace laspp
