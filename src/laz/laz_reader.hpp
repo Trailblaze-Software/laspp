@@ -24,9 +24,6 @@
 #include <memory>
 #include <span>
 #include <type_traits>
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
 
 #include "chunktable.hpp"
 #include "las_point.hpp"
@@ -41,6 +38,7 @@
 #include "laz/stream.hpp"
 #include "laz_vlr.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/macros.hpp"
 
 namespace laspp {
 
@@ -173,9 +171,9 @@ class LAZReader {
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
             [&total_n_layers](auto&& enc_ptr) {
-              auto& enc = *enc_ptr;
+              const auto& enc = *enc_ptr;
               if constexpr (has_num_layers_v<decltype(enc)>) {
-                total_n_layers += std::remove_reference_t<decltype(enc)>::NUM_LAYERS;
+                total_n_layers += std::decay_t<decltype(enc)>::NUM_LAYERS;
               } else {
                 LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
               }
@@ -206,19 +204,10 @@ class LAZReader {
       }
       LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
 
-      // Prefetch helper (platform-specific)
-      auto prefetch = [](const void* addr) {
-#ifdef _MSC_VER
-        _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0);
-#else
-        __builtin_prefetch(addr, 0, 3);
-#endif
-      };
-
       for (size_t i = 0; i < decompressed_data.size(); i++) {
         // Prefetch next points' decompressed data (helps with write operations)
         if (i + 3 < decompressed_data.size()) {
-          prefetch(&decompressed_data[i + 3]);
+          LASPP_PREFETCH(&decompressed_data[i + 3]);
         }
 
         std::optional<uint8_t> context;

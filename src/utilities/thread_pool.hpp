@@ -111,7 +111,6 @@ class ThreadPool {
   ThreadPool& operator=(ThreadPool&&) = delete;
 
   // Execute a function for each index in [begin, end)
-  // Uses std::latch for lock-free completion waiting (no spinwait)
   template <typename Func>
   void parallel_for(size_t begin, size_t end, Func func) {
     if (begin >= end) {
@@ -123,8 +122,6 @@ class ThreadPool {
     const size_t chunk_size = std::max(size_t{1}, range / num_tasks);
     std::atomic<size_t> next_index{begin};
 
-    // Use std::latch for lock-free completion synchronization
-    // Latch count is num_tasks (one countdown per task completion)
     std::latch completion_latch{static_cast<ptrdiff_t>(num_tasks)};
 
     // Launch tasks
@@ -140,13 +137,10 @@ class ThreadPool {
             func(j);
           }
         }
-        // Count down latch when task completes (lock-free atomic operation)
         completion_latch.count_down();
       });
     }
 
-    // Wait for all tasks to complete (blocks efficiently, no spinwait)
-    // This will park the thread on a condition variable internally
     completion_latch.wait();
   }
 
