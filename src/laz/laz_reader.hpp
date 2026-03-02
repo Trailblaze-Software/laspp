@@ -96,7 +96,7 @@ class LAZReader {
   const LAZChunkTable& chunk_table() const { return m_chunk_table.value(); }
 
   template <typename T>
-  std::span<T> decompress_chunk(std::span<std::byte> compressed_data,
+  std::span<T> decompress_chunk(std::span<const std::byte> compressed_data,
                                 std::span<T> decompressed_data) {
     std::vector<LAZEncoder> encoders;
     {
@@ -105,7 +105,7 @@ class LAZReader {
         switch (record.item_type) {
           case LAZItemType::Point14: {
             encoders.emplace_back(std::make_unique<LASPointFormat6Encoder>(
-                *reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
+                *reinterpret_cast<const LASPointFormat6*>(compressed_data.data())));
             context = std::get<std::unique_ptr<LASPointFormat6Encoder>>(encoders.back())
                           ->get_active_context();
             compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
@@ -113,25 +113,25 @@ class LAZReader {
           }
           case LAZItemType::RGB14: {
             encoders.emplace_back(std::make_unique<RGB14Encoder>(
-                *reinterpret_cast<ColorData*>(compressed_data.data()), context.value()));
+                *reinterpret_cast<const ColorData*>(compressed_data.data()), context.value()));
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
           case LAZItemType::Point10: {
             encoders.emplace_back(std::make_unique<LASPointFormat0Encoder>(
-                *reinterpret_cast<LASPointFormat0*>(compressed_data.data())));
+                *reinterpret_cast<const LASPointFormat0*>(compressed_data.data())));
             compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
             break;
           }
           case LAZItemType::GPSTime11: {
             encoders.emplace_back(std::make_unique<GPSTime11Encoder>(
-                *reinterpret_cast<GPSTime*>(compressed_data.data())));
+                *reinterpret_cast<const GPSTime*>(compressed_data.data())));
             compressed_data = compressed_data.subspan(sizeof(GPSTime));
             break;
           }
           case LAZItemType::RGB12: {
             encoders.emplace_back(std::make_unique<RGB12Encoder>(
-                *reinterpret_cast<ColorData*>(compressed_data.data())));
+                *reinterpret_cast<const ColorData*>(compressed_data.data())));
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
@@ -180,7 +180,7 @@ class LAZReader {
             },
             encoder);
       }
-      std::span<std::byte> compressed_layer_data =
+      std::span<const std::byte> compressed_layer_data =
           compressed_data.subspan(total_n_layers * sizeof(uint32_t));
 
       std::vector<
@@ -242,7 +242,8 @@ class LAZReader {
         }
       }
     } else {
-      InStream compressed_in_stream(compressed_data.data(), compressed_data.size());
+      InStream compressed_in_stream(compressed_data.data(),
+                                    compressed_data.size());  // const std::byte* accepted
       for (size_t i = 0; i < decompressed_data.size(); i++) {
         for (LAZEncoder& laz_encoder : encoders) {
           std::visit(

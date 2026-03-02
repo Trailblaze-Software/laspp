@@ -73,7 +73,8 @@ class LayeredInStreams {
                                                                     std::byte{0}, std::byte{0}};
 
  public:
-  LayeredInStreams(std::span<std::byte>& layer_sizes, std::span<std::byte>& compressed_layer_data) {
+  LayeredInStreams(std::span<const std::byte>& layer_sizes,
+                   std::span<const std::byte>& compressed_layer_data) {
     for (std::size_t i = 0; i < N_STREAMS; ++i) {
       std::uint32_t layer_size = 0;
       std::memcpy(&layer_size, layer_sizes.data(), sizeof(layer_size));
