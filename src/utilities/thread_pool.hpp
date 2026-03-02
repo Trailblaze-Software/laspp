@@ -28,10 +28,8 @@
 #include <queue>
 #include <thread>
 #include <vector>
-#ifdef _WIN32
-#include <cstring>
-#include <memory>
-#endif
+
+#include "env.hpp"
 
 namespace laspp {
 namespace utilities {
@@ -39,25 +37,14 @@ namespace utilities {
 // Get the number of threads to use from LASPP_NUM_THREADS environment variable,
 // or return hardware_concurrency() if not set or invalid.
 inline size_t get_num_threads() {
-  const char* env_threads = nullptr;
-#ifdef _WIN32
-  // Use _dupenv_s on Windows to avoid deprecation warning
-  char* env_threads_raw = nullptr;
-  size_t len = 0;
-  std::unique_ptr<char, decltype(&free)> guard(nullptr, &free);
-  if (_dupenv_s(&env_threads_raw, &len, "LASPP_NUM_THREADS") == 0 && env_threads_raw != nullptr) {
-    guard.reset(env_threads_raw);
-    env_threads = env_threads_raw;
-  }
-#else
-  env_threads = std::getenv("LASPP_NUM_THREADS");
-#endif
-  if (env_threads != nullptr) {
+  auto env_threads = get_env("LASPP_NUM_THREADS");
+  if (env_threads.has_value()) {
     constexpr long MAX_THREADS = 1024;
+    const char* str = env_threads->c_str();
     char* end = nullptr;
-    long num_threads = std::strtol(env_threads, &end, 10);
+    long num_threads = std::strtol(str, &end, 10);
     // Check: valid conversion, no trailing chars, positive, and within bounds
-    if (end != env_threads && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
+    if (end != str && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
       return static_cast<size_t>(num_threads);
     }
   }

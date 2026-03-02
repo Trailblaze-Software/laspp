@@ -39,6 +39,7 @@
 #include "laz/laz_reader.hpp"
 #include "laz/stream.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/env.hpp"
 #include "utilities/memory_mapped_file.hpp"
 #include "utilities/thread_pool.hpp"
 #include "vlr.hpp"
@@ -196,43 +197,10 @@ class LASReader {
   // Constructor from file path - uses memory mapping for optimal performance
   explicit LASReader(const std::filesystem::path& file_path) {
     // Allow forcing stream-based I/O via environment variable (for benchmarking/comparison)
-    // Validate environment variable: only accept "0" or non-empty non-zero string
-    const char* disable_mmap_env = nullptr;
-#ifdef _MSC_VER
-    // Use _dupenv_s on MSVC to avoid deprecated getenv warning treated as error
-    char* env_buf = nullptr;
-    size_t env_len = 0;
-    if (_dupenv_s(&env_buf, &env_len, "LASPP_DISABLE_MMAP") == 0 && env_buf != nullptr) {
-      // Validate: only use if it's a reasonable length (prevent DoS)
-      if (env_len > 0 && env_len < 1024) {
-        disable_mmap_env = env_buf;
-      } else {
-        std::free(env_buf);
-        env_buf = nullptr;
-      }
-    }
-#else
-    const char* raw_env = std::getenv("LASPP_DISABLE_MMAP");
-    if (raw_env != nullptr) {
-      size_t env_len = 0;
-      const char* p = raw_env;
-      bool is_null_terminated = false;
-      while (env_len < 1024) {
-        if (*p == '\0') {
-          is_null_terminated = true;
-          break;
-        }
-        ++env_len;
-        ++p;
-      }
-      if (is_null_terminated && env_len > 0 && env_len < 1024) {
-        disable_mmap_env = raw_env;
-      }
-    }
-#endif
-
+    // Any non-empty value other than "0" enables stream-based I/O.
+    auto disable_mmap = utilities::get_env("LASPP_DISABLE_MMAP");
     bool force_stream_io =
-        (disable_mmap_env != nullptr && disable_mmap_env[0] != '\0' && disable_mmap_env[0] != '0');
+        disable_mmap.has_value() && !disable_mmap->empty() && (*disable_mmap)[0] != '0';
 
     if (!force_stream_io) {
       try {
@@ -262,11 +230,6 @@ class LASReader {
       m_header = read_header(*m_input_stream);
     }
 
-#ifdef _MSC_VER
-    if (env_buf) {
-      std::free(env_buf);
-    }
-#endif
     m_vlr_headers = read_vlr_headers();
     m_evlr_headers = read_evlr_headers();
     if (m_header.is_laz_compressed()) {
