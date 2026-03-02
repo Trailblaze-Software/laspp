@@ -23,6 +23,7 @@
 #include <iostream>
 #include <istream>
 #include <limits>
+#include <span>
 #include <vector>
 
 #include "utilities/assert.hpp"
@@ -30,11 +31,42 @@
 namespace laspp {
 
 // Kept for backward-compatibility; no longer used in the hot decompression path.
+// Read-only stream buffer for const data. We ensure safety by never calling setp() or any write
+// operations.
 class PointerStreamBuffer : public std::streambuf {
  public:
-  PointerStreamBuffer(std::byte* data, size_t size) {
-    setg(reinterpret_cast<char*>(data), reinterpret_cast<char*>(data),
-         reinterpret_cast<char*>(data + size));
+  explicit PointerStreamBuffer(std::span<const std::byte> data) {
+    // setg() requires non-const pointers, but only uses them for read positioning
+    setg(const_cast<char*>(reinterpret_cast<const char*>(data.data())),
+         const_cast<char*>(reinterpret_cast<const char*>(data.data())),
+         const_cast<char*>(reinterpret_cast<const char*>(data.data() + data.size())));
+  }
+
+  // Explicitly disable write operations to ensure const-correctness
+  std::streambuf::int_type overflow(std::streambuf::int_type) override {
+    LASPP_FAIL("PointerStreamBuffer: write operation attempted on read-only buffer");
+  }
+
+ protected:
+  // Support seekg() / tellg() so that LASReader can seek within mapped memory.
+  pos_type seekoff(off_type off, std::ios_base::seekdir dir,
+                   std::ios_base::openmode which = std::ios_base::in) override {
+    if (which & std::ios_base::out) return pos_type(off_type(-1));  // read-only buffer
+    char* new_gptr;
+    if (dir == std::ios_base::beg) {
+      new_gptr = eback() + off;
+    } else if (dir == std::ios_base::cur) {
+      new_gptr = gptr() + off;
+    } else {  // std::ios_base::end
+      new_gptr = egptr() + off;
+    }
+    if (new_gptr < eback() || new_gptr > egptr()) return pos_type(off_type(-1));
+    setg(eback(), new_gptr, egptr());
+    return pos_type(new_gptr - eback());
+  }
+
+  pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in) override {
+    return seekoff(off_type(pos), std::ios_base::beg, which);
   }
 };
 
