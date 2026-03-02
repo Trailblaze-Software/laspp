@@ -68,15 +68,21 @@ inline size_t get_num_threads() {
 class ThreadPool {
  public:
   explicit ThreadPool(size_t num_threads = get_num_threads())
-      : m_num_threads(std::max(size_t{1}, num_threads)), m_stop(false) {
-    m_workers.reserve(m_num_threads);
-    for (size_t i = 0; i < m_num_threads; ++i) {
+      : m_max_threads(std::max(size_t{1}, num_threads)), m_stop(false) {
+    // Don't create threads yet - create them lazily on demand
+    m_workers.reserve(m_max_threads);
+  }
+
+  // Ensure we have at least n_threads worker threads created
+  void ensure_threads(size_t n_threads) {
+    std::unique_lock<std::mutex> lock(m_queue_mutex);
+    while (m_workers.size() < n_threads && m_workers.size() < m_max_threads) {
       m_workers.emplace_back([this] {
         while (true) {
           std::function<void()> task;
           {
-            std::unique_lock<std::mutex> lock(m_queue_mutex);
-            m_condition.wait(lock, [this] { return m_stop || !m_tasks.empty(); });
+            std::unique_lock<std::mutex> task_lock(m_queue_mutex);
+            m_condition.wait(task_lock, [this] { return m_stop || !m_tasks.empty(); });
             if (m_stop && m_tasks.empty()) {
               return;
             }
@@ -113,14 +119,17 @@ class ThreadPool {
       return;
     }
 
+    size_t requested_threads = get_num_threads();
+    ensure_threads(requested_threads);
+    size_t active_threads = std::min(requested_threads, m_max_threads);
+
     // Use shared_ptr to ensure atomics live long enough for all threads
     auto next_index = std::make_shared<std::atomic<size_t>>(begin);
     auto completed_count = std::make_shared<std::atomic<size_t>>(0);
     const size_t total_work = end - begin;
 
-    // Wake all worker threads to grab work dynamically
-    for (size_t i = 0; i < m_num_threads; ++i) {
-      enqueue([next_index, end, func, completed_count] {
+    for (size_t i = 0; i < active_threads; ++i) {
+      enqueue([next_index, end, func, completed_count]() mutable {
         while (true) {
           size_t idx = next_index->fetch_add(1);
           if (idx >= end) {
@@ -147,10 +156,10 @@ class ThreadPool {
     m_condition.notify_one();
   }
 
-  size_t m_num_threads;
+  size_t m_max_threads;
   std::vector<std::thread> m_workers;
   std::queue<std::function<void()>> m_tasks;
-  std::mutex m_queue_mutex;
+  mutable std::mutex m_queue_mutex;  // mutable for ensure_threads
   std::condition_variable m_condition;
   std::atomic<bool> m_stop;
 };
@@ -160,7 +169,11 @@ inline ThreadPool& get_thread_pool() {
   static std::once_flag init_flag;
   static std::unique_ptr<ThreadPool> pool;
 
-  std::call_once(init_flag, []() { pool = std::make_unique<ThreadPool>(); });
+  std::call_once(init_flag, []() {
+    size_t max_threads =
+        std::max(size_t{1}, static_cast<size_t>(std::thread::hardware_concurrency()));
+    pool = std::make_unique<ThreadPool>(max_threads);
+  });
 
   return *pool;
 }
