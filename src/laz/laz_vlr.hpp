@@ -71,7 +71,7 @@ struct LASPP_PACKED LAZSpecialVLRPt1 {
   bool adaptive_chunking() const { return chunk_size == std::numeric_limits<uint32_t>::max(); }
 
   explicit LAZSpecialVLRPt1(std::istream& is) {
-    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(this), sizeof(LAZSpecialVLRPt1)));
+    LASPP_CHECK_READ(is, this, sizeof(LAZSpecialVLRPt1));
   }
 
   explicit LAZSpecialVLRPt1(LAZCompressor laz_compressor)
@@ -318,7 +318,7 @@ struct LAZSpecialVLRContent : LAZSpecialVLRPt1 {
   explicit LAZSpecialVLRContent(std::istream& is)
       : LAZSpecialVLRPt1(is), items_records(num_item_records) {
     for (auto& item : items_records) {
-      LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
+      LASPP_CHECK_READ(is, &item, sizeof(LAZItemRecord));
       LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
       LASPP_ASSERT(item.item_version == laz_item_version_from_type(item.item_type));
     }

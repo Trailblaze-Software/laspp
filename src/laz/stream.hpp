@@ -44,7 +44,12 @@ class PointerStreamBuffer : public std::streambuf {
 
   // Explicitly disable write operations to ensure const-correctness
   std::streambuf::int_type overflow(std::streambuf::int_type) override {
+#ifdef LASPP_DEBUG_ASSERTS
     LASPP_FAIL("PointerStreamBuffer: write operation attempted on read-only buffer");
+#else
+    // Return EOF to indicate failure (standard library convention)
+    return traits_type::eof();
+#endif
   }
 
  protected:
@@ -52,17 +57,31 @@ class PointerStreamBuffer : public std::streambuf {
   pos_type seekoff(off_type off, std::ios_base::seekdir dir,
                    std::ios_base::openmode which = std::ios_base::in) override {
     if (which & std::ios_base::out) return pos_type(off_type(-1));  // read-only buffer
-    char* new_gptr;
+
+    // Compute offsets as integers to avoid undefined behavior from pointer arithmetic
+    const char* base = eback();
+    const char* current = gptr();
+    const char* end = egptr();
+    ptrdiff_t buffer_size = end - base;
+
+    ptrdiff_t new_index;
     if (dir == std::ios_base::beg) {
-      new_gptr = eback() + off;
+      new_index = off;
     } else if (dir == std::ios_base::cur) {
-      new_gptr = gptr() + off;
+      new_index = (current - base) + off;
     } else {  // std::ios_base::end
-      new_gptr = egptr() + off;
+      new_index = buffer_size + off;
     }
-    if (new_gptr < eback() || new_gptr > egptr()) return pos_type(off_type(-1));
-    setg(eback(), new_gptr, egptr());
-    return pos_type(new_gptr - eback());
+
+    // Validate bounds before converting to pointer
+    if (new_index < 0 || new_index > buffer_size) {
+      return pos_type(off_type(-1));
+    }
+
+    // Safe to convert to pointer now
+    char* new_gptr = const_cast<char*>(base) + new_index;
+    setg(const_cast<char*>(base), new_gptr, const_cast<char*>(end));
+    return pos_type(static_cast<off_type>(new_index));
   }
 
   pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in) override {
@@ -118,9 +137,9 @@ class InStream : StreamVariables {
   // into an owned buffer, then proceeds as the pointer constructor.
   explicit InStream(std::istream& stream) {
     auto cur = stream.tellg();
-    stream.seekg(0, std::ios::end);
+    LASPP_CHECK_SEEK(stream, 0, std::ios::end);
     auto end_pos = stream.tellg();
-    stream.seekg(cur);
+    LASPP_CHECK_SEEK(stream, cur, std::ios::beg);
     size_t sz = static_cast<size_t>(end_pos - cur);
     LASPP_ASSERT_GE(sz, 4u, "InStream: stream too small (need at least 4 bytes)");
     m_owned_data.resize(sz);
@@ -228,20 +247,20 @@ class OutStream : StreamVariables {
     const int64_t current_g = m_stream.tellg();
     const int64_t current_p = m_stream.tellp();
     int64_t updated_p = current_p - 1;
-    m_stream.seekg(updated_p);
+    LASPP_CHECK_SEEK(m_stream, updated_p, std::ios::beg);
     uint8_t carry = static_cast<uint8_t>(m_stream.get());
     m_stream.seekp(updated_p);
     while (carry == 0xff) {
       m_stream.put(0);
       LASPP_ASSERT_GT(updated_p, 0);
       updated_p--;
-      m_stream.seekg(updated_p);
+      LASPP_CHECK_SEEK(m_stream, updated_p, std::ios::beg);
       carry = static_cast<uint8_t>(m_stream.get());
       m_stream.seekp(updated_p);
     }
     m_stream.put(static_cast<char>(carry + 1));
     m_stream.seekp(current_p);
-    m_stream.seekg(current_g);
+    LASPP_CHECK_SEEK(m_stream, current_g, std::ios::beg);
   }
 
   void update_range(uint32_t lower, uint32_t upper) {

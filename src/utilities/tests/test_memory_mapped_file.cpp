@@ -189,7 +189,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 #endif
   }
 
-  // Test 7: Verify data() returns correct span
+  // Test 6: Verify data() returns correct span
   {
     TempFile data_file("data_test");
     const char test_data[] = "ABCDEF";

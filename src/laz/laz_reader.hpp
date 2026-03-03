@@ -82,13 +82,12 @@ class LAZReader {
 
   void read_chunk_table(std::istream& in_stream, size_t n_points) {
     int64_t chunk_table_offset;
-    LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&chunk_table_offset),
-                                    static_cast<int64_t>(sizeof(size_t))));
+    LASPP_CHECK_READ(in_stream, &chunk_table_offset, sizeof(size_t));
     if (chunk_table_offset == -1) {
       LASPP_UNIMPLEMENTED("Reading chunk table from LAS file");
     }
 
-    in_stream.seekg(chunk_table_offset);
+    LASPP_CHECK_SEEK(in_stream, chunk_table_offset, std::ios::beg);
 
     m_chunk_table.emplace(LAZChunkTable(in_stream, chunk_size(), n_points));
   }

@@ -65,7 +65,7 @@ class Vector3D {
   double operator[](size_t i) const { return m_data[i]; }
 
   explicit Vector3D(std::istream& in_stream) {
-    LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
+    LASPP_CHECK_READ(in_stream, m_data.data(), sizeof(m_data));
   }
 
   Vector3D(double x, double y, double z) : m_data{{x, y, z}} {}
@@ -279,10 +279,8 @@ class LASHeader {
 
  public:
   explicit LASHeader(std::istream& in_stream) {
-    in_stream.seekg(0);
-    apply_all_in_order([&](auto& val) {
-      LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&val), sizeof(val)));
-    });
+    LASPP_CHECK_SEEK(in_stream, 0, std::ios::beg);
+    apply_all_in_order([&](auto& val) { LASPP_CHECK_READ(in_stream, &val, sizeof(val)); });
 
     // Validate header_size matches version
     if (m_version_major == 1 && m_version_minor == 4) {

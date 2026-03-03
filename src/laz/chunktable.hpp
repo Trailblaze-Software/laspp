@@ -62,8 +62,7 @@ class LAZChunkTable : LAZChunkTableHeader {
                          std::optional<uint32_t> constant_chunk_size = std::nullopt,
                          size_t total_n_points = 0)
       : m_constant_chunk_size(constant_chunk_size) {
-    LASPP_CHECK_READ(istream.read(reinterpret_cast<char*>(this),
-                                  static_cast<int64_t>(sizeof(LAZChunkTableHeader))));
+    LASPP_CHECK_READ(istream, this, sizeof(LAZChunkTableHeader));
     if (constant_chunk_size) {
       if (constant_chunk_size.value() == 0) {
         LASPP_ASSERT_EQ(0, number_of_chunks);

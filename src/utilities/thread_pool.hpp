@@ -100,8 +100,9 @@ class ThreadPool {
   ThreadPool& operator=(ThreadPool&&) = delete;
 
   // Execute a function for each index in [begin, end)
+  // chunk_size: number of indices to process per atomic increment (default: 1)
   template <typename Func>
-  void parallel_for(size_t begin, size_t end, Func func) {
+  void parallel_for(size_t begin, size_t end, Func func, size_t chunk_size = 1) {
     if (begin >= end) {
       return;
     }
@@ -110,28 +111,38 @@ class ThreadPool {
     ensure_threads(requested_threads);
     size_t active_threads = std::min(requested_threads, m_max_threads);
 
-    // Use shared_ptr to ensure atomics live long enough for all threads
-    auto next_index = std::make_shared<std::atomic<size_t>>(begin);
-    auto completed_count = std::make_shared<std::atomic<size_t>>(0);
     const size_t total_work = end - begin;
+    const size_t num_chunks = (total_work + chunk_size - 1) / chunk_size;  // Ceiling division
+
+    // Use latch to block caller until all work is complete
+    auto completion_latch = std::make_shared<std::latch>(num_chunks);
+
+    // Use shared_ptr to ensure atomics live long enough for all threads
+    auto next_chunk = std::make_shared<std::atomic<size_t>>(0);
 
     for (size_t i = 0; i < active_threads; ++i) {
-      enqueue([next_index, end, func, completed_count]() mutable {
+      enqueue([next_chunk, num_chunks, begin, end, chunk_size, func, completion_latch]() mutable {
         while (true) {
-          size_t idx = next_index->fetch_add(1);
-          if (idx >= end) {
+          size_t chunk_idx = next_chunk->fetch_add(1);
+          if (chunk_idx >= num_chunks) {
             break;
           }
-          func(idx);
-          completed_count->fetch_add(1);
+
+          // Process all indices in this chunk
+          size_t chunk_begin = begin + chunk_idx * chunk_size;
+          size_t chunk_end = std::min(chunk_begin + chunk_size, end);
+          for (size_t idx = chunk_begin; idx < chunk_end; ++idx) {
+            func(idx);
+          }
+
+          // Signal completion of this chunk (reduces atomic contention)
+          completion_latch->count_down(1);
         }
       });
     }
 
-    // Wait for all work to complete
-    while (completed_count->load() < total_work) {
-      std::this_thread::yield();
-    }
+    // Block until all chunks are complete
+    completion_latch->wait();
   }
 
  private:
@@ -146,7 +157,7 @@ class ThreadPool {
   size_t m_max_threads;
   std::vector<std::thread> m_workers;
   std::queue<std::function<void()>> m_tasks;
-  mutable std::mutex m_queue_mutex;  // mutable for ensure_threads
+  std::mutex m_queue_mutex;
   std::condition_variable m_condition;
   std::atomic<bool> m_stop;
 };
@@ -167,8 +178,8 @@ inline ThreadPool& get_thread_pool() {
 
 // Convenience function for parallel_for using the global thread pool
 template <typename Func>
-void parallel_for(size_t begin, size_t end, Func func) {
-  get_thread_pool().parallel_for(begin, end, func);
+void parallel_for(size_t begin, size_t end, Func func, size_t chunk_size = 1) {
+  get_thread_pool().parallel_for(begin, end, func, chunk_size);
 }
 
 }  // namespace utilities

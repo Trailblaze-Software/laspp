@@ -63,6 +63,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -202,7 +203,14 @@ static double raw_file_read_once(const std::filesystem::path& path) {
       throw std::runtime_error("Cannot open file: " + path.string());
     }
     std::streamsize size = file.tellg();
+    // Validate tellg() result before using it (returns -1 on failure)
+    if (size < 0 || !file.good()) {
+      throw std::runtime_error("Failed to get file size: " + path.string());
+    }
     file.seekg(0, std::ios::beg);
+    if (!file.good()) {
+      throw std::runtime_error("Failed to seek to beginning: " + path.string());
+    }
     std::vector<char> buffer(static_cast<std::size_t>(size));
     if (!file.read(buffer.data(), size)) {
       throw std::runtime_error("Failed to read file: " + path.string());
@@ -277,20 +285,22 @@ static double laspp_read_once(const std::filesystem::path& path, int n_threads) 
   {
     // Use file path constructor - automatically uses memory mapping for optimal performance
     LASReader reader(path);
-    if (!reader.is_using_memory_mapping()) {
-      std::cerr << "WARNING: LASReader is NOT using memory mapping (fell back to streams)\n";
-    } else {
-      // Only print once per benchmark run, not per iteration
-      static bool printed = false;
-      if (!printed) {
-        std::cerr << "INFO: LASReader is using memory-mapped file I/O\n";
-        printed = true;
-      }
-    }
     std::vector<PointType> points(reader.num_points());
     reader.read_chunks<PointType>(points, {0, reader.num_chunks()});
   }
   return elapsed_since(t0);
+}
+
+// Check memory mapping status once per thread configuration (called before warmup/iterations)
+template <typename PointType>
+static void check_memory_mapping_status(const std::filesystem::path& path, int n_threads) {
+  ThreadControl ctrl(n_threads);
+  LASReader reader(path);
+  if (!reader.is_using_memory_mapping()) {
+    std::cerr << "WARNING: LASReader is NOT using memory mapping (fell back to streams)\n";
+  } else {
+    std::cerr << "INFO: LASReader is using memory-mapped file I/O\n";
+  }
 }
 
 // ── Point-format helpers ──────────────────────────────────────────────────────
@@ -363,9 +373,18 @@ static void run_benchmark(const std::filesystem::path& path, bool do_read, bool 
   for (int n_threads : thread_counts) {
     // ── laspp read ──────────────────────────────────────────────────────────
     if (do_read) {
+      // Check memory mapping status once per thread configuration (before timing)
+      // Use static map to track which thread counts we've already checked
+      static std::map<int, bool> checked_threads;
+      if (checked_threads.find(n_threads) == checked_threads.end()) {
+        check_memory_mapping_status<PointType>(path, n_threads);
+        checked_threads[n_threads] = true;
+      }
+      // Warmup iterations (not timed)
       for (int w = 0; w < warmup; ++w) {
         laspp_read_once<PointType>(path, n_threads);
       }
+      // Timed iterations
       for (int it = 0; it < iterations; ++it) {
         double t = laspp_read_once<PointType>(path, n_threads);
         results.push_back({"laspp", "read", n_threads, it, t});

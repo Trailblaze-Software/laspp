@@ -19,16 +19,19 @@
 
 #include <algorithm>
 #include <cassert>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <execution>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <optional>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <type_traits>
 #include <vector>
 
@@ -87,15 +90,16 @@ class LASReader {
       return ReadBuffer(m_mapped_file->subspan(offset, size));
     }
     LASPP_ASSERT(m_input_stream != nullptr, "m_input_stream must be set for stream-based I/O");
+
     std::vector<std::byte> buf(size);
-    m_input_stream->seekg(static_cast<int64_t>(offset));
-    LASPP_CHECK_READ(
-        m_input_stream->read(reinterpret_cast<char*>(buf.data()), static_cast<int64_t>(size)));
+    LASPP_CHECK_SEEK(*m_input_stream, offset, std::ios::beg);
+    LASPP_CHECK_READ(*m_input_stream, buf.data(), size);
+
     return ReadBuffer(std::move(buf));
   }
 
   static LASHeader read_header(std::istream& input_stream) {
-    input_stream.seekg(0);
+    LASPP_CHECK_SEEK(input_stream, 0, std::ios::beg);
     return LASHeader(input_stream);
   }
 
@@ -110,8 +114,7 @@ class LASReader {
     std::optional<std::vector<char>> geo_ascii;
     for (unsigned int i = 0; i < n_records; ++i) {
       typename T::record_type record;
-      LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(&record),
-                                            static_cast<int64_t>(sizeof(typename T::record_type))));
+      LASPP_CHECK_READ(*m_input_stream, &record, sizeof(typename T::record_type));
       // Calculate absolute file offset
       int64_t absolute_offset = m_input_stream->tellg();
       record_headers.emplace_back(record, static_cast<uint64_t>(absolute_offset));
@@ -124,14 +127,14 @@ class LASReader {
         if (record.is_projection()) {
           if (record.is_ogc_math_transform_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
-            LASPP_CHECK_READ(m_input_stream->read(wkt.data(), record.record_length_after_header));
+            LASPP_CHECK_READ(*m_input_stream, wkt.data(), record.record_length_after_header);
             std::string wkt_string(wkt.begin(), wkt.end());
             LASPP_ASSERT(!m_math_wkt.has_value(), "Multiple math WKTs found in header");
             m_math_wkt.emplace(wkt_string);
           }
           if (record.is_ogc_coordinate_system_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
-            LASPP_CHECK_READ(m_input_stream->read(wkt.data(), record.record_length_after_header));
+            LASPP_CHECK_READ(*m_input_stream, wkt.data(), record.record_length_after_header);
             std::string wkt_string(wkt.data(), wkt.size() - 1);
             LASPP_ASSERT(!m_coordinate_wkt.has_value(), "Multiple coordinate WKTs found in header");
             m_coordinate_wkt.emplace(wkt_string);
@@ -144,13 +147,12 @@ class LASReader {
           if (record.is_geo_double_params()) {
             LASPP_ASSERT_EQ(record.record_length_after_header % sizeof(double), 0);
             geo_doubles.emplace(record.record_length_after_header / sizeof(double));
-            LASPP_CHECK_READ(m_input_stream->read(reinterpret_cast<char*>(geo_doubles->data()),
-                                                  record.record_length_after_header));
+            LASPP_CHECK_READ(*m_input_stream, geo_doubles->data(),
+                             record.record_length_after_header);
           }
           if (record.is_geo_ascii_params()) {
             geo_ascii.emplace(uint64_t(record.record_length_after_header));
-            LASPP_CHECK_READ(
-                m_input_stream->read(geo_ascii->data(), record.record_length_after_header));
+            LASPP_CHECK_READ(*m_input_stream, geo_ascii->data(), record.record_length_after_header);
           }
         }
       }
