@@ -17,7 +17,14 @@ cmake_minimum_required(VERSION 3.20)
 
 option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
 option(LASPP_BUILD_TESTS "Build tests" ON)
-option(LASPP_BUILD_BENCHMARK "Build benchmark" ON)
+# Default benchmarks to OFF if this is a subproject (to avoid downloading
+# lazperf/googletest)
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  set(LASPP_BUILD_BENCHMARK_DEFAULT ON)
+else()
+  set(LASPP_BUILD_BENCHMARK_DEFAULT OFF)
+endif()
+option(LASPP_BUILD_BENCHMARK "Build benchmark" ${LASPP_BUILD_BENCHMARK_DEFAULT})
 option(LASPP_BUILD_APPS "Build apps" ON)
 option(LASPP_AGGRESSIVE_OPTIMIZATIONS
        "Enable aggressive performance optimizations (-march=native, etc.)" ON)

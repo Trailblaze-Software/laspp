@@ -19,6 +19,10 @@
 
 #include <array>
 #include <cstdint>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
 #include <vector>
 #ifndef _MSC_VER
 #define LASPP_HAS_BUILTIN(x) __has_builtin(x)
@@ -38,13 +42,20 @@ using source_location = std::experimental::source_location;
 }
 #endif
 
-#include <sstream>
-#include <string>
-
 #include "printing.hpp"
 #endif
 
 namespace laspp {
+
+// Helper to conditionally cast to size_t (avoids useless-cast warnings)
+template <typename T>
+inline size_t to_size_t(T value) {
+  if constexpr (std::is_same_v<T, size_t>) {
+    return value;
+  } else {
+    return static_cast<size_t>(value);
+  }
+}
 
 #ifdef LASPP_DEBUG_ASSERTS
 template <typename... Args>
@@ -192,16 +203,38 @@ static_assert(f_arr(DEBRACKET((std::array<int, 2>{{4, 4}}))));
     }                                                      \
     LASPP_ASSERT(caught, "Expected exception " #exception) \
   }
-
-#define LASPP_CHECK_READ(read)                                                           \
-  {                                                                                      \
-    auto &laspp_check_stream = read;                                                     \
-    LASPP_ASSERT(laspp_check_stream, "Failed to read from stream ", #read, " returned ", \
-                 laspp_check_stream.gcount(), " bytes");                                 \
-  }
 #else
 #define LASPP_ASSERT_THROWS(expr, exception)
-#define LASPP_CHECK_READ(read) read
 #endif
+
+// LASPP_CHECK_READ checks for read errors and byte count, even when debug asserts are off
+// Parameters: stream, buffer, size
+#define LASPP_CHECK_READ(stream, buffer, size)                                                 \
+  {                                                                                            \
+    auto &laspp_check_stream = (stream);                                                       \
+    size_t laspp_expected_size = laspp::to_size_t(size);                                       \
+    laspp_check_stream.read(reinterpret_cast<char *>(buffer),                                  \
+                            static_cast<std::streamsize>(laspp_expected_size));                \
+    std::streamsize laspp_bytes_read = laspp_check_stream.gcount();                            \
+    if (!laspp_check_stream || static_cast<size_t>(laspp_bytes_read) != laspp_expected_size) { \
+      std::stringstream laspp_error_msg;                                                       \
+      laspp_error_msg << "Failed to read from stream: expected " << laspp_expected_size        \
+                      << " bytes, got " << laspp_bytes_read << " bytes";                       \
+      throw std::runtime_error(laspp_error_msg.str());                                         \
+    }                                                                                          \
+  }
+
+// LASPP_CHECK_SEEK checks if a seek operation succeeded
+// Parameters: stream, offset, direction (e.g., std::ios::beg, std::ios::cur, std::ios::end)
+#define LASPP_CHECK_SEEK(stream, offset, direction)                           \
+  {                                                                           \
+    auto &laspp_check_stream = (stream);                                      \
+    laspp_check_stream.seekg(static_cast<std::streamoff>(offset), direction); \
+    if (!laspp_check_stream.good()) {                                         \
+      std::stringstream laspp_error_msg;                                      \
+      laspp_error_msg << "Failed to seek in stream to offset " << offset;     \
+      throw std::runtime_error(laspp_error_msg.str());                        \
+    }                                                                         \
+  }
 
 }  // namespace laspp

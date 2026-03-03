@@ -22,15 +22,14 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <functional>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <vector>
-#ifdef _WIN32
-#include <cstring>
-#include <memory>
-#endif
+
+#include "env.hpp"
 
 namespace laspp {
 namespace utilities {
@@ -38,32 +37,17 @@ namespace utilities {
 // Get the number of threads to use from LASPP_NUM_THREADS environment variable,
 // or return hardware_concurrency() if not set or invalid.
 inline size_t get_num_threads() {
-#ifdef _WIN32
-  // Use _dupenv_s on Windows to avoid deprecation warning
-  char* env_threads = nullptr;
-  size_t len = 0;
-  if (_dupenv_s(&env_threads, &len, "LASPP_NUM_THREADS") == 0 && env_threads != nullptr) {
-    std::unique_ptr<char, decltype(&free)> guard(env_threads, &free);
+  auto env_threads = get_env("LASPP_NUM_THREADS");
+  if (env_threads.has_value()) {
     constexpr long MAX_THREADS = 1024;
+    const char* str = env_threads->c_str();
     char* end = nullptr;
-    long num_threads = std::strtol(env_threads, &end, 10);
+    long num_threads = std::strtol(str, &end, 10);
     // Check: valid conversion, no trailing chars, positive, and within bounds
-    if (end != env_threads && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
+    if (end != str && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
       return static_cast<size_t>(num_threads);
     }
   }
-#else
-  const char* env_threads = std::getenv("LASPP_NUM_THREADS");
-  if (env_threads != nullptr) {
-    constexpr long MAX_THREADS = 1024;
-    char* end = nullptr;
-    long num_threads = std::strtol(env_threads, &end, 10);
-    // Check: valid conversion, no trailing chars, positive, and within bounds
-    if (end != env_threads && *end == '\0' && num_threads > 0 && num_threads <= MAX_THREADS) {
-      return static_cast<size_t>(num_threads);
-    }
-  }
-#endif
   return std::max(size_t{1}, static_cast<size_t>(std::thread::hardware_concurrency()));
 }
 
@@ -71,15 +55,21 @@ inline size_t get_num_threads() {
 class ThreadPool {
  public:
   explicit ThreadPool(size_t num_threads = get_num_threads())
-      : m_num_threads(std::max(size_t{1}, num_threads)), m_stop(false) {
-    m_workers.reserve(m_num_threads);
-    for (size_t i = 0; i < m_num_threads; ++i) {
+      : m_max_threads(std::max(size_t{1}, num_threads)), m_stop(false) {
+    // Don't create threads yet - create them lazily on demand
+    m_workers.reserve(m_max_threads);
+  }
+
+  // Ensure we have at least n_threads worker threads created
+  void ensure_threads(size_t n_threads) {
+    std::unique_lock<std::mutex> lock(m_queue_mutex);
+    while (m_workers.size() < n_threads && m_workers.size() < m_max_threads) {
       m_workers.emplace_back([this] {
         while (true) {
           std::function<void()> task;
           {
-            std::unique_lock<std::mutex> lock(m_queue_mutex);
-            m_condition.wait(lock, [this] { return m_stop || !m_tasks.empty(); });
+            std::unique_lock<std::mutex> task_lock(m_queue_mutex);
+            m_condition.wait(task_lock, [this] { return m_stop || !m_tasks.empty(); });
             if (m_stop && m_tasks.empty()) {
               return;
             }
@@ -110,39 +100,49 @@ class ThreadPool {
   ThreadPool& operator=(ThreadPool&&) = delete;
 
   // Execute a function for each index in [begin, end)
+  // chunk_size: number of indices to process per atomic increment (default: 1)
   template <typename Func>
-  void parallel_for(size_t begin, size_t end, Func func) {
+  void parallel_for(size_t begin, size_t end, Func func, size_t chunk_size = 1) {
     if (begin >= end) {
       return;
     }
 
-    const size_t range = end - begin;
-    const size_t num_tasks = std::min(m_num_threads, range);
-    const size_t chunk_size = std::max(size_t{1}, range / num_tasks);
-    std::atomic<size_t> next_index{begin};
-    std::atomic<size_t> completed_tasks{0};
+    size_t requested_threads = get_num_threads();
+    ensure_threads(requested_threads);
+    size_t active_threads = std::min(requested_threads, m_max_threads);
 
-    // Launch tasks
-    for (size_t i = 0; i < num_tasks; ++i) {
-      enqueue([&next_index, end, chunk_size, &func, &completed_tasks] {
+    const size_t total_work = end - begin;
+    const size_t num_chunks = (total_work + chunk_size - 1) / chunk_size;  // Ceiling division
+
+    // Use latch to block caller until all work is complete
+    auto completion_latch = std::make_shared<std::latch>(num_chunks);
+
+    // Use shared_ptr to ensure atomics live long enough for all threads
+    auto next_chunk = std::make_shared<std::atomic<size_t>>(0);
+
+    for (size_t i = 0; i < active_threads; ++i) {
+      enqueue([next_chunk, num_chunks, begin, end, chunk_size, func, completion_latch]() mutable {
         while (true) {
-          size_t idx = next_index.fetch_add(chunk_size);
-          if (idx >= end) {
+          size_t chunk_idx = next_chunk->fetch_add(1);
+          if (chunk_idx >= num_chunks) {
             break;
           }
-          size_t end_idx = std::min(idx + chunk_size, end);
-          for (size_t j = idx; j < end_idx; ++j) {
-            func(j);
+
+          // Process all indices in this chunk
+          size_t chunk_begin = begin + chunk_idx * chunk_size;
+          size_t chunk_end = std::min(chunk_begin + chunk_size, end);
+          for (size_t idx = chunk_begin; idx < chunk_end; ++idx) {
+            func(idx);
           }
+
+          // Signal completion of this chunk (reduces atomic contention)
+          completion_latch->count_down(1);
         }
-        completed_tasks++;
       });
     }
 
-    // Wait for all tasks to complete
-    while (completed_tasks.load() < num_tasks) {
-      std::this_thread::yield();
-    }
+    // Block until all chunks are complete
+    completion_latch->wait();
   }
 
  private:
@@ -154,7 +154,7 @@ class ThreadPool {
     m_condition.notify_one();
   }
 
-  size_t m_num_threads;
+  size_t m_max_threads;
   std::vector<std::thread> m_workers;
   std::queue<std::function<void()>> m_tasks;
   std::mutex m_queue_mutex;
@@ -162,29 +162,24 @@ class ThreadPool {
   std::atomic<bool> m_stop;
 };
 
-// Global thread pool instance (lazy-initialized, respects LASPP_NUM_THREADS changes)
+// Global thread pool instance (lazy-initialized)
 inline ThreadPool& get_thread_pool() {
-  static std::unique_ptr<ThreadPool> pool_ptr;
-  static std::mutex pool_mutex;
-  static size_t last_thread_count = 0;
+  static std::once_flag init_flag;
+  static std::unique_ptr<ThreadPool> pool;
 
-  std::lock_guard<std::mutex> lock(pool_mutex);
+  std::call_once(init_flag, []() {
+    size_t max_threads =
+        std::max(size_t{1}, static_cast<size_t>(std::thread::hardware_concurrency()));
+    pool = std::make_unique<ThreadPool>(max_threads);
+  });
 
-  size_t current_thread_count = get_num_threads();
-
-  // Recreate pool if thread count changed or if it doesn't exist
-  if (!pool_ptr || last_thread_count != current_thread_count) {
-    pool_ptr = std::make_unique<ThreadPool>(current_thread_count);
-    last_thread_count = current_thread_count;
-  }
-
-  return *pool_ptr;
+  return *pool;
 }
 
 // Convenience function for parallel_for using the global thread pool
 template <typename Func>
-void parallel_for(size_t begin, size_t end, Func func) {
-  get_thread_pool().parallel_for(begin, end, func);
+void parallel_for(size_t begin, size_t end, Func func, size_t chunk_size = 1) {
+  get_thread_pool().parallel_for(begin, end, func, chunk_size);
 }
 
 }  // namespace utilities

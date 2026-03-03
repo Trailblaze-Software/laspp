@@ -624,10 +624,10 @@ def plot_results(
 
         # Plot thread-scaling tools as lines
         for tool in scaling_tools:
-            # Get all points including default (threads=0)
+            # Get all points (exclude threads=0/default)
             tool_pts = sorted(
                 [(s.threads, s.mb_per_s)
-                 for s in op_results if s.tool == tool and s.threads >= 0],
+                 for s in op_results if s.tool == tool and s.threads > 0],
                 key=lambda x: x[0],
             )
             if tool_pts:
@@ -642,17 +642,30 @@ def plot_results(
         # Single-threaded tools as horizontal dashed lines
         single_threaded_tools = ["laszip", "lazperf", "pdal"]
 
+        # Roofline (raw file read) as a special horizontal line
+        roofline_results = [s for s in op_results if s.tool == "roofline"]
+        if roofline_results:
+            roofline_result = roofline_results[0]
+            if "roofline" not in tool_colors:
+                tool_colors["roofline"] = "#888888"  # Gray color for roofline
+            ax.axhline(roofline_result.mb_per_s, linestyle=":", color=tool_colors["roofline"],
+                       label="Roofline (raw file read)", linewidth=2.0, alpha=0.7)
+
         for tool in single_threaded_tools:
             tool_results = [s for s in op_results if s.tool == tool]
             if not tool_results:
                 continue
-            # Get the single-threaded result
-            single_thread_result = next((s for s in tool_results if s.threads <= 1), tool_results[0])
+            # Get the single-threaded result (threads <= 1 or threads == 0 for default)
+            single_thread_result = next(
+                (s for s in tool_results if s.threads <= 1 or s.threads == 0),
+                tool_results[0]
+            )
             if tool not in tool_colors:
+                # Start color assignment after scaling tools
                 tool_colors[tool] = colors[len(tool_colors) % len(colors)]
             col = tool_colors[tool]
             ax.axhline(single_thread_result.mb_per_s, linestyle="--", color=col,
-                       label=tool, linewidth=1.5)
+                       label=tool, linewidth=2.0, alpha=0.8)
 
         ax.set_xlabel("Thread count", fontsize=11)
         ax.set_ylabel("Throughput (MB/s – compressed file size)", fontsize=11)
@@ -760,11 +773,7 @@ def main() -> int:
         else:
             print(f"Using C++ benchmark binary: {binary}")
             include_laszip = "laszip" in tools
-            if "laspp" in tools:
-                # Add "default" (0 = unset LASPP_NUM_THREADS) to thread counts
-                include_laspp_threads = [0] + thread_counts
-            else:
-                include_laspp_threads = [1]
+            include_laspp_threads = thread_counts if "laspp" in tools else [1]
             try:
                 meta, cpp_results = run_cpp_benchmark(
                     binary=binary,

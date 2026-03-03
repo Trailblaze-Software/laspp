@@ -19,6 +19,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 
 #include "laz/bit_symbol_encoder.hpp"
 #include "laz/raw_encoder.hpp"
@@ -98,9 +99,13 @@ class IntegerEncoder {
   std::shared_ptr<SymbolEncoders> m_symbol_encoders;
 
  public:
-  explicit IntegerEncoder(std::optional<std::shared_ptr<SymbolEncoders>> symbol_encoders = {})
-      : m_symbol_encoders(symbol_encoders.has_value() ? symbol_encoders.value()
-                                                      : std::make_shared<SymbolEncoders>()) {}
+  IntegerEncoder() : m_symbol_encoders(std::make_shared<SymbolEncoders>()) {}
+
+  explicit IntegerEncoder(std::shared_ptr<SymbolEncoders> symbol_encoders)
+      : m_symbol_encoders(std::move(symbol_encoders)) {}
+
+  explicit IntegerEncoder(std::optional<std::shared_ptr<SymbolEncoders>> symbol_encoders)
+      : m_symbol_encoders(symbol_encoders.value_or(std::make_shared<SymbolEncoders>())) {}
 
   int32_t decode_int(InStream& stream) {
     uint_fast16_t k = m_k_encoder.decode_symbol(stream);

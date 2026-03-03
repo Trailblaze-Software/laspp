@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <span>
@@ -37,6 +38,7 @@
 #include "laz/stream.hpp"
 #include "laz_vlr.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/macros.hpp"
 
 namespace laspp {
 
@@ -80,13 +82,12 @@ class LAZReader {
 
   void read_chunk_table(std::istream& in_stream, size_t n_points) {
     int64_t chunk_table_offset;
-    LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&chunk_table_offset),
-                                    static_cast<int64_t>(sizeof(size_t))));
+    LASPP_CHECK_READ(in_stream, &chunk_table_offset, sizeof(size_t));
     if (chunk_table_offset == -1) {
       LASPP_UNIMPLEMENTED("Reading chunk table from LAS file");
     }
 
-    in_stream.seekg(chunk_table_offset);
+    LASPP_CHECK_SEEK(in_stream, chunk_table_offset, std::ios::beg);
 
     m_chunk_table.emplace(LAZChunkTable(in_stream, chunk_size(), n_points));
   }
@@ -94,7 +95,7 @@ class LAZReader {
   const LAZChunkTable& chunk_table() const { return m_chunk_table.value(); }
 
   template <typename T>
-  std::span<T> decompress_chunk(std::span<std::byte> compressed_data,
+  std::span<T> decompress_chunk(std::span<const std::byte> compressed_data,
                                 std::span<T> decompressed_data) {
     std::vector<LAZEncoder> encoders;
     {
@@ -102,40 +103,41 @@ class LAZReader {
       for (LAZItemRecord record : m_special_vlr.items_records) {
         switch (record.item_type) {
           case LAZItemType::Point14: {
-            encoders.emplace_back(LASPointFormat6Encoder(
-                *reinterpret_cast<LASPointFormat6*>(compressed_data.data())));
-            context = std::get<LASPointFormat6Encoder>(encoders.back()).get_active_context();
+            encoders.emplace_back(std::make_unique<LASPointFormat6Encoder>(
+                *reinterpret_cast<const LASPointFormat6*>(compressed_data.data())));
+            context = std::get<std::unique_ptr<LASPointFormat6Encoder>>(encoders.back())
+                          ->get_active_context();
             compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
             break;
           }
           case LAZItemType::RGB14: {
-            encoders.emplace_back(RGB14Encoder(
-                *reinterpret_cast<ColorData*>(compressed_data.data()), context.value()));
+            encoders.emplace_back(std::make_unique<RGB14Encoder>(
+                *reinterpret_cast<const ColorData*>(compressed_data.data()), context.value()));
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
           case LAZItemType::Point10: {
-            encoders.emplace_back(LASPointFormat0Encoder(
-                *reinterpret_cast<LASPointFormat0*>(compressed_data.data())));
+            encoders.emplace_back(std::make_unique<LASPointFormat0Encoder>(
+                *reinterpret_cast<const LASPointFormat0*>(compressed_data.data())));
             compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
             break;
           }
           case LAZItemType::GPSTime11: {
-            encoders.emplace_back(
-                GPSTime11Encoder(*reinterpret_cast<GPSTime*>(compressed_data.data())));
+            encoders.emplace_back(std::make_unique<GPSTime11Encoder>(
+                *reinterpret_cast<const GPSTime*>(compressed_data.data())));
             compressed_data = compressed_data.subspan(sizeof(GPSTime));
             break;
           }
           case LAZItemType::RGB12: {
-            encoders.emplace_back(
-                RGB12Encoder(*reinterpret_cast<ColorData*>(compressed_data.data())));
+            encoders.emplace_back(std::make_unique<RGB12Encoder>(
+                *reinterpret_cast<const ColorData*>(compressed_data.data())));
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
           case LAZItemType::Byte: {
             std::vector<std::byte> last_bytes(record.item_size);
             std::copy_n(compressed_data.data(), record.item_size, last_bytes.begin());
-            encoders.emplace_back(BytesEncoder(last_bytes));
+            encoders.emplace_back(std::make_unique<BytesEncoder>(last_bytes));
             compressed_data = compressed_data.subspan(record.item_size);
             break;
           }
@@ -167,16 +169,17 @@ class LAZReader {
       size_t total_n_layers = 0;
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
-            [&total_n_layers](auto&& enc) {
+            [&total_n_layers](auto&& enc_ptr) {
+              const auto& enc = *enc_ptr;
               if constexpr (has_num_layers_v<decltype(enc)>) {
-                total_n_layers += std::remove_reference_t<decltype(enc)>::NUM_LAYERS;
+                total_n_layers += std::decay_t<decltype(enc)>::NUM_LAYERS;
               } else {
                 LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
               }
             },
             encoder);
       }
-      std::span<std::byte> compressed_layer_data =
+      std::span<const std::byte> compressed_layer_data =
           compressed_data.subspan(total_n_layers * sizeof(uint32_t));
 
       std::vector<
@@ -185,7 +188,8 @@ class LAZReader {
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
             [&compressed_data, &compressed_layer_data,
-             &layered_in_streams_for_encoders](auto&& enc) {
+             &layered_in_streams_for_encoders](auto&& enc_ptr) {
+              auto& enc = *enc_ptr;
               if constexpr (has_num_layers_v<decltype(enc)>) {
                 layered_in_streams_for_encoders.emplace_back(
                     std::make_unique<
@@ -198,24 +202,33 @@ class LAZReader {
             encoder);
       }
       LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
+
       for (size_t i = 0; i < decompressed_data.size(); i++) {
+        // Prefetch next points' decompressed data (helps with write operations)
+        if (i + 3 < decompressed_data.size()) {
+          LASPP_PREFETCH(&decompressed_data[i + 3]);
+        }
+
         std::optional<uint8_t> context;
         for (size_t encoder_idx = 0; encoder_idx < encoders.size(); encoder_idx++) {
           LAZEncoder& laz_encoder = encoders[encoder_idx];
+
           std::visit(
-              [&decompressed_data, &i, &layered_in_streams_for_encoders, &encoder_idx,
-               &context](auto&& encoder) {
+              [&decompressed_data, &i, &layered_in_streams_for_encoders, encoder_idx,
+               &context](auto&& enc_ptr) {
+                auto& encoder = *enc_ptr;
                 if constexpr (has_num_layers_v<decltype(encoder)>) {
-                  LayeredInStreams<std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>&
-                      layered_in_stream = *std::get<std::unique_ptr<LayeredInStreams<
-                          std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>>>(
+                  using EncoderType = std::remove_reference_t<decltype(encoder)>;
+                  LayeredInStreams<EncoderType::NUM_LAYERS>& layered_in_stream =
+                      *std::get<std::unique_ptr<LayeredInStreams<EncoderType::NUM_LAYERS>>>(
                           layered_in_streams_for_encoders[encoder_idx]);
-                  if (i > 0) {
-                    if constexpr (std::is_same_v<std::remove_reference_t<decltype(encoder)>,
-                                                 LASPointFormat6Encoder>) {
+                  if constexpr (std::is_same_v<EncoderType, LASPointFormat6Encoder>) {
+                    if (i > 0) {
                       encoder.decode(layered_in_stream);
                       context = encoder.get_active_context();
-                    } else {
+                    }
+                  } else {
+                    if (i > 0) {
                       encoder.decode(layered_in_stream, context.value());
                     }
                   }
@@ -228,11 +241,13 @@ class LAZReader {
         }
       }
     } else {
-      InStream compressed_in_stream(compressed_data.data(), compressed_data.size());
+      InStream compressed_in_stream(compressed_data.data(),
+                                    compressed_data.size());  // const std::byte* accepted
       for (size_t i = 0; i < decompressed_data.size(); i++) {
         for (LAZEncoder& laz_encoder : encoders) {
           std::visit(
-              [&compressed_in_stream, &decompressed_data, &i](auto&& encoder) {
+              [&compressed_in_stream, &decompressed_data, &i](auto&& enc_ptr) {
+                auto& encoder = *enc_ptr;
                 if constexpr (has_num_layers_v<decltype(encoder)>) {
                   LASPP_FAIL("Cannot use layered encoder with non-layered compression.");
                 } else {

@@ -77,11 +77,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     LASPP_ASSERT_EQ(combined_data.size(), 30852);
 
-    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
-                                   LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
-    std::span<std::byte> data_span(
-        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
-        combined_data.size() - size_span.size());
+    const std::byte* data_ptr = reinterpret_cast<const std::byte*>(combined_data.data());
+    std::span<const std::byte> size_span(data_ptr,
+                                         LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<const std::byte> data_span(data_ptr + size_span.size(),
+                                         combined_data.size() - size_span.size());
 
     LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
 
