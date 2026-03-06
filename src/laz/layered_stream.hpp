@@ -1,23 +1,12 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
 
 #include <cstring>
+#include <sstream>
 
 #include "stream.hpp"
 
@@ -53,22 +42,44 @@ class AlwaysConstructedArray {
 
 template <std::size_t N_STREAMS>
 class LayeredInStreams {
-  AlwaysConstructedArray<PointerStreamBuffer, N_STREAMS> m_layer_stream_buffers;
-  AlwaysConstructedArray<std::istream, N_STREAMS> m_layer_streams;
+ public:
+  LayeredInStreams(const LayeredInStreams&) = delete;
+  LayeredInStreams& operator=(const LayeredInStreams&) = delete;
+  LayeredInStreams(LayeredInStreams&&) = delete;
+  LayeredInStreams& operator=(LayeredInStreams&&) = delete;
+
+ private:
+  // Each InStream reads directly from its slice of the in-memory compressed data —
+  // no PointerStreamBuffer or std::istream wrapper needed.
   AlwaysConstructedArray<InStream, N_STREAMS> m_streams;
   std::array<bool, N_STREAMS> m_non_empty{};
 
+  // Dummy buffer for empty layers (InStream requires at least 4 bytes to initialize).
+  // This is only used for layers with size 0 or < 4, which should never be read from
+  // (non_empty() check prevents access).
+  static constexpr std::array<std::byte, 4> s_empty_layer_buffer = {std::byte{0}, std::byte{0},
+                                                                    std::byte{0}, std::byte{0}};
+
  public:
-  LayeredInStreams(std::span<std::byte>& layer_sizes, std::span<std::byte>& compressed_layer_data) {
+  LayeredInStreams(std::span<const std::byte>& layer_sizes,
+                   std::span<const std::byte>& compressed_layer_data) {
     for (std::size_t i = 0; i < N_STREAMS; ++i) {
       std::uint32_t layer_size = 0;
       std::memcpy(&layer_size, layer_sizes.data(), sizeof(layer_size));
       m_non_empty[i] = layer_size > 0;
       layer_sizes = layer_sizes.subspan(sizeof(layer_size));
-      m_layer_stream_buffers.construct(i, compressed_layer_data.data(), layer_size);
-      m_layer_streams.construct(i, &m_layer_stream_buffers[i]);
-      m_streams.construct(i, m_layer_streams[i]);
-      compressed_layer_data = compressed_layer_data.subspan(layer_size);
+
+      // InStream requires at least 4 bytes to initialize. For empty or very small layers,
+      // use a dummy buffer. These streams should never be read from (non_empty() check).
+      if (layer_size >= 4) {
+        m_streams.construct(i, compressed_layer_data.data(), static_cast<size_t>(layer_size));
+        compressed_layer_data = compressed_layer_data.subspan(layer_size);
+      } else {
+        // Use dummy buffer for empty/small layers
+        m_streams.construct(i, s_empty_layer_buffer.data(), s_empty_layer_buffer.size());
+        // Still advance the compressed_data span even if we didn't use it
+        compressed_layer_data = compressed_layer_data.subspan(layer_size);
+      }
     }
   }
 
@@ -79,6 +90,13 @@ class LayeredInStreams {
 
 template <size_t N_STREAMS>
 class LayeredOutStreams {
+ public:
+  LayeredOutStreams(const LayeredOutStreams&) = delete;
+  LayeredOutStreams& operator=(const LayeredOutStreams&) = delete;
+  LayeredOutStreams(LayeredOutStreams&&) = delete;
+  LayeredOutStreams& operator=(LayeredOutStreams&&) = delete;
+
+ private:
   std::array<std::stringstream, N_STREAMS> m_layer_stringstreams;
   AlwaysConstructedArray<OutStream, N_STREAMS> m_streams;
 

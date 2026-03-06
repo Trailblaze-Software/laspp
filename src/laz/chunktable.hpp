@@ -1,26 +1,21 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
 
 #include <cstdint>
 #include <iostream>
-#include <optional>
 #include <vector>
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4389)  // signed/unsigned mismatch in MSVC std::optional implementation
+#endif
+#include <optional>
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include "laz/integer_encoder.hpp"
 #include "laz/stream.hpp"
@@ -55,8 +50,7 @@ class LAZChunkTable : LAZChunkTableHeader {
                          std::optional<uint32_t> constant_chunk_size = std::nullopt,
                          size_t total_n_points = 0)
       : m_constant_chunk_size(constant_chunk_size) {
-    LASPP_CHECK_READ(istream.read(reinterpret_cast<char*>(this),
-                                  static_cast<int64_t>(sizeof(LAZChunkTableHeader))));
+    LASPP_CHECK_READ(istream, this, sizeof(LAZChunkTableHeader));
     if (constant_chunk_size) {
       if (constant_chunk_size.value() == 0) {
         LASPP_ASSERT_EQ(0, number_of_chunks);

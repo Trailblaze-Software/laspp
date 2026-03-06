@@ -1,4 +1,9 @@
 /*
+ * SPDX-FileCopyrightText: (c) 2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
+ */
+
+/*
  * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
@@ -165,18 +170,18 @@ class QuadtreeSpatialIndex {
   explicit QuadtreeSpatialIndex(std::istream& is) {
     // Read "LASX" signature
     char signature[4];
-    LASPP_CHECK_READ(is.read(signature, 4));
+    LASPP_CHECK_READ(is, signature, 4);
     if (memcmp(signature, "LASX", 4) != 0) {
       LASPP_ASSERT(false, "Invalid spatial index signature");
     }
 
     // Read version
     uint32_t version;
-    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&version), 4));
+    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&version), 4);
     LASPP_ASSERT_EQ(version, 0u);
 
     // Read quadtree header
-    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&m_quadtree_header), sizeof(QuadtreeHeader)));
+    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&m_quadtree_header), sizeof(QuadtreeHeader));
     LASPP_ASSERT(memcmp(m_quadtree_header.spatial_signature, "LASS", 4) == 0,
                  "Invalid quadtree spatial signature");
     LASPP_ASSERT_EQ(m_quadtree_header.type, 0u);
@@ -185,15 +190,23 @@ class QuadtreeSpatialIndex {
 
     // Read interval header
     char interval_signature[4];
-    LASPP_CHECK_READ(is.read(interval_signature, 4));
+    LASPP_CHECK_READ(is, interval_signature, 4);
     LASPP_ASSERT(memcmp(interval_signature, "LASV", 4) == 0, "Invalid interval signature");
 
     uint32_t interval_version;
-    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&interval_version), 4));
+    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&interval_version), 4);
     LASPP_ASSERT_EQ(interval_version, 0u);
 
     uint32_t number_cells;
-    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&number_cells), 4));
+    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&number_cells), 4);
+
+    // Sanity check: prevent reading unreasonably large values from corrupted files
+    // A reasonable upper limit: 1 million cells (each cell has at least 12 bytes of header)
+    constexpr uint32_t MAX_REASONABLE_CELLS = 1000000;
+    if (number_cells > MAX_REASONABLE_CELLS) {
+      throw std::runtime_error("Invalid number_cells in spatial index: " +
+                               std::to_string(number_cells));
+    }
 
     // Read cells
     for (uint32_t i = 0; i < number_cells; ++i) {
@@ -201,9 +214,17 @@ class QuadtreeSpatialIndex {
       int32_t cell_index;
       uint32_t number_intervals;
       uint32_t number_points;
-      LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&cell_index), sizeof(int32_t)));
-      LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&number_intervals), sizeof(uint32_t)));
-      LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&number_points), sizeof(uint32_t)));
+      LASPP_CHECK_READ(is, reinterpret_cast<char*>(&cell_index), sizeof(int32_t));
+      LASPP_CHECK_READ(is, reinterpret_cast<char*>(&number_intervals), sizeof(uint32_t));
+      LASPP_CHECK_READ(is, reinterpret_cast<char*>(&number_points), sizeof(uint32_t));
+
+      // Sanity check: prevent reading unreasonably large values from corrupted files
+      // A reasonable upper limit: 1 million intervals per cell
+      constexpr uint32_t MAX_REASONABLE_INTERVALS = 1000000;
+      if (number_intervals > MAX_REASONABLE_INTERVALS) {
+        throw std::runtime_error("Invalid number_intervals in spatial index cell: " +
+                                 std::to_string(number_intervals));
+      }
 
       CellIntervals cell;
       cell.cell_index = cell_index;
@@ -213,8 +234,8 @@ class QuadtreeSpatialIndex {
       // Read intervals
       for (uint32_t j = 0; j < number_intervals; ++j) {
         PointInterval interval;
-        LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&interval.start), 4));
-        LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&interval.end), 4));
+        LASPP_CHECK_READ(is, reinterpret_cast<char*>(&interval.start), 4);
+        LASPP_CHECK_READ(is, reinterpret_cast<char*>(&interval.end), 4);
         cell.intervals.push_back(interval);
       }
 

@@ -1,19 +1,7 @@
 
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
@@ -69,10 +57,10 @@ class Vector3D {
   const double& operator[](size_t i) const { return m_data[i]; }
 
   explicit Vector3D(std::istream& in_stream) {
-    LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(m_data.data()), sizeof(m_data)));
+    LASPP_CHECK_READ(in_stream, m_data.data(), sizeof(m_data));
   }
 
-  Vector3D(double x, double y, double z) : m_data{x, y, z} {}
+  Vector3D(double x, double y, double z) : m_data{{x, y, z}} {}
 
   Vector3D() = default;
 
@@ -343,10 +331,8 @@ class LASHeader {
 
  public:
   explicit LASHeader(std::istream& in_stream) {
-    in_stream.seekg(0);
-    apply_all_in_order([&](auto& val) {
-      LASPP_CHECK_READ(in_stream.read(reinterpret_cast<char*>(&val), sizeof(val)));
-    });
+    LASPP_CHECK_SEEK(in_stream, 0, std::ios::beg);
+    apply_all_in_order([&](auto& val) { LASPP_CHECK_READ(in_stream, &val, sizeof(val)); });
 
     // Validate header_size matches version
     if (m_version_major == 1 && m_version_minor == 4) {
@@ -419,7 +405,8 @@ class LASHeader {
 
   void set_point_format(uint8_t point_format, uint16_t num_extra_bytes) {
     m_point_data_record_format = point_format;
-    m_point_data_record_length = size_of_point_format(point_format) + num_extra_bytes;
+    m_point_data_record_length =
+        static_cast<uint16_t>(size_of_point_format(point_format) + num_extra_bytes);
   }
 
   const Bound3D& bounds() const { return m_bounds; }

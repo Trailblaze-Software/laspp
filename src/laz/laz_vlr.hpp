@@ -1,18 +1,6 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
@@ -71,7 +59,7 @@ struct LASPP_PACKED LAZSpecialVLRPt1 {
   bool adaptive_chunking() const { return chunk_size == std::numeric_limits<uint32_t>::max(); }
 
   explicit LAZSpecialVLRPt1(std::istream& is) {
-    LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(this), sizeof(LAZSpecialVLRPt1)));
+    LASPP_CHECK_READ(is, this, sizeof(LAZSpecialVLRPt1));
   }
 
   explicit LAZSpecialVLRPt1(LAZCompressor laz_compressor)
@@ -163,9 +151,17 @@ inline bool check_size_from_type(LAZItemType type, uint16_t size) {
       return size % 8 == 0;
     case LAZItemType::Byte14:
       return true;
-    default:
+    case LAZItemType::Point10:
+    case LAZItemType::GPSTime11:
+    case LAZItemType::RGB12:
+    case LAZItemType::Wavepacket13:
+    case LAZItemType::Point14:
+    case LAZItemType::RGB14:
+    case LAZItemType::RGBNIR14:
+    case LAZItemType::Wavepacket14:
       return size == default_size(type);
   }
+  LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
 }
 
 inline std::ostream& operator<<(std::ostream& os, const LAZItemType& type) {
@@ -310,7 +306,7 @@ struct LAZSpecialVLRContent : LAZSpecialVLRPt1 {
   explicit LAZSpecialVLRContent(std::istream& is)
       : LAZSpecialVLRPt1(is), items_records(num_item_records) {
     for (auto& item : items_records) {
-      LASPP_CHECK_READ(is.read(reinterpret_cast<char*>(&item), sizeof(LAZItemRecord)));
+      LASPP_CHECK_READ(is, &item, sizeof(LAZItemRecord));
       LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
       LASPP_ASSERT(item.item_version == laz_item_version_from_type(item.item_type));
     }

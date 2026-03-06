@@ -1,4 +1,9 @@
 /*
+ * SPDX-FileCopyrightText: (c) 2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
+ */
+
+/*
  * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: LGPL-2.1-or-later
  *
@@ -89,9 +94,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     // Test reading from filename
-    LASReader reader(temp_file);
-    LASPP_ASSERT_EQ(reader.header().num_points(), 10u);
-    LASPP_ASSERT_EQ(reader.header().point_format(), 0);
+    {
+      LASReader reader(temp_file);
+      LASPP_ASSERT_EQ(reader.header().num_points(), 10u);
+      LASPP_ASSERT_EQ(reader.header().point_format(), 0);
+    }  // Ensure reader is destroyed before removing file
 
     // Clean up
     std::filesystem::remove(temp_file);
@@ -134,12 +141,14 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     // Test reading from filename - should find .lax file
-    LASReader reader(temp_file);
-    LASPP_ASSERT(reader.has_lastools_spatial_index());
-    const auto& spatial_index = reader.lastools_spatial_index();
-    LASPP_ASSERT_GT(spatial_index.num_cells(), 0u);
-    // The actual number of levels depends on the tile_size calculation
-    LASPP_ASSERT_GT(spatial_index.quadtree_header().levels, 0u);
+    {
+      LASReader reader(temp_file);
+      LASPP_ASSERT(reader.has_lastools_spatial_index());
+      const auto& spatial_index = reader.lastools_spatial_index();
+      LASPP_ASSERT_GT(spatial_index.num_cells(), 0u);
+      // The actual number of levels depends on the tile_size calculation
+      LASPP_ASSERT_GT(spatial_index.quadtree_header().levels, 0u);
+    }  // Ensure reader is destroyed before removing files
 
     // Clean up
     std::filesystem::remove(temp_file);
@@ -189,10 +198,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     // Test reading - should use EVLR spatial index, not .lax
-    LASReader reader(temp_file);
-    LASPP_ASSERT(reader.has_lastools_spatial_index());
-    const auto& spatial_index = reader.lastools_spatial_index();
-    LASPP_ASSERT_EQ(spatial_index.quadtree_header().levels, 3u);  // From EVLR, not .lax
+    {
+      LASReader reader(temp_file);
+      LASPP_ASSERT(reader.has_lastools_spatial_index());
+      const auto& spatial_index = reader.lastools_spatial_index();
+      LASPP_ASSERT_EQ(spatial_index.quadtree_header().levels, 3u);  // From EVLR, not .lax
+    }  // Ensure reader is destroyed before removing files
 
     // Clean up
     std::filesystem::remove(temp_file);
@@ -225,8 +236,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
 
     // Should not crash, just not find spatial index
-    LASReader reader(temp_file);
-    LASPP_ASSERT(!reader.has_lastools_spatial_index());
+    {
+      LASReader reader(temp_file);
+      LASPP_ASSERT(!reader.has_lastools_spatial_index());
+    }  // Ensure reader is destroyed before removing files
 
     // Clean up
     std::filesystem::remove(temp_file);

@@ -1,18 +1,6 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #include <algorithm>
@@ -77,11 +65,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     LASPP_ASSERT_EQ(combined_data.size(), 30852);
 
-    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
-                                   LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
-    std::span<std::byte> data_span(
-        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
-        combined_data.size() - size_span.size());
+    const std::byte* data_ptr = reinterpret_cast<const std::byte*>(combined_data.data());
+    std::span<const std::byte> size_span(data_ptr,
+                                         LASPointFormat6Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<const std::byte> data_span(data_ptr + size_span.size(),
+                                         combined_data.size() - size_span.size());
 
     LayeredInStreams<LASPointFormat6Encoder::NUM_LAYERS> in_streams(size_span, data_span);
 

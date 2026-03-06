@@ -1,18 +1,6 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
@@ -89,8 +77,8 @@ class LASPointFormat0Encoder {
             m_prev_intensities[m_m] + m_intensity_encoder.decode_int(m_m, stream));
       } else {
         m_last_las_point.intensity =
-            m_prev_intensities[m_m] +
-            static_cast<uint16_t>(m_intensity_encoder.decode_int(3, stream));
+            static_cast<uint16_t>(m_prev_intensities[m_m] +
+                                  static_cast<uint16_t>(m_intensity_encoder.decode_int(3, stream)));
       }
       m_prev_intensities[m_m] = m_last_las_point.intensity;
     } else {

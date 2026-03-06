@@ -1,26 +1,14 @@
 <!--
-  SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
-  SPDX-License-Identifier: LGPL-2.1-or-later
-
-  This library is free software; you can redistribute it and/or modify it under
-  the terms of the GNU Lesser General Public License as published by the Free
-  Software Foundation; version 2.1.
-
-  This library is distributed in the hope that it will be useful, but WITHOUT
-  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-  FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
-  details.
-
-  For LGPL2 incompatible licensing or development requests, please contact
-  trailblaze.software@gmail.com
- -->
+  SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+  SPDX-License-Identifier: MIT
+-->
 
 # LAS++
 
 [![Build](https://github.com/Trailblaze-Software/laspp/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/Trailblaze-Software/laspp/actions/workflows/cmake-multi-platform.yml)
 [![Pre-commit](https://github.com/Trailblaze-Software/laspp/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/Trailblaze-Software/laspp/actions/workflows/pre-commit.yml)
 [![codecov](https://codecov.io/gh/Trailblaze-Software/laspp/graph/badge.svg?token=EK80UEXH3E)](https://codecov.io/gh/Trailblaze-Software/laspp)
-[![License: LGPL v2.1](https://img.shields.io/badge/License-LGPL_v2.1-blue.svg)](https://www.gnu.org/licenses/lgpl-2.1)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![REUSE status](https://api.reuse.software/badge/github.com/Trailblaze-Software/laspp)](https://api.reuse.software/info/github.com/Trailblaze-Software/laspp)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/9ff99e8d04cc49ec9acfd2c7fd4da6ad)](https://app.codacy.com/gh/Trailblaze-Software/laspp/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 ![Repo Size](https://img.shields.io/github/repo-size/Trailblaze-Software/laspp)

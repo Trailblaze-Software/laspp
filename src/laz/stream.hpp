@@ -1,42 +1,104 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
 
 #include <array>
-#include <bit>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <istream>
 #include <limits>
+#include <span>
+#include <vector>
 
 #include "utilities/assert.hpp"
 
 namespace laspp {
 
+// Kept for backward-compatibility; no longer used in the hot decompression path.
+// Read-only stream buffer for const data. We ensure safety by never calling setp() or any write
+// operations.
 class PointerStreamBuffer : public std::streambuf {
  public:
-  PointerStreamBuffer(std::byte* data, size_t size) {
-    setg(reinterpret_cast<char*>(data), reinterpret_cast<char*>(data),
-         reinterpret_cast<char*>(data + size));
+  explicit PointerStreamBuffer(std::span<const std::byte> data) {
+    // setg() requires non-const pointers, but only uses them for read positioning
+    setg(const_cast<char*>(reinterpret_cast<const char*>(data.data())),
+         const_cast<char*>(reinterpret_cast<const char*>(data.data())),
+         const_cast<char*>(reinterpret_cast<const char*>(data.data() + data.size())));
+  }
+
+  // Explicitly disable write operations to ensure const-correctness
+  std::streambuf::int_type overflow(std::streambuf::int_type) override {
+#ifdef LASPP_DEBUG_ASSERTS
+    LASPP_FAIL("PointerStreamBuffer: write operation attempted on read-only buffer");
+#else
+    // Return EOF to indicate failure (standard library convention)
+    return traits_type::eof();
+#endif
+  }
+
+  // Override xsgetn to ensure proper bounds checking when reading
+  std::streamsize xsgetn(char* s, std::streamsize n) override {
+    char* base = eback();
+    char* current = gptr();
+    char* end = egptr();
+    if (current == nullptr || end == nullptr || base == nullptr) {
+      return 0;  // No data available
+    }
+
+    std::streamsize available = end - current;
+    std::streamsize to_read = (n < available) ? n : available;
+
+    if (to_read > 0) {
+      std::memcpy(s, current, static_cast<size_t>(to_read));
+      // Update get pointer
+      setg(base, current + to_read, end);
+    }
+
+    // Return the number of bytes actually read
+    // If to_read < n, LASPP_CHECK_READ will detect this via gcount()
+    return to_read;
+  }
+
+ protected:
+  // Support seekg() / tellg() so that LASReader can seek within mapped memory.
+  pos_type seekoff(off_type off, std::ios_base::seekdir dir,
+                   std::ios_base::openmode which = std::ios_base::in) override {
+    if (which & std::ios_base::out) return pos_type(off_type(-1));  // read-only buffer
+
+    // Compute offsets as integers to avoid undefined behavior from pointer arithmetic
+    const char* base = eback();
+    const char* current = gptr();
+    const char* end = egptr();
+    ptrdiff_t buffer_size = end - base;
+
+    ptrdiff_t new_index;
+    if (dir == std::ios_base::beg) {
+      new_index = off;
+    } else if (dir == std::ios_base::cur) {
+      new_index = (current - base) + off;
+    } else {  // std::ios_base::end
+      new_index = buffer_size + off;
+    }
+
+    // Validate bounds before converting to pointer
+    if (new_index < 0 || new_index > buffer_size) {
+      return pos_type(off_type(-1));
+    }
+
+    // Safe to convert to pointer now
+    char* new_gptr = const_cast<char*>(base) + new_index;
+    setg(const_cast<char*>(base), new_gptr, const_cast<char*>(end));
+    return pos_type(static_cast<off_type>(new_index));
+  }
+
+  pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in) override {
+    return seekoff(off_type(pos), std::ios_base::beg, which);
   }
 };
-
-#define BORING_VERSION
 
 struct StreamVariables {
   uint32_t m_base = 0;
@@ -44,198 +106,113 @@ struct StreamVariables {
   uint32_t m_length = std::numeric_limits<uint32_t>::max();
 };
 
-#ifdef BORING_VERSION
+// Arithmetic-coding input stream.
+//
+// The fast constructor takes a raw pointer to already-in-memory compressed data and reads
+// directly from it — no virtual dispatch, no intermediate buffer.  This is the path used
+// by all LAZ chunk decompression.
+//
+// The legacy std::istream& constructor slurps all remaining stream data into an owned
+// buffer and then uses the same pointer-based read path; it exists for tests and any
+// callers that work with file streams.
 class InStream : StreamVariables {
-  constexpr static size_t BUFFER_SIZE = 1024;
-  std::istream& m_stream;
-  std::array<std::byte, BUFFER_SIZE> m_buffer;
-  size_t buffer_idx;
+  const std::byte* m_ptr = nullptr;
+  const std::byte* m_end = nullptr;  // End of buffer for bounds checking
 
-  std::byte read_byte() {
-    if (buffer_idx == BUFFER_SIZE) {
-      m_stream.read(reinterpret_cast<char*>(m_buffer.data()), BUFFER_SIZE);
-      if (!m_stream) {
-        m_stream.clear();
-      }
-      buffer_idx = 0;
-    }
-    return m_buffer[buffer_idx++];
-  }
+  // Owned buffer used only by the std::istream& constructor.
+  std::vector<std::byte> m_owned_data;
 
-  template <size_t Extent>
-  void read_bytes(std::span<std::byte, Extent> bytes) {
-    if constexpr (Extent == 1) {
-      bytes[0] = read_byte();
-      return;
-    } else if constexpr (Extent == 2) {
-      if (buffer_idx + 2 < BUFFER_SIZE) {
-        bytes[0] = m_buffer[buffer_idx++];
-        bytes[1] = m_buffer[buffer_idx++];
-      } else {
-        bytes[0] = read_byte();
-        bytes[1] = read_byte();
-      }
-      return;
-    } else if constexpr (Extent == 3) {
-      if (buffer_idx + 3 < BUFFER_SIZE) {
-        bytes[0] = m_buffer[buffer_idx++];
-        bytes[1] = m_buffer[buffer_idx++];
-        bytes[2] = m_buffer[buffer_idx++];
-      } else {
-        bytes[0] = read_byte();
-        bytes[1] = read_byte();
-        bytes[2] = read_byte();
-      }
-      return;
-    } else {
-      static_assert(Extent == 1);
-    }
+  [[nodiscard]] std::byte read_byte() noexcept {
+    LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer");
+    return *m_ptr++;
   }
 
  public:
-  explicit InStream(std::istream& stream) : m_stream(stream), m_buffer(), buffer_idx(BUFFER_SIZE) {
+  InStream(const InStream&) = delete;
+  InStream& operator=(const InStream&) = delete;
+  InStream(InStream&&) = delete;
+  InStream& operator=(InStream&&) = delete;
+
+  // Fast path: construct directly from in-memory data.  No copies, no virtual dispatch.
+  // Requires at least 4 bytes to initialize the range coder state.
+  InStream(const std::byte* data, size_t size) noexcept : m_ptr(data), m_end(data + size) {
+    LASPP_ASSERT_GE(size, 4u, "InStream: buffer too small (need at least 4 bytes)");
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
+      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(read_byte()));
     }
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  uint32_t length() const { return m_length; }
-
-  void update_range(uint32_t lower, uint32_t upper) {
-    m_value -= lower;
-    m_length = upper - lower;
-  }
-
-  uint32_t get_value() {
-    if (length() < (1 << 8)) {
-      m_value <<= 24;
-      m_length <<= 24;
-      uint32_t new_3_bytes = 0;
-      std::array<std::byte, 3>& bla = *reinterpret_cast<std::array<std::byte, 3>*>(&new_3_bytes);
-      read_bytes(std::span<std::byte, 3>(bla));
-      std::swap(bla[0], bla[2]);
-      m_value |= new_3_bytes;
-    } else if (length() < (1 << 16)) {
-      m_value <<= 16;
-      m_length <<= 16;
-      uint16_t new_2_bytes;
-      read_bytes(std::span<std::byte, 2>(reinterpret_cast<std::array<std::byte, 2>&>(new_2_bytes)));
-      m_value |= std::rotl(new_2_bytes, 8);
-    } else if (length() < (1 << 24)) {
-      m_value <<= 8;
-      m_length <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
-    }
-    return m_value;
-  }
-};
-
-#else
-class InStream : StreamVariables {
-  constexpr static size_t BUFFER_SIZE = 256;
-  std::istream& m_stream;
-  std::array<uint32_t, BUFFER_SIZE> m_buffer;
-  uint64_t current_big_chunk;
-  uint32_t num_bytes_valid;
-  uint32_t buffer_idx;
-  int64_t valid_elements = std::numeric_limits<uint32_t>::max();
-
-  uint32_t read_chunk() {
-    if (buffer_idx == BUFFER_SIZE) {
-      m_stream.read(reinterpret_cast<char*>(m_buffer.data()), sizeof(m_buffer));
-      if (!m_stream) {
-        valid_elements = (m_stream.gcount() + 3) / 4;
-        m_stream.clear();
-      }
-      buffer_idx = 0;
-    }
-    LASPP_ASSERT_GE(valid_elements, buffer_idx);
-    return m_buffer[buffer_idx++];
-  }
-
-  static_assert(std::endian::native == std::endian::little);
-
-  void update_chunk() {
-    if (num_bytes_valid < 4) {
-      uint64_t new_chunk = read_chunk();
-      current_big_chunk |= (new_chunk << (num_bytes_valid * 8));
-      num_bytes_valid += 4;
-    }
-  }
-
-  std::byte read_byte() {
-    update_chunk();
-    uint8_t byte = static_cast<uint8_t>(current_big_chunk);
-    current_big_chunk >>= 8;
-    num_bytes_valid--;
-    return static_cast<std::byte>(byte);
-  }
-
-  template <uint32_t NumBytes>
-  uint32_t read_bytes() {
-    static_assert(NumBytes > 0 && NumBytes < 4);
-    update_chunk();
-    uint32_t new_bytes = current_big_chunk & ((1u << (NumBytes * 8)) - 1);
-    current_big_chunk >>= NumBytes * 8;
-    num_bytes_valid -= NumBytes;
-    if constexpr (NumBytes == 2) {
-      std::array<uint8_t, 4>& new_bytes_32 = reinterpret_cast<std::array<uint8_t, 4>&>(new_bytes);
-      std::swap(new_bytes_32[0], new_bytes_32[1]);
-    } else if constexpr (NumBytes == 3) {
-      std::array<uint8_t, 4>& new_bytes_32 = reinterpret_cast<std::array<uint8_t, 4>&>(new_bytes);
-      std::swap(new_bytes_32[0], new_bytes_32[2]);
-    }
-    return new_bytes;
-  }
-
- public:
-  explicit InStream(std::istream& stream)
-      : m_stream(stream),
-        m_buffer(),
-        current_big_chunk(0),
-        num_bytes_valid(0),
-        buffer_idx(BUFFER_SIZE) {
+  // Legacy path for tests and streaming callers: reads all remaining data from `stream`
+  // into an owned buffer, then proceeds as the pointer constructor.
+  explicit InStream(std::istream& stream) {
+    auto cur = stream.tellg();
+    LASPP_CHECK_SEEK(stream, 0, std::ios::end);
+    auto end_pos = stream.tellg();
+    LASPP_CHECK_SEEK(stream, cur, std::ios::beg);
+    size_t sz = static_cast<size_t>(end_pos - cur);
+    LASPP_ASSERT_GE(sz, 4u, "InStream: stream too small (need at least 4 bytes)");
+    m_owned_data.resize(sz);
+    stream.read(reinterpret_cast<char*>(m_owned_data.data()), static_cast<std::streamsize>(sz));
+    m_ptr = m_owned_data.data();
+    m_end = m_owned_data.data() + sz;
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
+      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(read_byte()));
     }
     m_length = std::numeric_limits<uint32_t>::max();
   }
 
-  uint32_t length() const { return m_length; }
+  uint32_t length() const noexcept { return m_length; }
 
-  void update_range(uint32_t lower, uint32_t upper) {
+  void update_range(uint32_t lower, uint32_t upper) noexcept {
     m_value -= lower;
     m_length = upper - lower;
   }
 
-  uint32_t get_value() {
-    if (length() < (1 << 8)) {
+  // Renormalise the range coder and return the current value.  Reads 0, 1, 2 or 3 bytes
+  // from the in-memory pointer — the common case (length >= 2^24) reads nothing, so this
+  // is very cheap on average.
+  uint32_t get_value() noexcept {
+    if (m_length < (1u << 8)) {
+      LASPP_ASSERT(m_ptr + 3 <= m_end, "InStream: read past end of buffer (need 3 bytes)");
       m_value <<= 24;
       m_length <<= 24;
-      m_value |= read_bytes<3>();
-    } else if (length() < (1 << 16)) {
+      // Read 3 bytes big-endian.
+      m_value |= (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) << 16) |
+                 (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1])) << 8) |
+                 static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2]));
+      m_ptr += 3;
+    } else if (m_length < (1u << 16)) {
+      LASPP_ASSERT(m_ptr + 2 <= m_end, "InStream: read past end of buffer (need 2 bytes)");
       m_value <<= 16;
       m_length <<= 16;
-      m_value |= read_bytes<2>();
-    } else if (length() < (1 << 24)) {
+      // Read 2 bytes big-endian.
+      m_value |= (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) << 8) |
+                 static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1]));
+      m_ptr += 2;
+    } else if (m_length < (1u << 24)) {
+      LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer (need 1 byte)");
       m_value <<= 8;
       m_length <<= 8;
-      m_value |= static_cast<uint8_t>(read_byte());
+      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
     }
     return m_value;
   }
-
-  std::istream& stream() { return m_stream; }
 };
-#endif
 
 class OutStream : StreamVariables {
   std::iostream& m_stream;
   bool m_finalized;
 
+ public:
+  OutStream(const OutStream&) = delete;
+  OutStream& operator=(const OutStream&) = delete;
+  OutStream(OutStream&&) = delete;
+  OutStream& operator=(OutStream&&) = delete;
+
+ private:
   void finalize_stream() {
     bool write_two_bytes;
     if (length() > (1u << 25)) {
@@ -281,20 +258,20 @@ class OutStream : StreamVariables {
     const int64_t current_g = m_stream.tellg();
     const int64_t current_p = m_stream.tellp();
     int64_t updated_p = current_p - 1;
-    m_stream.seekg(updated_p);
+    LASPP_CHECK_SEEK(m_stream, updated_p, std::ios::beg);
     uint8_t carry = static_cast<uint8_t>(m_stream.get());
     m_stream.seekp(updated_p);
     while (carry == 0xff) {
       m_stream.put(0);
       LASPP_ASSERT_GT(updated_p, 0);
       updated_p--;
-      m_stream.seekg(updated_p);
+      LASPP_CHECK_SEEK(m_stream, updated_p, std::ios::beg);
       carry = static_cast<uint8_t>(m_stream.get());
       m_stream.seekp(updated_p);
     }
     m_stream.put(static_cast<char>(carry + 1));
     m_stream.seekp(current_p);
-    m_stream.seekg(current_g);
+    LASPP_CHECK_SEEK(m_stream, current_g, std::ios::beg);
   }
 
   void update_range(uint32_t lower, uint32_t upper) {

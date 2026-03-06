@@ -1,18 +1,6 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
@@ -255,7 +243,7 @@ struct LASPointFormat6Context : LASPointFormat6 {
     if (!streams.non_empty(LASPP_USER_DATA_LAYER)) {
       return;
     }
-    uint8_t user_ctx = user_data / 4;
+    uint8_t user_ctx = static_cast<uint8_t>(user_data / 4u);
     uint_fast16_t decoded_user_data =
         user_data_encoders[user_ctx].decode_symbol(streams[LASPP_USER_DATA_LAYER]);
     user_data = static_cast<uint8_t>(decoded_user_data);
@@ -361,7 +349,7 @@ struct LASPointFormat6Context : LASPointFormat6 {
 
   inline void encode_user_data(uint8_t prev_user_data, const LASPointFormat6& point,
                                LayerOutStreams& streams) {
-    uint8_t user_ctx = prev_user_data / 4;
+    uint8_t user_ctx = static_cast<uint8_t>(prev_user_data / 4u);
     user_data_encoders[user_ctx].encode_symbol(streams[LASPP_USER_DATA_LAYER], point.user_data);
     user_data = point.user_data;
   }
@@ -572,7 +560,7 @@ class LASPointFormat6EncoderBase {
       handle_encode_scanner_change(prev_context, point, target_context_idx, streams);
     } else {
       // Workaround for issue with context setting in V3:
-      m_external_context = Version == 3 ? 0 : m_context;
+      m_external_context = static_cast<uint_fast8_t>(Version == 3 ? 0 : m_context);
     }
 
     LASPointFormat6Context& context = m_contexts[m_context];

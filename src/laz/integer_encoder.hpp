@@ -1,24 +1,13 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
 
 #include <limits>
 #include <memory>
+#include <optional>
 
 #include "laz/bit_symbol_encoder.hpp"
 #include "laz/raw_encoder.hpp"
@@ -66,7 +55,7 @@ class IntegerEncoder {
             return encoder_7.decode_symbol(stream);
         }
       }
-      return encoders_8_32.at(k - 8).decode_symbol(stream);
+      return encoders_8_32.at(k - 8u).decode_symbol(stream);
     }
 
     void encode(OutStream& stream, uint_fast16_t k, uint_fast16_t val) {
@@ -90,7 +79,7 @@ class IntegerEncoder {
             return encoder_7.encode_symbol(stream, val);
         }
       }
-      return encoders_8_32.at(k - 8).encode_symbol(stream, val);
+      return encoders_8_32.at(k - 8u).encode_symbol(stream, val);
     }
   };
 
@@ -98,9 +87,13 @@ class IntegerEncoder {
   std::shared_ptr<SymbolEncoders> m_symbol_encoders;
 
  public:
-  explicit IntegerEncoder(std::optional<std::shared_ptr<SymbolEncoders>> symbol_encoders = {})
-      : m_symbol_encoders(symbol_encoders.has_value() ? symbol_encoders.value()
-                                                      : std::make_shared<SymbolEncoders>()) {}
+  IntegerEncoder() : m_symbol_encoders(std::make_shared<SymbolEncoders>()) {}
+
+  explicit IntegerEncoder(std::shared_ptr<SymbolEncoders> symbol_encoders)
+      : m_symbol_encoders(std::move(symbol_encoders)) {}
+
+  explicit IntegerEncoder(std::optional<std::shared_ptr<SymbolEncoders>> symbol_encoders)
+      : m_symbol_encoders(symbol_encoders.value_or(std::make_shared<SymbolEncoders>())) {}
 
   int32_t decode_int(InStream& stream) {
     uint_fast16_t k = m_k_encoder.decode_symbol(stream);

@@ -1,24 +1,16 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
 
+#include <algorithm>
 #include <cstring>
+#include <execution>
+#include <future>
 #include <memory>
+#include <numeric>
 #include <span>
 #include <sstream>
 #include <string>
@@ -38,6 +30,13 @@
 namespace laspp {
 
 class LAZWriter {
+ public:
+  LAZWriter(const LAZWriter&) = delete;
+  LAZWriter& operator=(const LAZWriter&) = delete;
+  LAZWriter(LAZWriter&&) = delete;
+  LAZWriter& operator=(LAZWriter&&) = delete;
+
+ private:
   LAZSpecialVLRContent m_special_vlr;
   LAZChunkTable m_chunk_table;
   std::iostream& m_stream;
@@ -81,7 +80,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use Point10 encoder with layered compression");
             }
-            encoders.emplace_back(LASPointFormat0Encoder(point));
+            encoders.emplace_back(std::make_unique<LASPointFormat0Encoder>(point));
             compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat0));
             break;
           }
@@ -90,8 +89,9 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(point), T>()) {
               point = points[0];
             }
-            encoders.emplace_back(LASPointFormat6Encoder(point));
-            context = std::get<LASPointFormat6Encoder>(encoders.back()).get_active_context();
+            encoders.emplace_back(std::make_unique<LASPointFormat6Encoder>(point));
+            context = std::get<std::unique_ptr<LASPointFormat6Encoder>>(encoders.back())
+                          ->get_active_context();
             compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat6));
             layered_streams.emplace_back(
                 std::make_unique<LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS>>());
@@ -107,7 +107,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use GPSTime11 encoder with layered compression");
             }
-            encoders.emplace_back(GPSTime11Encoder(gps_time));
+            encoders.emplace_back(std::make_unique<GPSTime11Encoder>(gps_time));
             compressed_data.write(reinterpret_cast<const char*>(&gps_time), sizeof(GPSTime));
             break;
           }
@@ -119,7 +119,7 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use RGB12 encoder with layered compression");
             }
-            encoders.emplace_back(RGB12Encoder(color_data));
+            encoders.emplace_back(std::make_unique<RGB12Encoder>(color_data));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             break;
           }
@@ -128,7 +128,7 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(color_data), T>()) {
               color_data = points[0];
             }
-            encoders.emplace_back(RGB14Encoder(color_data, context.value()));
+            encoders.emplace_back(std::make_unique<RGB14Encoder>(color_data, context.value()));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             layered_streams.emplace_back(
                 std::make_unique<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>());
@@ -145,11 +145,19 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use Byte encoder with layered compression");
             }
-            encoders.emplace_back(BytesEncoder(bytes));
+            encoders.emplace_back(std::make_unique<BytesEncoder>(bytes));
             compressed_data.write(reinterpret_cast<const char*>(bytes.data()),
                                   static_cast<int64_t>(bytes.size()));
             break;
           }
+          case LAZItemType::Short:
+          case LAZItemType::Integer:
+          case LAZItemType::Long:
+          case LAZItemType::Float:
+          case LAZItemType::Double:
+          case LAZItemType::Wavepacket13:
+          case LAZItemType::RGBNIR14:
+          case LAZItemType::Wavepacket14:
           default:
             LASPP_FAIL("Currently unsupported LAZ item type: ",
                        static_cast<uint16_t>(record.item_type));
@@ -179,7 +187,8 @@ class LAZWriter {
           for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
             LAZEncoder& laz_encoder = encoders[encoder_index];
             std::visit(
-                [&](auto&& encoder) {
+                [&](auto&& enc_ptr) {
+                  auto& encoder = *enc_ptr;
                   if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
                                                        decltype(encoder.last_value())>>,
                                                    T>()) {
@@ -215,7 +224,8 @@ class LAZWriter {
       layer_sizes.reserve(total_layer_count);
       for (size_t encoder_index = 0; encoder_index < encoders.size(); encoder_index++) {
         std::visit(
-            [&](auto&& encoder) {
+            [&](auto&& enc_ptr) {
+              auto& encoder = *enc_ptr;
               if constexpr (has_num_layers_v<decltype(encoder)>) {
                 auto& streams = *std::get<std::unique_ptr<
                     LayeredOutStreams<std::remove_reference_t<decltype(encoder)>::NUM_LAYERS>>>(
@@ -261,22 +271,52 @@ class LAZWriter {
       while (index.value() > m_chunk_table.num_chunks()) {
       }
     }
-#pragma omp critical
-    {
-      m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
-                              static_cast<uint32_t>(compressed_chunk_size));
-      m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
-      m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
-                                     ? m_chunk_table.constant_chunk_size().value()
-                                     : std::numeric_limits<uint32_t>::max();
-    }
+    m_chunk_table.add_chunk(static_cast<uint32_t>(points.size()),
+                            static_cast<uint32_t>(compressed_chunk_size));
+    m_stream.write(compressed_chunk.str().c_str(), compressed_chunk_size);
+    m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
+                                   ? m_chunk_table.constant_chunk_size().value()
+                                   : std::numeric_limits<uint32_t>::max();
   }
 
   template <typename T>
   void write_chunks(const std::span<std::span<T>> chunks) {
-    // #pragma omp parallel for
+    // Pipeline: launch all compressions asynchronously, then write chunks in order
+    // as soon as each one completes. This overlaps compression (CPU) with I/O.
+    struct ChunkResult {
+      std::string payload;
+      uint32_t compressed_size;
+      uint32_t points_count;
+    };
+
+    std::vector<std::future<ChunkResult>> compression_futures;
+    compression_futures.reserve(chunks.size());
+
+    // Launch all compressions asynchronously
     for (size_t i = 0; i < chunks.size(); i++) {
-      write_chunk(chunks[i], i);
+      compression_futures.push_back(
+          std::async(std::launch::async, [this, chunk = chunks[i]]() -> ChunkResult {
+            std::stringstream compressed_chunk = compress_chunk(chunk);
+            int64_t compressed_chunk_size = compressed_chunk.tellp();
+            LASPP_ASSERT_LT(chunk.size(), std::numeric_limits<uint32_t>::max());
+            LASPP_ASSERT_LT(compressed_chunk_size, std::numeric_limits<uint32_t>::max());
+
+            ChunkResult result;
+            result.payload = compressed_chunk.str();
+            result.compressed_size = static_cast<uint32_t>(compressed_chunk_size);
+            result.points_count = static_cast<uint32_t>(chunk.size());
+            return result;
+          }));
+    }
+
+    // Write chunks in order as they become ready (pipelined I/O)
+    for (size_t i = 0; i < chunks.size(); i++) {
+      ChunkResult result = compression_futures[i].get();
+      m_chunk_table.add_chunk(result.points_count, result.compressed_size);
+      m_stream.write(result.payload.data(), static_cast<std::streamsize>(result.compressed_size));
+      m_special_vlr.chunk_size = m_chunk_table.constant_chunk_size().has_value()
+                                     ? m_chunk_table.constant_chunk_size().value()
+                                     : std::numeric_limits<uint32_t>::max();
     }
   }
 

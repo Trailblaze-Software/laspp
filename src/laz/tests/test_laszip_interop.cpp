@@ -1,18 +1,6 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 // Windows compatibility: prevent min/max macros and byte typedef conflicts
@@ -77,8 +65,8 @@ template <typename PointT>
 void populate_laszip_format0_fields(const PointT& point, laszip_point& las_point) {
   unsigned char return_num = static_cast<unsigned char>(point.bit_byte.return_number);
   unsigned char num_returns = static_cast<unsigned char>(point.bit_byte.number_of_returns);
-  las_point.return_number = return_num & 0x7;
-  las_point.number_of_returns = num_returns & 0x7;
+  las_point.return_number = static_cast<unsigned char>(return_num & 0x7u);
+  las_point.number_of_returns = static_cast<unsigned char>(num_returns & 0x7u);
   las_point.scan_direction_flag = point.bit_byte.scan_direction_flag;
   las_point.edge_of_flight_line = point.bit_byte.edge_of_flight_line;
   las_point.classification = static_cast<laszip_U8>(point.classification_byte.classification);
@@ -93,14 +81,14 @@ void populate_laszip_format0_fields(const PointT& point, laszip_point& las_point
 
 template <typename PointT>
 void populate_laszip_format6_fields(const PointT& point, laszip_point& las_point) {
-  las_point.return_number = static_cast<laszip_U8>(std::min<int>(point.return_number, 7)) & 0x7;
+  las_point.return_number = static_cast<laszip_U8>(std::min<int>(point.return_number, 7)) & 0x7u;
   las_point.number_of_returns =
-      static_cast<laszip_U8>(std::min<int>(point.number_of_returns, 7)) & 0x7;
+      static_cast<laszip_U8>(std::min<int>(point.number_of_returns, 7)) & 0x7u;
   las_point.scan_direction_flag = point.scan_direction_flag;
   las_point.edge_of_flight_line = point.edge_of_flight_line;
-  las_point.synthetic_flag = point.classification_flags & 0x1;
-  las_point.keypoint_flag = (point.classification_flags >> 1) & 0x1;
-  las_point.withheld_flag = (point.classification_flags >> 2) & 0x1;
+  las_point.synthetic_flag = point.classification_flags & 0x1u;
+  las_point.keypoint_flag = (point.classification_flags >> 1u) & 0x1u;
+  las_point.withheld_flag = (point.classification_flags >> 2u) & 0x1u;
   las_point.extended_point_type = 1;
   las_point.extended_classification_flags = point.classification_flags;
   las_point.extended_classification = static_cast<laszip_U8>(point.classification);
@@ -110,7 +98,7 @@ void populate_laszip_format6_fields(const PointT& point, laszip_point& las_point
   las_point.extended_scan_angle = static_cast<laszip_I16>(point.scan_angle);
   las_point.scan_angle_rank =
       static_cast<laszip_I8>(std::clamp<int>(static_cast<int>(point.scan_angle) / 512, -128, 127));
-  las_point.classification = static_cast<laszip_U8>(point.classification) & 0x1F;
+  las_point.classification = static_cast<laszip_U8>(point.classification) & 0x1Fu;
   las_point.user_data = point.user_data;
   las_point.point_source_ID = point.point_source_id;
   las_point.gps_time = point.gps_time;
@@ -220,7 +208,7 @@ template <typename PointT>
 void populate_header_basic_fields(laszip_header& header, laszip_U64 total_points) {
   header.version_major = 1;
   header.version_minor = PointT::MinVersion;
-  header.header_size = (header.version_minor >= 4) ? 375 : 227;
+  header.header_size = static_cast<laszip_U16>((header.version_minor >= 4) ? 375 : 227);
   header.offset_to_point_data = header.header_size;
   header.point_data_format = PointT::PointFormat;
   header.point_data_record_length = static_cast<laszip_U16>(sizeof(PointT));
@@ -505,7 +493,7 @@ void run_laszip_internal_roundtrip(size_t n_points) {
   LASzipper zipper;
   LASPP_ASSERT(zipper.open(compressed_stream, &laszip));
 
-  if (PointT::PointFormat < 6) {
+  if constexpr (PointT::PointFormat < 6) {
     PointT point_buffer{};
     std::vector<unsigned char*> point_items(laszip.num_items);
     size_t offset = 0;

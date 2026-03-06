@@ -1,18 +1,6 @@
 /*
- * SPDX-FileCopyrightText: (c) 2025 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: LGPL-2.1-or-later
- *
- * This library is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; version 2.1.
- *
- * This library is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
- * FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details.
- *
- * For LGPL2 incompatible licensing or development requests, please contact
- * trailblaze.software@gmail.com
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+ * SPDX-License-Identifier: MIT
  */
 
 #pragma once
@@ -94,9 +82,12 @@ class GeneralGPSTimeEncoder {
         m_current_frame = (m_current_frame + case_delta - 2) % 4;
         return decode(in_stream);
       }
-      if (!Point14 && case_delta == 0) {
-        case_delta = 511;
-      } else if (case_delta == 2) {
+      if constexpr (!Point14) {
+        if (case_delta == 0) {
+          case_delta = 511;
+        }
+      }
+      if (case_delta == 2) {
         case_delta = 512 - Point14;
       }
     } else {
@@ -129,7 +120,7 @@ class GeneralGPSTimeEncoder {
         return m_reference_frames[m_current_frame].prev_gps_time;
       } else if (case_delta < 500) {
         uint32_t dgps_time_low = static_cast<uint32_t>(
-            m_dgps_time_low_encoder.decode_int(case_delta < 10 ? 2 : 3, in_stream));
+            m_dgps_time_low_encoder.decode_int(case_delta < 10u ? 2u : 3u, in_stream));
         m_reference_frames[m_current_frame].prev_gps_time.as_int64() += static_cast<int32_t>(
             static_cast<uint32_t>(case_delta) *
                 static_cast<uint32_t>(m_reference_frames[m_current_frame].delta) +
@@ -152,7 +143,7 @@ class GeneralGPSTimeEncoder {
         return m_reference_frames[m_current_frame].prev_gps_time;
       } else if (case_delta <= 510) {
         uint32_t dgps_time_low = static_cast<uint32_t>(
-            m_dgps_time_low_encoder.decode_int(case_delta == 510 ? 6 : 5, in_stream));
+            m_dgps_time_low_encoder.decode_int(case_delta == 510u ? 6u : 5u, in_stream));
         m_reference_frames[m_current_frame].prev_gps_time.as_int64() -= static_cast<int32_t>(
             static_cast<uint32_t>(case_delta - 500) *
                 static_cast<uint32_t>(m_reference_frames[m_current_frame].delta) -
@@ -168,8 +159,12 @@ class GeneralGPSTimeEncoder {
         }
         return m_reference_frames[m_current_frame].prev_gps_time;
       }
-    } else if (!Point14 && case_delta == 511) {
-      return m_reference_frames[m_current_frame].prev_gps_time;
+    } else {
+      if constexpr (!Point14) {
+        if (case_delta == 511) {
+          return m_reference_frames[m_current_frame].prev_gps_time;
+        }
+      }
     }
     LASPP_ASSERT_EQ(case_delta, 512 - Point14, "The final one");
     uint32_t dgps_time_low =
@@ -192,9 +187,11 @@ class GeneralGPSTimeEncoder {
   void encode(OutStream& out_stream, GPSTime gps_time) {
     ReferenceFrame& rf = m_reference_frames[m_current_frame];
     if (rf.delta == 0) {
-      if (!Point14 && rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
-        m_case_0delta_encoder.encode_symbol(out_stream, 0);
-        return;
+      if constexpr (!Point14) {
+        if (rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
+          m_case_0delta_encoder.encode_symbol(out_stream, 0);
+          return;
+        }
       }
       int64_t diff = static_cast<int64_t>(gps_time.as_uint64() - rf.prev_gps_time.as_uint64());
       if (diff == static_cast<int32_t>(diff)) {
@@ -228,9 +225,11 @@ class GeneralGPSTimeEncoder {
       }
       m_reference_frames[m_current_frame].prev_gps_time = gps_time;
     } else {
-      if (!Point14 && rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
-        m_case_encoder.encode_symbol(out_stream, 511);
-        return;
+      if constexpr (!Point14) {
+        if (rf.prev_gps_time.as_uint64() == gps_time.as_uint64()) {
+          m_case_encoder.encode_symbol(out_stream, 511);
+          return;
+        }
       }
       int64_t diff = gps_time.as_int64() - rf.prev_gps_time.as_int64();
       if (diff == static_cast<int32_t>(diff)) {
@@ -254,7 +253,7 @@ class GeneralGPSTimeEncoder {
           if (multiplier < 500) {
             m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(multiplier));
             m_dgps_time_low_encoder.encode_int(
-                multiplier < 10 ? 2 : 3, out_stream,
+                static_cast<uint32_t>(multiplier < 10 ? 2 : 3), out_stream,
                 static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) *
                                                    static_cast<uint32_t>(multiplier)));
           } else {
@@ -276,7 +275,7 @@ class GeneralGPSTimeEncoder {
           }
           m_case_encoder.encode_symbol(out_stream, static_cast<uint_fast16_t>(500 - multiplier));
           m_dgps_time_low_encoder.encode_int(
-              multiplier == -10 ? 6 : 5, out_stream,
+              static_cast<uint32_t>(multiplier == -10 ? 6 : 5), out_stream,
               static_cast<int32_t>(diff_32 - static_cast<uint32_t>(rf.delta) *
                                                  static_cast<uint32_t>(multiplier)));
           if (multiplier == -10) {
