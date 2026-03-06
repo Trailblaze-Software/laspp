@@ -160,11 +160,11 @@ class QuadtreeSpatialIndex {
 
     // Read version
     uint32_t version;
-    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&version), 4);
+    LASPP_CHECK_READ(is, &version, 4);
     LASPP_ASSERT_EQ(version, 0u);
 
     // Read quadtree header
-    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&m_quadtree_header), sizeof(QuadtreeHeader));
+    LASPP_CHECK_READ(is, &m_quadtree_header, sizeof(QuadtreeHeader));
     LASPP_ASSERT(memcmp(m_quadtree_header.spatial_signature, "LASS", 4) == 0,
                  "Invalid quadtree spatial signature");
     LASPP_ASSERT_EQ(m_quadtree_header.type, 0u);
@@ -177,11 +177,11 @@ class QuadtreeSpatialIndex {
     LASPP_ASSERT(memcmp(interval_signature, "LASV", 4) == 0, "Invalid interval signature");
 
     uint32_t interval_version;
-    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&interval_version), 4);
+    LASPP_CHECK_READ(is, &interval_version, 4);
     LASPP_ASSERT_EQ(interval_version, 0u);
 
     uint32_t number_cells;
-    LASPP_CHECK_READ(is, reinterpret_cast<char*>(&number_cells), 4);
+    LASPP_CHECK_READ(is, &number_cells, 4);
 
     // Sanity check: prevent reading unreasonably large values from corrupted files
     // A reasonable upper limit: 1 million cells (each cell has at least 12 bytes of header)
@@ -197,9 +197,9 @@ class QuadtreeSpatialIndex {
       int32_t cell_index;
       uint32_t number_intervals;
       uint32_t number_points;
-      LASPP_CHECK_READ(is, reinterpret_cast<char*>(&cell_index), sizeof(int32_t));
-      LASPP_CHECK_READ(is, reinterpret_cast<char*>(&number_intervals), sizeof(uint32_t));
-      LASPP_CHECK_READ(is, reinterpret_cast<char*>(&number_points), sizeof(uint32_t));
+      LASPP_CHECK_READ(is, &cell_index, sizeof(int32_t));
+      LASPP_CHECK_READ(is, &number_intervals, sizeof(uint32_t));
+      LASPP_CHECK_READ(is, &number_points, sizeof(uint32_t));
 
       // Sanity check: prevent reading unreasonably large values from corrupted files
       // A reasonable upper limit: 1 million intervals per cell
@@ -217,8 +217,8 @@ class QuadtreeSpatialIndex {
       // Read intervals
       for (uint32_t j = 0; j < number_intervals; ++j) {
         PointInterval interval;
-        LASPP_CHECK_READ(is, reinterpret_cast<char*>(&interval.start), 4);
-        LASPP_CHECK_READ(is, reinterpret_cast<char*>(&interval.end), 4);
+        LASPP_CHECK_READ(is, &interval.start, 4);
+        LASPP_CHECK_READ(is, &interval.end, 4);
         cell.intervals.push_back(interval);
       }
 
