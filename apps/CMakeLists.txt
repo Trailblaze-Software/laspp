@@ -7,6 +7,12 @@ add_executable(${LAS2LAS++_EXE_NAME} las2las++.cpp)
 
 target_link_libraries(${LAS2LAS++_EXE_NAME} ${LIBRARY_NAME})
 
+# MSVC needs /bigobj for large translation units in debug mode
+if(MSVC)
+  target_compile_options(${LAS2LAS++_EXE_NAME}
+                         PRIVATE $<$<CONFIG:Debug>:/bigobj>)
+endif()
+
 # Utility to create test files for benchmarking
 add_executable(create_test_file create_test_file.cpp)
 target_link_libraries(create_test_file PRIVATE ${LIBRARY_NAME})

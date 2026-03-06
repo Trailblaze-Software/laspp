@@ -6,7 +6,7 @@
 #pragma once
 
 #include <algorithm>
-#include <execution>
+#include <atomic>
 #include <numeric>
 #include <span>
 #include <sstream>
@@ -21,6 +21,7 @@
 #include "laz/laz_writer.hpp"
 #include "spatial_index.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/thread_pool.hpp"
 #include "vlr.hpp"
 
 namespace laspp {
@@ -204,18 +205,14 @@ class LASWriter {
     static_assert(is_copy_assignable<LASPointFormat0, ExampleFullLASPoint>());
     static_assert(is_copy_fromable<GPSTime, ExampleFullLASPoint>());
 
-    std::vector<size_t> point_indices(points.size());
-    std::iota(point_indices.begin(), point_indices.end(), size_t{0});
-
     // Parallel copy from user point type into the serialisable PointType buffer.
-    std::for_each(std::execution::par_unseq, point_indices.begin(), point_indices.end(),
-                  [&](size_t i) {
-                    copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
-                    copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
-                    copy_if_possible<GPSTime>(points_to_write[i], points[i]);
-                    copy_if_possible<ColorData>(points_to_write[i], points[i]);
-                    copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
-                  });
+    utilities::parallel_for(size_t{0}, points.size(), [&](size_t i) {
+      copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
+      copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
+      copy_if_possible<GPSTime>(points_to_write[i], points[i]);
+      copy_if_possible<ColorData>(points_to_write[i], points[i]);
+      copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
+    });
 
     // Parallel reduction to accumulate per-return counts and bounding box.
     if constexpr (std::is_base_of_v<LASPointFormat0, PointType> ||
@@ -229,33 +226,50 @@ class LASWriter {
                            std::numeric_limits<int32_t>::lowest()};
       };
 
-      PointStats result = std::transform_reduce(
-          std::execution::par_unseq, point_indices.begin(), point_indices.end(), PointStats{},
-          [](PointStats a, const PointStats& b) {
-            for (size_t j = 0; j < 15; j++) a.points_by_return[j] += b.points_by_return[j];
-            for (size_t j = 0; j < 3; j++) {
-              a.min_pos[j] = std::min(a.min_pos[j], b.min_pos[j]);
-              a.max_pos[j] = std::max(a.max_pos[j], b.max_pos[j]);
-            }
-            return a;
-          },
-          [&](size_t i) {
-            PointStats s;
-            if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
-              if (points_to_write[i].bit_byte.return_number < 16 &&
-                  points_to_write[i].bit_byte.return_number > 0) {
-                s.points_by_return[points_to_write[i].bit_byte.return_number - 1] = 1;
-              }
-            } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
-              if (points_to_write[i].return_number < 16 && points_to_write[i].return_number > 0) {
-                s.points_by_return[points_to_write[i].return_number - 1] = 1;
-              }
-            }
-            s.min_pos[0] = s.max_pos[0] = points_to_write[i].x;
-            s.min_pos[1] = s.max_pos[1] = points_to_write[i].y;
-            s.min_pos[2] = s.max_pos[2] = points_to_write[i].z;
-            return s;
-          });
+      // Parallel reduction using thread pool with thread-local accumulation
+      size_t num_threads = utilities::get_num_threads();
+      std::vector<PointStats> thread_stats(num_threads);
+      std::atomic<size_t> next_thread_idx{0};
+
+      utilities::parallel_for(size_t{0}, points.size(), [&](size_t i) {
+        // Get thread-local slot index (assigned once per thread)
+        thread_local size_t thread_idx = std::numeric_limits<size_t>::max();
+        if (thread_idx == std::numeric_limits<size_t>::max()) {
+          thread_idx = next_thread_idx.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        PointStats& local_stats = thread_stats[thread_idx];
+
+        // Accumulate stats for this point
+        if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+          if (points_to_write[i].bit_byte.return_number < 16 &&
+              points_to_write[i].bit_byte.return_number > 0) {
+            local_stats.points_by_return[points_to_write[i].bit_byte.return_number - 1]++;
+          }
+        } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+          if (points_to_write[i].return_number < 16 && points_to_write[i].return_number > 0) {
+            local_stats.points_by_return[points_to_write[i].return_number - 1]++;
+          }
+        }
+        local_stats.min_pos[0] = std::min(local_stats.min_pos[0], points_to_write[i].x);
+        local_stats.min_pos[1] = std::min(local_stats.min_pos[1], points_to_write[i].y);
+        local_stats.min_pos[2] = std::min(local_stats.min_pos[2], points_to_write[i].z);
+        local_stats.max_pos[0] = std::max(local_stats.max_pos[0], points_to_write[i].x);
+        local_stats.max_pos[1] = std::max(local_stats.max_pos[1], points_to_write[i].y);
+        local_stats.max_pos[2] = std::max(local_stats.max_pos[2], points_to_write[i].z);
+      });
+
+      // Sequential reduction of thread-local stats
+      PointStats result;
+      for (const auto& stats : thread_stats) {
+        for (size_t j = 0; j < 15; j++) {
+          result.points_by_return[j] += stats.points_by_return[j];
+        }
+        for (size_t j = 0; j < 3; j++) {
+          result.min_pos[j] = std::min(result.min_pos[j], stats.min_pos[j]);
+          result.max_pos[j] = std::max(result.max_pos[j], stats.max_pos[j]);
+        }
+      }
 
       for (size_t j = 0; j < 15; j++) points_by_return[j] = result.points_by_return[j];
       for (size_t j = 0; j < 3; j++) {

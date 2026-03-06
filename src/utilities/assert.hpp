@@ -213,8 +213,8 @@ static_assert(f_arr(DEBRACKET((std::array<int, 2>{{4, 4}}))));
     }                                                                                          \
   }
 
-// Macros to suppress useless-cast warnings only for GCC/Clang
-#if defined(__GNUC__) || defined(__clang__)
+// Macros to suppress useless-cast warnings only for GCC (Clang doesn't support -Wuseless-cast)
+#if defined(__GNUC__) && !defined(__clang__)
 #define LASPP_PUSH_WARNING_DISABLE_USELESS_CAST \
   _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wuseless-cast\"")
 #define LASPP_POP_WARNING _Pragma("GCC diagnostic pop")

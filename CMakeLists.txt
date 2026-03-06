@@ -203,6 +203,10 @@ if(LASPP_BUILD_TESTS)
     target_link_libraries(${TEST_NAME} PRIVATE ${LIBRARY_NAME})
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     target_compile_definitions(${TEST_NAME} PRIVATE LASPP_DEBUG_ASSERTS)
+    # MSVC needs /bigobj for large translation units in debug mode
+    if(MSVC)
+      target_compile_options(${TEST_NAME} PRIVATE $<$<CONFIG:Debug>:/bigobj>)
+    endif()
   endforeach()
 
   if(TARGET test_laszip_interop)
