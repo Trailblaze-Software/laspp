@@ -230,8 +230,8 @@ class QuadtreeSpatialIndex {
 
   // Build spatial index from points
   template <typename PointType = LASPointFormat0>
-  QuadtreeSpatialIndex(const LASHeader& header, const std::vector<PointType>& points = {},
-                       double tile_size = 50.0) {
+  explicit QuadtreeSpatialIndex(const LASHeader& header, const std::vector<PointType>& points = {},
+                                double tile_size = 50.0) {
     // Initialize header signatures
     memcpy(m_quadtree_header.spatial_signature, "LASS", 4);
     m_quadtree_header.type = 0;  // LAS_SPATIAL_QUAD_TREE
