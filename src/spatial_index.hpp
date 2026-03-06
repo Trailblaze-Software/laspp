@@ -253,8 +253,16 @@ class QuadtreeSpatialIndex {
 
     uint32_t levels = 0;
     if (max_dim > 0 && tile_size > 0) {
-      levels = static_cast<uint32_t>(std::ceil(std::log2(max_dim / tile_size)));
-      levels = std::max(1u, std::min(levels, 20u));  // Limit to reasonable range
+      double ratio = max_dim / tile_size;
+      if (ratio >= 1.0) {
+        levels = static_cast<uint32_t>(std::ceil(std::log2(ratio)));
+        // Limit to 16 levels max: uint32_t can only represent 16 levels (32 bits / 2 bits per
+        // level)
+        levels = std::max(1u, std::min(levels, 16u));
+      } else {
+        // If max_dim < tile_size, we only need 1 level (root)
+        levels = 1;
+      }
     } else {
       levels = 4;  // Default
     }
