@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <ios>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -212,12 +213,26 @@ static_assert(f_arr(DEBRACKET((std::array<int, 2>{{4, 4}}))));
     }                                                                                          \
   }
 
+// Macros to suppress useless-cast warnings only for GCC/Clang
+#if defined(__GNUC__) || defined(__clang__)
+#define LASPP_PUSH_WARNING_DISABLE_USELESS_CAST \
+  _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wuseless-cast\"")
+#define LASPP_POP_WARNING _Pragma("GCC diagnostic pop")
+#else
+#define LASPP_PUSH_WARNING_DISABLE_USELESS_CAST
+#define LASPP_POP_WARNING
+#endif
+
 // LASPP_CHECK_SEEK checks if a seek operation succeeded
 // Parameters: stream, offset, direction (e.g., std::ios::beg, std::ios::cur, std::ios::end)
+// Note: Cast to std::streamoff is needed for sign conversion (size_t -> signed) and is
+//       harmless when types already match (may trigger -Wuseless-cast in some cases)
 #define LASPP_CHECK_SEEK(stream, offset, direction)                           \
   {                                                                           \
     auto &laspp_check_stream = (stream);                                      \
+    LASPP_PUSH_WARNING_DISABLE_USELESS_CAST                                   \
     laspp_check_stream.seekg(static_cast<std::streamoff>(offset), direction); \
+    LASPP_POP_WARNING                                                         \
     if (!laspp_check_stream.good()) {                                         \
       std::stringstream laspp_error_msg;                                      \
       laspp_error_msg << "Failed to seek in stream to offset " << offset;     \

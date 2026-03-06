@@ -92,7 +92,7 @@ class PointerStreamBuffer : public std::streambuf {
     // Safe to convert to pointer now
     char* new_gptr = const_cast<char*>(base) + new_index;
     setg(const_cast<char*>(base), new_gptr, const_cast<char*>(end));
-    return pos_type(static_cast<off_type>(new_index));
+    return pos_type(new_index);
   }
 
   pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in) override {
