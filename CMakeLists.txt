@@ -136,9 +136,18 @@ elseif(UNIX)
     add_compile_options("-Werror")
   endif()
   if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    add_compile_options("-fsanitize=address,undefined"
-                        "-fno-sanitize-recover=all")
-    add_link_options("-fsanitize=address,undefined")
+    # Clang's static ASan conflicts with WSL2's address space layout (Windows
+    # kernel mappings can overlap with ASan's shadow memory region), causing
+    # random segfaults during ASan initialization. Use UBSan only for Clang;
+    # GCC's dynamic ASan works fine.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+      add_compile_options("-fsanitize=undefined" "-fno-sanitize-recover=all")
+      add_link_options("-fsanitize=undefined")
+    else()
+      add_compile_options("-fsanitize=address,undefined"
+                          "-fno-sanitize-recover=all")
+      add_link_options("-fsanitize=address,undefined")
+    endif()
   endif()
   add_compile_options(
     "-fstrict-enums"
@@ -203,15 +212,6 @@ if(LASPP_BUILD_TESTS)
     target_link_libraries(${TEST_NAME} PRIVATE ${LIBRARY_NAME})
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     target_compile_definitions(${TEST_NAME} PRIVATE LASPP_DEBUG_ASSERTS)
-    # Set ASAN_OPTIONS to work around WSL2 address space conflicts with Clang's
-    # ASan mmap_limit_mb forces ASan to use a fallback allocation strategy
-    # that's more tolerant of fragmented address space (Windows kernel mappings
-    # in WSL2)
-    set_tests_properties(
-      ${TEST_NAME}
-      PROPERTIES
-        ENVIRONMENT
-        "ASAN_OPTIONS=mmap_limit_mb=65536:detect_stack_use_after_return=0")
     # MSVC needs /bigobj for large translation units in debug mode
     if(MSVC)
       target_compile_options(${TEST_NAME} PRIVATE $<$<CONFIG:Debug>:/bigobj>)

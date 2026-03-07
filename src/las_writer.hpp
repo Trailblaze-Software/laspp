@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <numeric>
 #include <span>
 #include <sstream>
@@ -251,12 +252,17 @@ class LASWriter {
             local_stats.points_by_return[points_to_write[i].return_number - 1]++;
           }
         }
-        local_stats.min_pos[0] = std::min(local_stats.min_pos[0], points_to_write[i].x);
-        local_stats.min_pos[1] = std::min(local_stats.min_pos[1], points_to_write[i].y);
-        local_stats.min_pos[2] = std::min(local_stats.min_pos[2], points_to_write[i].z);
-        local_stats.max_pos[0] = std::max(local_stats.max_pos[0], points_to_write[i].x);
-        local_stats.max_pos[1] = std::max(local_stats.max_pos[1], points_to_write[i].y);
-        local_stats.max_pos[2] = std::max(local_stats.max_pos[2], points_to_write[i].z);
+        // Read x, y, z using memcpy to avoid alignment issues with packed structures
+        int32_t x, y, z;
+        std::memcpy(&x, &points_to_write[i].x, sizeof(int32_t));
+        std::memcpy(&y, &points_to_write[i].y, sizeof(int32_t));
+        std::memcpy(&z, &points_to_write[i].z, sizeof(int32_t));
+        local_stats.min_pos[0] = std::min(local_stats.min_pos[0], x);
+        local_stats.min_pos[1] = std::min(local_stats.min_pos[1], y);
+        local_stats.min_pos[2] = std::min(local_stats.min_pos[2], z);
+        local_stats.max_pos[0] = std::max(local_stats.max_pos[0], x);
+        local_stats.max_pos[1] = std::max(local_stats.max_pos[1], y);
+        local_stats.max_pos[2] = std::max(local_stats.max_pos[2], z);
       });
 
       // Sequential reduction of thread-local stats
