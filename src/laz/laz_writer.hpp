@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <execution>
 #include <future>
 #include <memory>
 #include <numeric>
