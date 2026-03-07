@@ -260,9 +260,9 @@ class LASWriter {
               }
               // Read x, y, z using memcpy to avoid alignment issues with packed structures
               int32_t x, y, z;
-              std::memcpy(&x, &points_to_write[i].x, sizeof(int32_t));
-              std::memcpy(&y, &points_to_write[i].y, sizeof(int32_t));
-              std::memcpy(&z, &points_to_write[i].z, sizeof(int32_t));
+              std::memcpy(&x, &points_to_write[i].x, sizeof(x));
+              std::memcpy(&y, &points_to_write[i].y, sizeof(y));
+              std::memcpy(&z, &points_to_write[i].z, sizeof(z));
               local_stats.min_pos[0] = std::min(local_stats.min_pos[0], x);
               local_stats.min_pos[1] = std::min(local_stats.min_pos[1], y);
               local_stats.min_pos[2] = std::min(local_stats.min_pos[2], z);

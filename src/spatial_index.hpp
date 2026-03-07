@@ -290,7 +290,7 @@ class QuadtreeSpatialIndex {
       // Read x, y using memcpy to avoid alignment issues with packed structures
       int32_t x_int, y_int;
       std::memcpy(&x_int, &points[i].x, sizeof(x_int));
-      std::memcpy(&y_int, &points[i].y, sizeof(x_int));
+      std::memcpy(&y_int, &points[i].y, sizeof(y_int));
       double x = int32_to_double(x_int, scale_x, offset_x);
       double y = int32_to_double(y_int, scale_y, offset_y);
 
