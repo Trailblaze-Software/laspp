@@ -50,16 +50,15 @@ function(setup_lazperf)
 
   # Quiet warnings coming from LAZperf itself.
   if(NOT MSVC)
-    target_compile_options(
-      lazperf
-      PRIVATE -Wno-maybe-uninitialized
-              -Wno-format
-              -Wno-format-security
-              -Wno-switch
-              -Wno-stringop-truncation
-              -Wno-format-overflow
-              -Wno-sign-conversion
-              -Wno-conversion)
+    # Common flags for both GCC and Clang
+    set(_common_flags -Wno-format -Wno-format-security -Wno-switch
+                      -Wno-sign-conversion -Wno-conversion)
+    # GCC-specific flags
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      list(APPEND _common_flags -Wno-maybe-uninitialized
+           -Wno-stringop-truncation -Wno-format-overflow)
+    endif()
+    target_compile_options(lazperf PRIVATE ${_common_flags})
   endif()
 endfunction()
 

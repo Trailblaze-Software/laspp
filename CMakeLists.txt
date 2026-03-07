@@ -203,6 +203,15 @@ if(LASPP_BUILD_TESTS)
     target_link_libraries(${TEST_NAME} PRIVATE ${LIBRARY_NAME})
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     target_compile_definitions(${TEST_NAME} PRIVATE LASPP_DEBUG_ASSERTS)
+    # Set ASAN_OPTIONS to work around WSL2 address space conflicts with Clang's
+    # ASan mmap_limit_mb forces ASan to use a fallback allocation strategy
+    # that's more tolerant of fragmented address space (Windows kernel mappings
+    # in WSL2)
+    set_tests_properties(
+      ${TEST_NAME}
+      PROPERTIES
+        ENVIRONMENT
+        "ASAN_OPTIONS=mmap_limit_mb=65536:detect_stack_use_after_return=0")
     # MSVC needs /bigobj for large translation units in debug mode
     if(MSVC)
       target_compile_options(${TEST_NAME} PRIVATE $<$<CONFIG:Debug>:/bigobj>)
