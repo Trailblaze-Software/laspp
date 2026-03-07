@@ -380,11 +380,11 @@ class LASHeader {
   }
 
   std::array<double, 3> transform(std::array<int32_t, 3> pos) {
-    return {
+    return {{
         m_transform.scale_factors().x() * pos[0] + m_transform.offsets().x(),
         m_transform.scale_factors().y() * pos[1] + m_transform.offsets().y(),
         m_transform.scale_factors().z() * pos[2] + m_transform.offsets().z(),
-    };
+    }};
   }
 
   std::array<size_t, 15> num_points_by_return() const {

@@ -158,6 +158,7 @@ class LAZWriter {
           case LAZItemType::Wavepacket13:
           case LAZItemType::RGBNIR14:
           case LAZItemType::Wavepacket14:
+          case LAZItemType::Byte14:
           default:
             LASPP_FAIL("Currently unsupported LAZ item type: ",
                        static_cast<uint16_t>(record.item_type));
