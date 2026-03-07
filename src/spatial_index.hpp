@@ -287,8 +287,12 @@ class QuadtreeSpatialIndex {
     // Group points by quadtree cell
     std::map<int32_t, std::vector<uint32_t>> cell_to_points;
     for (size_t i = 0; i < points.size(); ++i) {
-      double x = int32_to_double(points[i].x, scale_x, offset_x);
-      double y = int32_to_double(points[i].y, scale_y, offset_y);
+      // Read x, y using memcpy to avoid alignment issues with packed structures
+      int32_t x_int, y_int;
+      std::memcpy(&x_int, &points[i].x, sizeof(x_int));
+      std::memcpy(&y_int, &points[i].y, sizeof(x_int));
+      double x = int32_to_double(x_int, scale_x, offset_x);
+      double y = int32_to_double(y_int, scale_y, offset_y);
 
       int32_t cell_index = get_cell_index(x, y);
       cell_to_points[cell_index].push_back(static_cast<uint32_t>(i));

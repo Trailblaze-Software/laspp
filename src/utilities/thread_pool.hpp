@@ -133,6 +133,63 @@ class ThreadPool {
     completion_latch->wait();
   }
 
+  // Execute a reduction over [begin, end), accumulating into `result` via T::combine(const T&).
+  // `func` is called as func(index, thread_local_T) for each index.
+  // Each worker thread builds its own local T (default-constructed), then merges into `result`
+  // under a mutex once all its assigned work is done.
+  template <typename T, typename Func>
+  void parallel_for_reduction(size_t begin, size_t end, T& result, Func func,
+                              size_t chunk_size = 1) {
+    if (begin >= end) {
+      return;
+    }
+
+    size_t requested_threads = get_num_threads();
+    ensure_threads(requested_threads);
+    size_t active_threads = std::min(requested_threads, m_max_threads);
+
+    const size_t total_work = end - begin;
+    const size_t num_chunks = (total_work + chunk_size - 1) / chunk_size;  // Ceiling division
+
+    // Latch counts down once per active thread (after it finishes work + combine)
+    auto completion_latch = std::make_shared<std::latch>(active_threads);
+    auto next_chunk = std::make_shared<std::atomic<size_t>>(0);
+    auto combine_mutex = std::make_shared<std::mutex>();
+
+    for (size_t i = 0; i < active_threads; ++i) {
+      enqueue([next_chunk, num_chunks, begin, end, chunk_size, func, completion_latch,
+               combine_mutex, &result]() mutable {
+        T local{};
+        bool has_work = false;
+
+        while (true) {
+          size_t chunk_idx = next_chunk->fetch_add(1);
+          if (chunk_idx >= num_chunks) {
+            break;
+          }
+
+          has_work = true;
+          size_t chunk_begin = begin + chunk_idx * chunk_size;
+          size_t chunk_end = std::min(chunk_begin + chunk_size, end);
+          for (size_t idx = chunk_begin; idx < chunk_end; ++idx) {
+            func(idx, local);
+          }
+        }
+
+        // Merge thread-local result into shared result under mutex before signalling done
+        if (has_work) {
+          std::lock_guard<std::mutex> lock(*combine_mutex);
+          result.combine(local);
+        }
+
+        completion_latch->count_down(1);
+      });
+    }
+
+    // Block until all threads have finished work and combined their local results
+    completion_latch->wait();
+  }
+
  private:
   void enqueue(std::function<void()> task) {
     {
@@ -168,6 +225,12 @@ inline ThreadPool& get_thread_pool() {
 template <typename Func>
 void parallel_for(size_t begin, size_t end, Func func, size_t chunk_size = 1) {
   get_thread_pool().parallel_for(begin, end, func, chunk_size);
+}
+
+// Convenience function for parallel_for_reduction using the global thread pool
+template <typename T, typename Func>
+void parallel_for_reduction(size_t begin, size_t end, T& result, Func func, size_t chunk_size = 1) {
+  get_thread_pool().parallel_for_reduction(begin, end, result, func, chunk_size);
 }
 
 }  // namespace utilities

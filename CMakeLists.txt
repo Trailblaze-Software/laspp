@@ -86,90 +86,103 @@ endif()
 
 # ── Performance optimization flags for aggressive Release builds
 # ──────────────────────────
-if(CMAKE_BUILD_TYPE MATCHES "Release" AND LASPP_AGGRESSIVE_OPTIMIZATIONS)
-  if(MSVC)
-    # Apply only to Release configuration using generator expressions
-    add_compile_options("$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/Ob2>"
-                        "$<$<CONFIG:Release>:/GL>")
-    add_link_options("$<$<CONFIG:Release>:/LTCG>")
-    if(HAVE_AVX2)
-      add_compile_options("$<$<CONFIG:Release>:/arch:AVX2>")
-      message(STATUS "AVX2 optimizations enabled for Release builds")
+# Only apply when this is the top-level project to avoid affecting consuming
+# projects
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  if(CMAKE_BUILD_TYPE MATCHES "Release" AND LASPP_AGGRESSIVE_OPTIMIZATIONS)
+    if(MSVC)
+      # Apply only to Release configuration using generator expressions
+      add_compile_options(
+        "$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/Ob2>"
+        "$<$<CONFIG:Release>:/GL>")
+      add_link_options("$<$<CONFIG:Release>:/LTCG>")
+      if(HAVE_AVX2)
+        add_compile_options("$<$<CONFIG:Release>:/arch:AVX2>")
+        message(STATUS "AVX2 optimizations enabled for Release builds")
+      endif()
+      message(
+        STATUS "Aggressive performance optimizations enabled for Release builds"
+      )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      # For single-config generators (Unix Makefiles), CMAKE_BUILD_TYPE check is
+      # sufficient
+      add_compile_options("-O3" "-march=native" "-flto" "-funroll-loops")
+      add_link_options("-flto")
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options("-fomit-frame-pointer"
+                            "-fno-semantic-interposition")
+      endif()
+      message(
+        STATUS "Aggressive performance optimizations enabled for Release builds"
+      )
     endif()
+  elseif(CMAKE_BUILD_TYPE MATCHES "Release")
     message(
-      STATUS "Aggressive performance optimizations enabled for Release builds")
-  elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    # For single-config generators (Unix Makefiles), CMAKE_BUILD_TYPE check is
-    # sufficient
-    add_compile_options("-O3" "-march=native" "-flto" "-funroll-loops")
-    add_link_options("-flto")
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-      add_compile_options("-fomit-frame-pointer" "-fno-semantic-interposition")
-    endif()
-    message(
-      STATUS "Aggressive performance optimizations enabled for Release builds")
+      STATUS
+        "Using standard Release optimizations (LASPP_AGGRESSIVE_OPTIMIZATIONS=OFF)"
+    )
   endif()
-elseif(CMAKE_BUILD_TYPE MATCHES "Release")
-  message(
-    STATUS
-      "Using standard Release optimizations (LASPP_AGGRESSIVE_OPTIMIZATIONS=OFF)"
-  )
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if(WIN32)
-  if(${CMAKE_CXX_COMPILER} MATCHES ".*mingw.*")
-    add_compile_options("-fstrict-enums" "-Wall" "-Wextra" "-Wpedantic"
-                        "-Werror")
-  else()
-    add_compile_options(
-      "/W4"
-      "/WX"
-      # C4267/C4244: size_t/type narrowing inside MSVC STL template bodies.
-      "/wd4267" # size_t narrowing in MSVC STL <xutility> template
-                # instantiations
-      "/wd4244") # type narrowing in MSVC STL <xutility> template instantiations
-  endif()
-elseif(UNIX)
-  if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
-    add_compile_options("-Werror")
-  endif()
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    # Clang's static ASan conflicts with WSL2's address space layout (Windows
-    # kernel mappings can overlap with ASan's shadow memory region), causing
-    # random segfaults during ASan initialization. Use UBSan only for Clang;
-    # GCC's dynamic ASan works fine.
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-      add_compile_options("-fsanitize=undefined" "-fno-sanitize-recover=all")
-      add_link_options("-fsanitize=undefined")
+
+# Only apply strict compiler flags when this is the top-level project.
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+  if(WIN32)
+    if(${CMAKE_CXX_COMPILER} MATCHES ".*mingw.*")
+      add_compile_options("-fstrict-enums" "-Wall" "-Wextra" "-Wpedantic"
+                          "-Werror")
     else()
-      add_compile_options("-fsanitize=address,undefined"
-                          "-fno-sanitize-recover=all")
-      add_link_options("-fsanitize=address,undefined")
+      add_compile_options(
+        "/W4"
+        "/WX"
+        # C4267/C4244: size_t/type narrowing inside MSVC STL template bodies.
+        "/wd4267" # size_t narrowing in MSVC STL <xutility> template
+                  # instantiations
+        "/wd4244") # type narrowing in MSVC STL <xutility> template
+                   # instantiations
     endif()
-  endif()
-  add_compile_options(
-    "-fstrict-enums"
-    "-Wall"
-    "-Wextra"
-    "-Wpedantic"
-    "-Wdouble-promotion"
-    "-Wshadow"
-    "-Wpointer-arith"
-    "-Wstrict-aliasing"
-    "-Wnull-dereference"
-    "-Wdouble-promotion"
-    "-Wold-style-cast"
-    "-Wconversion"
-    "-Wsign-conversion")
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  elseif(UNIX)
+    if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
+      add_compile_options("-Werror")
+    endif()
+    if(CMAKE_BUILD_TYPE MATCHES "Debug")
+      # Clang's static ASan conflicts with WSL2's address space layout (Windows
+      # kernel mappings can overlap with ASan's shadow memory region), causing
+      # random segfaults during ASan initialization. Use UBSan only for Clang;
+      # GCC's dynamic ASan works fine.
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        add_compile_options("-fsanitize=undefined" "-fno-sanitize-recover=all")
+        add_link_options("-fsanitize=undefined")
+      else()
+        add_compile_options("-fsanitize=address,undefined"
+                            "-fno-sanitize-recover=all")
+        add_link_options("-fsanitize=address,undefined")
+      endif()
+    endif()
     add_compile_options(
-      "-Wduplicated-branches" "-Wlogical-op" "-Wrestrict" "-Wcast-align=strict"
-      "-Wduplicated-cond" "-Wuseless-cast")
+      "-fstrict-enums"
+      "-Wall"
+      "-Wextra"
+      "-Wpedantic"
+      "-Wdouble-promotion"
+      "-Wshadow"
+      "-Wpointer-arith"
+      "-Wstrict-aliasing"
+      "-Wnull-dereference"
+      "-Wdouble-promotion"
+      "-Wold-style-cast"
+      "-Wconversion"
+      "-Wsign-conversion")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      add_compile_options(
+        "-Wduplicated-branches" "-Wlogical-op" "-Wrestrict"
+        "-Wcast-align=strict" "-Wduplicated-cond" "-Wuseless-cast")
+    endif()
+  else()
+    message(FATAL_ERROR "Unsupported platform")
   endif()
-else()
-  message(FATAL_ERROR "Unsupported platform")
 endif()
 
 set(LIBRARY_NAME las++)

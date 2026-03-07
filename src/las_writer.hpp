@@ -225,57 +225,52 @@ class LASWriter {
         int32_t max_pos[3]{std::numeric_limits<int32_t>::lowest(),
                            std::numeric_limits<int32_t>::lowest(),
                            std::numeric_limits<int32_t>::lowest()};
+
+        void combine(const PointStats& other) {
+          for (size_t j = 0; j < 15; j++) {
+            points_by_return[j] += other.points_by_return[j];
+          }
+          for (size_t j = 0; j < 3; j++) {
+            min_pos[j] = std::min(min_pos[j], other.min_pos[j]);
+            max_pos[j] = std::max(max_pos[j], other.max_pos[j]);
+          }
+        }
       };
 
-      // Parallel reduction using thread pool with thread-local accumulation
-      size_t num_threads = utilities::get_num_threads();
-      std::vector<PointStats> thread_stats(num_threads);
-      std::atomic<size_t> next_thread_idx{0};
-
-      utilities::parallel_for(size_t{0}, points.size(), [&](size_t i) {
-        // Get thread-local slot index (assigned once per thread)
-        thread_local size_t thread_idx = std::numeric_limits<size_t>::max();
-        if (thread_idx == std::numeric_limits<size_t>::max()) {
-          thread_idx = next_thread_idx.fetch_add(1, std::memory_order_relaxed);
-        }
-
-        PointStats& local_stats = thread_stats[thread_idx];
-
-        // Accumulate stats for this point
-        if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
-          if (points_to_write[i].bit_byte.return_number < 16 &&
-              points_to_write[i].bit_byte.return_number > 0) {
-            local_stats.points_by_return[points_to_write[i].bit_byte.return_number - 1]++;
-          }
-        } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
-          if (points_to_write[i].return_number < 16 && points_to_write[i].return_number > 0) {
-            local_stats.points_by_return[points_to_write[i].return_number - 1]++;
-          }
-        }
-        // Read x, y, z using memcpy to avoid alignment issues with packed structures
-        int32_t x, y, z;
-        std::memcpy(&x, &points_to_write[i].x, sizeof(int32_t));
-        std::memcpy(&y, &points_to_write[i].y, sizeof(int32_t));
-        std::memcpy(&z, &points_to_write[i].z, sizeof(int32_t));
-        local_stats.min_pos[0] = std::min(local_stats.min_pos[0], x);
-        local_stats.min_pos[1] = std::min(local_stats.min_pos[1], y);
-        local_stats.min_pos[2] = std::min(local_stats.min_pos[2], z);
-        local_stats.max_pos[0] = std::max(local_stats.max_pos[0], x);
-        local_stats.max_pos[1] = std::max(local_stats.max_pos[1], y);
-        local_stats.max_pos[2] = std::max(local_stats.max_pos[2], z);
-      });
-
-      // Sequential reduction of thread-local stats
       PointStats result;
-      for (const auto& stats : thread_stats) {
-        for (size_t j = 0; j < 15; j++) {
-          result.points_by_return[j] += stats.points_by_return[j];
-        }
-        for (size_t j = 0; j < 3; j++) {
-          result.min_pos[j] = std::min(result.min_pos[j], stats.min_pos[j]);
-          result.max_pos[j] = std::max(result.max_pos[j], stats.max_pos[j]);
-        }
-      }
+      // Use chunking internally: process 1000 points per chunk for better cache locality
+      constexpr size_t reduction_chunk_size = 1000;
+      const size_t num_chunks = (points.size() + reduction_chunk_size - 1) / reduction_chunk_size;
+      utilities::parallel_for_reduction(
+          size_t{0}, num_chunks, result, [&](size_t chunk_idx, PointStats& local_stats) {
+            // Process all points in this chunk
+            const size_t chunk_start = chunk_idx * reduction_chunk_size;
+            const size_t chunk_end = std::min(chunk_start + reduction_chunk_size, points.size());
+            for (size_t i = chunk_start; i < chunk_end; ++i) {
+              // Accumulate stats for this point
+              if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+                if (points_to_write[i].bit_byte.return_number < 16 &&
+                    points_to_write[i].bit_byte.return_number > 0) {
+                  local_stats.points_by_return[points_to_write[i].bit_byte.return_number - 1]++;
+                }
+              } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+                if (points_to_write[i].return_number < 16 && points_to_write[i].return_number > 0) {
+                  local_stats.points_by_return[points_to_write[i].return_number - 1]++;
+                }
+              }
+              // Read x, y, z using memcpy to avoid alignment issues with packed structures
+              int32_t x, y, z;
+              std::memcpy(&x, &points_to_write[i].x, sizeof(int32_t));
+              std::memcpy(&y, &points_to_write[i].y, sizeof(int32_t));
+              std::memcpy(&z, &points_to_write[i].z, sizeof(int32_t));
+              local_stats.min_pos[0] = std::min(local_stats.min_pos[0], x);
+              local_stats.min_pos[1] = std::min(local_stats.min_pos[1], y);
+              local_stats.min_pos[2] = std::min(local_stats.min_pos[2], z);
+              local_stats.max_pos[0] = std::max(local_stats.max_pos[0], x);
+              local_stats.max_pos[1] = std::max(local_stats.max_pos[1], y);
+              local_stats.max_pos[2] = std::max(local_stats.max_pos[2], z);
+            }
+          });
 
       for (size_t j = 0; j < 15; j++) points_by_return[j] = result.points_by_return[j];
       for (size_t j = 0; j < 3; j++) {
