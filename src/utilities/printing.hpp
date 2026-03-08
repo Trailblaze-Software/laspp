@@ -107,14 +107,14 @@ class LimitedMap {
 
   friend std::ostream& operator<<(std::ostream& os, const LimitedMap<K, V>& limited) {
     size_t count = 0;
-    for (const auto& [k, v] : limited.m_map) {
+    for (const auto& kv : limited.m_map) {
       if (count++ >= limited.m_limit) {
         break;
       }
-      os << v << std::endl;
+      os << kv.second << '\n';
     }
     if (limited.m_show_remaining && limited.m_map.size() > limited.m_limit) {
-      os << "... (" << (limited.m_map.size() - limited.m_limit) << " more)" << std::endl;
+      os << "... (" << (limited.m_map.size() - limited.m_limit) << " more)" << '\n';
     }
     return os;
   }
