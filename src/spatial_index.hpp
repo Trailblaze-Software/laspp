@@ -60,6 +60,8 @@ namespace laspp {
  *       - end (U32, 4 bytes, little endian)
  */
 
+#pragma pack(push, 1)
+
 struct LASPP_PACKED QuadtreeHeader {
   char spatial_signature[4];   // "LASS"
   uint32_t type;               // 0 = LAS_SPATIAL_QUAD_TREE
@@ -95,6 +97,8 @@ struct LASPP_PACKED IntervalCellData {
   uint32_t number_points;
   // Followed by number_intervals pairs of (start, end) U32 values
 };
+
+#pragma pack(pop)
 
 struct PointInterval {
   uint32_t start;
