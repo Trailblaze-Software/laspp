@@ -6,7 +6,6 @@
 #pragma once
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
 #include <numeric>
 #include <span>

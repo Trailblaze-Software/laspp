@@ -5,13 +5,13 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <array>
 #include <cstdint>
-#include <ios>
+#include <initializer_list>
 #include <sstream>
-#include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <vector>
 #ifndef _MSC_VER
 #define LASPP_HAS_BUILTIN(x) __has_builtin(x)

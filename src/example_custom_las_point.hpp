@@ -6,6 +6,8 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
+#include <ostream>
 
 #include "las_point.hpp"
 

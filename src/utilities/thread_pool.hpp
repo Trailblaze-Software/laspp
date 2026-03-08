@@ -13,8 +13,11 @@
 #include <latch>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "env.hpp"

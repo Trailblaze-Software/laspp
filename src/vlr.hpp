@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cassert>
 #include <cstdint>
 #include <iostream>

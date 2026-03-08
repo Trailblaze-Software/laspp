@@ -5,9 +5,10 @@
 
 #pragma once
 
-#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <set>

@@ -6,14 +6,15 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <iostream>
+#include <iterator>
 #include <limits>
-#include <sstream>
+#include <string>
 
 #include "las_point.hpp"
 #include "utilities/assert.hpp"

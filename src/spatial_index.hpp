@@ -5,14 +5,20 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "las_header.hpp"
+#include "las_point.hpp"
 #include "utilities/assert.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/printing.hpp"
