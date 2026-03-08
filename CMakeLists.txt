@@ -3,6 +3,11 @@
 
 cmake_minimum_required(VERSION 3.20)
 
+project(
+  LAS++
+  VERSION 0.0.0
+  LANGUAGES CXX)
+
 option(LASPP_DEBUG_ASSERTS "Enable debugging asserts" ON)
 option(LASPP_BUILD_TESTS "Build tests" ON)
 # Default benchmarks to OFF if this is a subproject (to avoid downloading
@@ -18,11 +23,6 @@ option(LASPP_AGGRESSIVE_OPTIMIZATIONS
        "Enable aggressive performance optimizations (-march=native, etc.)" ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-project(
-  LAS++
-  VERSION 0.0.0
-  LANGUAGES CXX)
 set(COPYRIGHT "Copyright (c) 2024 Trailblaze Software. All rights reserved.")
 
 if(LASPP_BUILD_TESTS OR LASPP_BUILD_BENCHMARK)
