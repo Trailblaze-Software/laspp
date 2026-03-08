@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <iostream>
 #include <iterator>
 #include <map>
