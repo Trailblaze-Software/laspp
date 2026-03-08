@@ -11,6 +11,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <optional>
 #include <span>
@@ -374,45 +375,71 @@ class LASReader {
   template <typename T>
   std::span<T> read_chunks(std::span<T> output_location, std::pair<size_t, size_t> chunk_indexes) {
     if (header().is_laz_compressed()) {
-      size_t compressed_start_offset =
-          m_laz_reader->chunk_table().chunk_offset(chunk_indexes.first);
-      size_t total_compressed_size =
-          m_laz_reader->chunk_table().compressed_chunk_size(chunk_indexes.second - 1) +
-          m_laz_reader->chunk_table().chunk_offset(chunk_indexes.second - 1) -
-          compressed_start_offset;
+      const auto& chunk_table = m_laz_reader->chunk_table();
       size_t total_n_points =
-          (chunk_indexes.second == m_laz_reader->chunk_table().num_chunks()
+          (chunk_indexes.second == chunk_table.num_chunks()
                ? header().num_points()
-               : m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_indexes.second]) -
-          m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_indexes.first];
+               : chunk_table.decompressed_chunk_offsets()[chunk_indexes.second]) -
+          chunk_table.decompressed_chunk_offsets()[chunk_indexes.first];
       LASPP_ASSERT_GE(output_location.size(), total_n_points);
-
-      size_t file_data_offset = header().offset_to_point_data() + compressed_start_offset;
-      auto buf = get_bytes(file_data_offset, total_compressed_size);
 
       std::vector<size_t> chunk_indices(chunk_indexes.second - chunk_indexes.first);
       std::iota(chunk_indices.begin(), chunk_indices.end(), chunk_indexes.first);
 
-      // Use thread pool for parallel execution (respects LASPP_NUM_THREADS environment variable)
-      utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
-        size_t chunk_index = chunk_indices[idx];
-        size_t start_offset =
-            m_laz_reader->chunk_table().chunk_offset(chunk_index) - compressed_start_offset;
-        size_t compressed_chunk_size =
-            m_laz_reader->chunk_table().compressed_chunk_size(chunk_index);
-        std::span<const std::byte> compressed_chunk =
-            buf.data.subspan(start_offset, compressed_chunk_size);
+      if (m_mapped_file.has_value()) {
+        // Memory-mapped path: read contiguous block once, then decompress chunks in parallel
+        size_t compressed_start_offset = chunk_table.chunk_offset(chunk_indexes.first);
+        size_t total_compressed_size = chunk_table.compressed_chunk_size(chunk_indexes.second - 1) +
+                                       chunk_table.chunk_offset(chunk_indexes.second - 1) -
+                                       compressed_start_offset;
+        size_t file_data_offset = header().offset_to_point_data() + compressed_start_offset;
+        auto buf = get_bytes(file_data_offset, total_compressed_size);
 
-        size_t point_offset =
-            m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_index] -
-            m_laz_reader->chunk_table().decompressed_chunk_offsets()[chunk_indexes.first];
-        size_t n_points = m_laz_reader->chunk_table().points_per_chunk()[chunk_index];
-        if (chunk_index == 0) {
-          LASPP_ASSERT_EQ(point_offset, 0u);
-        }
-        m_laz_reader->decompress_chunk(compressed_chunk,
-                                       output_location.subspan(point_offset, n_points));
-      });
+        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
+          size_t chunk_index = chunk_indices[idx];
+          size_t start_offset = chunk_table.chunk_offset(chunk_index) - compressed_start_offset;
+          size_t compressed_chunk_size = chunk_table.compressed_chunk_size(chunk_index);
+          std::span<const std::byte> compressed_chunk =
+              buf.data.subspan(start_offset, compressed_chunk_size);
+
+          size_t point_offset = chunk_table.decompressed_chunk_offsets()[chunk_index] -
+                                chunk_table.decompressed_chunk_offsets()[chunk_indexes.first];
+          size_t n_points = chunk_table.points_per_chunk()[chunk_index];
+          if (chunk_index == 0) {
+            LASPP_ASSERT_EQ(point_offset, 0u);
+          }
+          m_laz_reader->decompress_chunk(compressed_chunk,
+                                         output_location.subspan(point_offset, n_points));
+        });
+      } else {
+        // Stream-based path: read chunks in parallel (with mutex protection) and decompress.
+        // This overlaps I/O and decompression - while one thread decompresses, others can read.
+        std::mutex stream_mutex;
+        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
+          size_t chunk_index = chunk_indices[idx];
+          size_t file_data_offset =
+              header().offset_to_point_data() + chunk_table.chunk_offset(chunk_index);
+          size_t compressed_chunk_size = chunk_table.compressed_chunk_size(chunk_index);
+
+          // Read chunk data with stream mutex protection
+          std::vector<std::byte> compressed_buffer;
+          {
+            std::lock_guard<std::mutex> lock(stream_mutex);
+            auto buf = get_bytes(file_data_offset, compressed_chunk_size);
+            compressed_buffer = {buf.data.begin(), buf.data.end()};
+          }
+
+          // Decompress without holding the lock (allows other threads to read while we decompress)
+          size_t point_offset = chunk_table.decompressed_chunk_offsets()[chunk_index] -
+                                chunk_table.decompressed_chunk_offsets()[chunk_indexes.first];
+          size_t n_points = chunk_table.points_per_chunk()[chunk_index];
+          if (chunk_index == 0) {
+            LASPP_ASSERT_EQ(point_offset, 0u);
+          }
+          m_laz_reader->decompress_chunk(std::span<const std::byte>(compressed_buffer),
+                                         output_location.subspan(point_offset, n_points));
+        });
+      }
       return output_location.subspan(0, total_n_points);
     }
     LASPP_ASSERT(chunk_indexes.first == 0);
@@ -431,7 +458,8 @@ class LASReader {
   }
 
   // Get chunk indices that contain the given point intervals
-  // Returns a sorted list of unique chunk indices
+  // Returns a sorted list of unique chunk indices.
+  // Uses binary search on the monotonically-increasing decompressed_chunk_offsets array
   std::vector<size_t> get_chunk_indices_from_intervals(
       const std::vector<PointInterval>& intervals) const {
     std::vector<size_t> chunk_indices;
@@ -439,19 +467,35 @@ class LASReader {
     if (header().is_laz_compressed() && m_laz_reader.has_value()) {
       const auto& chunk_table = m_laz_reader->chunk_table();
       const auto& decompressed_offsets = chunk_table.decompressed_chunk_offsets();
-      const auto& points_per_chunk = chunk_table.points_per_chunk();
+      const size_t n_chunks = decompressed_offsets.size();
+
+      if (n_chunks == 0 || intervals.empty()) {
+        return chunk_indices;
+      }
 
       for (const auto& interval : intervals) {
-        // Find chunks that overlap with this interval
-        for (size_t chunk_idx = 0; chunk_idx < decompressed_offsets.size(); ++chunk_idx) {
-          size_t chunk_start = decompressed_offsets[chunk_idx];
-          size_t chunk_end = chunk_start + points_per_chunk[chunk_idx] - 1;
+        const size_t a = static_cast<size_t>(interval.start);
+        const size_t b = static_cast<size_t>(interval.end);
 
-          // Check if chunk overlaps with interval
-          if (chunk_start <= static_cast<size_t>(interval.end) &&
-              chunk_end >= static_cast<size_t>(interval.start)) {
-            chunk_indices.push_back(chunk_idx);
-          }
+        // First overlapping chunk: the first chunk i where chunk_end[i] >= a.
+        // chunk_end[i] = decompressed_offsets[i+1] - 1 (for i < n_chunks-1), so
+        // chunk_end[i] >= a  <=>  decompressed_offsets[i+1] > a.
+        // Find the first position j in [begin+1, end) where offsets[j] > a;
+        // then i = j - 1 is the first chunk whose end reaches a.
+        // When j == end (a is past all offset values), first_chunk = n_chunks - 1
+        // (the last chunk, whose end extends to total_points - 1).
+        auto first_it =
+            std::upper_bound(decompressed_offsets.begin() + 1, decompressed_offsets.end(), a);
+        size_t first_chunk = static_cast<size_t>(first_it - decompressed_offsets.begin()) - 1;
+
+        // Last overlapping chunk (exclusive upper bound): the first chunk i where
+        // chunk_start[i] = decompressed_offsets[i] > b.
+        auto last_it =
+            std::upper_bound(decompressed_offsets.begin(), decompressed_offsets.end(), b);
+        size_t last_chunk_exclusive = static_cast<size_t>(last_it - decompressed_offsets.begin());
+
+        for (size_t i = first_chunk; i < last_chunk_exclusive; ++i) {
+          chunk_indices.push_back(i);
         }
       }
 
@@ -469,7 +513,7 @@ class LASReader {
     return chunk_indices;
   }
 
-  // Read a list of chunks (not necessarily contiguous)
+  // Read a list of chunks (not necessarily contiguous), decompressing in parallel.
   template <typename T>
   std::span<T> read_chunks_list(std::span<T> output_location,
                                 const std::vector<size_t>& chunk_indices) {
@@ -478,24 +522,54 @@ class LASReader {
     }
 
     if (header().is_laz_compressed()) {
-      // For LAZ files, we need to read chunks individually and place them in the output
-      size_t total_points = 0;
       const auto& chunk_table = m_laz_reader->chunk_table();
-      const auto& points_per_chunk = chunk_table.points_per_chunk();
+      const auto& points_per_chunk_vec = chunk_table.points_per_chunk();
 
-      // Calculate total points needed
-      for (size_t chunk_idx : chunk_indices) {
-        total_points += points_per_chunk[chunk_idx];
+      // Pre-compute per-chunk output offsets in a single sequential pass.
+      size_t total_points = 0;
+      std::vector<size_t> output_offsets(chunk_indices.size());
+      for (size_t i = 0; i < chunk_indices.size(); ++i) {
+        output_offsets[i] = total_points;
+        total_points += points_per_chunk_vec[chunk_indices[i]];
       }
 
       LASPP_ASSERT_GE(output_location.size(), total_points);
 
-      // Read each chunk and place it in the output buffer
-      size_t output_offset = 0;
-      for (size_t chunk_idx : chunk_indices) {
-        size_t n_points = points_per_chunk[chunk_idx];
-        read_chunk<T>(output_location.subspan(output_offset, n_points), chunk_idx);
-        output_offset += n_points;
+      if (m_mapped_file.has_value()) {
+        // Memory-mapped path: get_bytes is zero-copy and thread-safe.
+        // Decompress all chunks in parallel — each call uses only local state.
+        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t i) {
+          const size_t chunk_idx = chunk_indices[i];
+          const size_t file_data_offset =
+              header().offset_to_point_data() + chunk_table.chunk_offset(chunk_idx);
+          auto buf = get_bytes(file_data_offset, chunk_table.compressed_chunk_size(chunk_idx));
+          m_laz_reader->decompress_chunk(
+              buf.data,
+              output_location.subspan(output_offsets[i], points_per_chunk_vec[chunk_idx]));
+        });
+      } else {
+        // Stream-based path: read chunks in parallel (with mutex protection) and decompress.
+        // This overlaps I/O and decompression - while one thread decompresses, others can read.
+        std::mutex stream_mutex;
+        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t i) {
+          const size_t chunk_idx = chunk_indices[i];
+          const size_t file_data_offset =
+              header().offset_to_point_data() + chunk_table.chunk_offset(chunk_idx);
+          const size_t compressed_size = chunk_table.compressed_chunk_size(chunk_idx);
+
+          // Read chunk data with stream mutex protection
+          std::vector<std::byte> compressed_buffer;
+          {
+            std::lock_guard<std::mutex> lock(stream_mutex);
+            auto buf = get_bytes(file_data_offset, compressed_size);
+            compressed_buffer = {buf.data.begin(), buf.data.end()};
+          }
+
+          // Decompress without holding the lock (allows other threads to read while we decompress)
+          m_laz_reader->decompress_chunk(
+              std::span<const std::byte>(compressed_buffer),
+              output_location.subspan(output_offsets[i], points_per_chunk_vec[chunk_idx]));
+        });
       }
 
       return output_location.subspan(0, total_points);
