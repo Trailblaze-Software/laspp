@@ -10,6 +10,8 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
+#include <type_traits>
+#include <stdexcept>
 #include <sstream>
 #include <string>
 #include <vector>
