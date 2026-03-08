@@ -439,8 +439,12 @@ class LASWriter {
       point_cell_pairs.reserve(points.size());
 
       for (size_t i = 0; i < points.size(); ++i) {
-        double x = int32_to_double(points[i].x, scale_x, offset_x);
-        double y = int32_to_double(points[i].y, scale_y, offset_y);
+        int32_t x_raw;
+        int32_t y_raw;
+        std::memcpy(&x_raw, &points[i].x, sizeof(x_raw));
+        std::memcpy(&y_raw, &points[i].y, sizeof(y_raw));
+        double x = int32_to_double(x_raw, scale_x, offset_x);
+        double y = int32_to_double(y_raw, scale_y, offset_y);
         int32_t cell_index = temp_index.get_cell_index(x, y);
         point_cell_pairs.push_back({cell_index, i});
       }
