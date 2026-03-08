@@ -462,8 +462,6 @@ class LASWriter {
 
       // Build final spatial index with reordered points
       QuadtreeSpatialIndex spatial_index(reader.header(), points);
-      std::cout << "Built spatial index with " << spatial_index.num_cells() << " cells for "
-                << points.size() << " points." << std::endl;
 
       // Write points
       write_points<PointType>(points, 50000);
