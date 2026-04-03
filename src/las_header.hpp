@@ -14,6 +14,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <sstream>
 #include <string>
 
 #include "las_point.hpp"
