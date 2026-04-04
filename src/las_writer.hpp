@@ -420,58 +420,74 @@ class LASWriter {
 
   template <typename PointType>
   void copy_points_with_spatial_index(LASReader& reader, bool add_spatial_index) {
+    if (!add_spatial_index) {
+      // Streaming fast path: process one batch of chunks at a time.
+      // Each batch is decompressed in parallel (read_chunks uses parallel_for
+      // internally), so throughput matches the bulk path while peak memory is
+      // bounded to O(batch_size * chunk_pts) instead of O(total_points).
+      const auto ppc = reader.points_per_chunk();
+      if (ppc.empty()) return;
+
+      const size_t n_chunks = reader.num_chunks();
+      const size_t batch_size = 20 * utilities::get_num_threads();
+
+      // Compute the exact maximum point count across all batches so the buffer
+      // is neither over- nor under-allocated (matters for single-chunk non-LAZ
+      // files where max_chunk_pts == num_points).
+      size_t max_batch_pts = 0;
+      for (size_t b = 0; b < n_chunks; b += batch_size) {
+        size_t pts = 0;
+        for (size_t i = b, end = std::min(b + batch_size, n_chunks); i < end; ++i) pts += ppc[i];
+        max_batch_pts = std::max(max_batch_pts, pts);
+      }
+
+      std::vector<PointType> batch_buf(max_batch_pts);
+      for (size_t b = 0; b < n_chunks; b += batch_size) {
+        auto pts =
+            reader.read_chunks<PointType>(batch_buf, {b, std::min(b + batch_size, n_chunks)});
+        write_points<PointType>(pts);
+      }
+      return;
+    }
+
+    // Spatial-index path: reordering requires the full point set in memory.
     std::vector<PointType> points(reader.num_points());
     reader.read_chunks<PointType>(points, {0, reader.num_chunks()});
 
-    if (add_spatial_index) {
-      // Reorder points by quadtree cell index (always done when adding spatial index)
-      double scale_x = reader.header().transform().scale_factors().x();
-      double offset_x = reader.header().transform().offsets().x();
-      double scale_y = reader.header().transform().scale_factors().y();
-      double offset_y = reader.header().transform().offsets().y();
+    double scale_x = reader.header().transform().scale_factors().x();
+    double offset_x = reader.header().transform().offsets().x();
+    double scale_y = reader.header().transform().scale_factors().y();
+    double offset_y = reader.header().transform().offsets().y();
 
-      // Build initial spatial index to get cell indices
-      // We need to build it from points first to get the quadtree structure
-      QuadtreeSpatialIndex temp_index(reader.header(), points);
+    QuadtreeSpatialIndex temp_index(reader.header(), points);
 
-      // Create vector of (cell_index, original_index) pairs for sorting
-      std::vector<std::pair<int32_t, size_t>> point_cell_pairs;
-      point_cell_pairs.reserve(points.size());
+    std::vector<std::pair<int32_t, size_t>> point_cell_pairs;
+    point_cell_pairs.reserve(points.size());
 
-      for (size_t i = 0; i < points.size(); ++i) {
-        int32_t x_raw;
-        int32_t y_raw;
-        std::memcpy(&x_raw, &points[i].x, sizeof(x_raw));
-        std::memcpy(&y_raw, &points[i].y, sizeof(y_raw));
-        double x = int32_to_double(x_raw, scale_x, offset_x);
-        double y = int32_to_double(y_raw, scale_y, offset_y);
-        int32_t cell_index = temp_index.get_cell_index(x, y);
-        point_cell_pairs.push_back({cell_index, i});
-      }
-
-      // Sort by cell index, then by original index
-      std::sort(point_cell_pairs.begin(), point_cell_pairs.end());
-
-      // Reorder points
-      std::vector<PointType> reordered_points;
-      reordered_points.reserve(points.size());
-      for (const auto& pair : point_cell_pairs) {
-        reordered_points.push_back(points[pair.second]);
-      }
-      points = std::move(reordered_points);
-
-      // Build final spatial index with reordered points
-      QuadtreeSpatialIndex spatial_index(reader.header(), points);
-
-      // Write points
-      write_points<PointType>(points, 50000);
-
-      // Write spatial index
-      write_lastools_spatial_index(spatial_index);
-    } else {
-      // Regular write without spatial index
-      write_points<PointType>(points);
+    for (size_t i = 0; i < points.size(); ++i) {
+      int32_t x_raw;
+      int32_t y_raw;
+      std::memcpy(&x_raw, &points[i].x, sizeof(x_raw));
+      std::memcpy(&y_raw, &points[i].y, sizeof(y_raw));
+      double x = int32_to_double(x_raw, scale_x, offset_x);
+      double y = int32_to_double(y_raw, scale_y, offset_y);
+      int32_t cell_index = temp_index.get_cell_index(x, y);
+      point_cell_pairs.push_back({cell_index, i});
     }
+
+    std::sort(point_cell_pairs.begin(), point_cell_pairs.end());
+
+    std::vector<PointType> reordered_points;
+    reordered_points.reserve(points.size());
+    for (const auto& pair : point_cell_pairs) {
+      reordered_points.push_back(points[pair.second]);
+    }
+    points = std::move(reordered_points);
+
+    QuadtreeSpatialIndex spatial_index(reader.header(), points);
+
+    write_points<PointType>(points, 50000);
+    write_lastools_spatial_index(spatial_index);
   }
 
  public:
