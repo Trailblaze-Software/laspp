@@ -21,7 +21,6 @@
 #define LASPP_HAS_BUILTIN(x) 0
 #endif
 
-#ifdef LASPP_DEBUG_ASSERTS
 #include <iostream>
 #include <optional>
 #if defined(_MSC_VER) || LASPP_HAS_BUILTIN(__builtin_source_location)
@@ -34,7 +33,6 @@ using source_location = std::experimental::source_location;
 #endif
 
 #include "printing.hpp"
-#endif
 
 namespace laspp {
 
@@ -48,7 +46,6 @@ inline size_t to_size_t(T value) {
   }
 }
 
-#ifdef LASPP_DEBUG_ASSERTS
 template <typename... Args>
 std::optional<std::string> OptionalString(Args &&...args) {
   if constexpr (sizeof...(args) == 0) {
@@ -59,11 +56,6 @@ std::optional<std::string> OptionalString(Args &&...args) {
     return ss.str();
   }
 }
-
-#define LASPP_ASSERT(condition, ...)                                          \
-  if (!(condition))                                                           \
-    laspp::_LASPP_FAIL_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__), \
-                              std::source_location::current());
 
 inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
                                const std::optional<std::string> &message,
@@ -76,6 +68,22 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
   std::cerr << ss.str();
   throw std::runtime_error(ss.str());
 }
+
+template <typename A, typename B>
+inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
+                             const std::string &b_str, const std::string &nop,
+                             const std::optional<std::string> &message,
+                             const std::source_location &loc = std::source_location::current()) {
+  std::stringstream ss;
+  ss << a << " " << nop << " " << b;
+  laspp::_LASPP_FAIL_ASSERT(a_str + " " + nop + " " + b_str,
+                            message ? (ss.str() + " " + *message) : ss.str(), loc);
+}
+
+#define LASPP_ASSERT(condition, ...)                                          \
+  if (!(condition))                                                           \
+    laspp::_LASPP_FAIL_ASSERT(#condition, laspp::OptionalString(__VA_ARGS__), \
+                              std::source_location::current());
 
 #ifdef _MSC_VER
 #define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)                                            \
@@ -98,20 +106,15 @@ inline void _LASPP_FAIL_ASSERT(const std::string &condition_str,
   }
 #endif
 
-template <typename A, typename B>
-inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
-                             const std::string &b_str, const std::string &nop,
-                             const std::optional<std::string> &message,
-                             const std::source_location &loc = std::source_location::current()) {
-  std::stringstream ss;
-  ss << a << " " << nop << " " << b;
-  laspp::_LASPP_FAIL_ASSERT(a_str + " " + nop + " " + b_str,
-                            message ? (ss.str() + " " + *message) : ss.str(), loc);
-}
-
+// LASPP_DEBUG_ASSERT compiles out entirely in release (zero overhead on hot paths).
+// In debug builds it is identical to LASPP_ASSERT.
+#ifdef LASPP_DEBUG_ASSERTS
+#define LASPP_DEBUG_ASSERT(condition, ...) LASPP_ASSERT(condition, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT_BIN_OP(a, b, op, nop, ...) \
+  LASPP_ASSERT_BIN_OP(a, b, op, nop, __VA_ARGS__)
 #else
-#define LASPP_ASSERT(condition, ...)
-#define LASPP_ASSERT_BIN_OP(a, b, op, nop, ...)
+#define LASPP_DEBUG_ASSERT(condition, ...)
+#define LASPP_DEBUG_ASSERT_BIN_OP(a, b, op, nop, ...)
 #endif
 
 #define LASPP_FAIL(...)             \
@@ -126,6 +129,20 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 #define LASPP_ASSERT_LT(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, <, >=, __VA_ARGS__)
 #define LASPP_ASSERT_EQ(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, ==, !=, __VA_ARGS__)
 #define LASPP_ASSERT_NE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, !=, ==, __VA_ARGS__)
+
+// Debug-only binary-op shorthands — compile out entirely in release builds.
+#define LASPP_DEBUG_ASSERT_GE(expr, val, ...) \
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, >=, <, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT_LE(expr, val, ...) \
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, <=, >, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT_GT(expr, val, ...) \
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, >, <=, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT_LT(expr, val, ...) \
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, <, >=, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT_EQ(expr, val, ...) \
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, ==, !=, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT_NE(expr, val, ...) \
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, !=, ==, __VA_ARGS__)
 
 #if defined(_MSC_VER) && !defined(__clang__)  // MSVC
 #define UNREACHABLE() __assume(false)

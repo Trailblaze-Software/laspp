@@ -52,10 +52,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       combined_data = combined_stream.str();
     }
 
-    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
-                                   Bytes14Encoder::NUM_LAYERS * sizeof(uint32_t));
-    std::span<std::byte> data_span(
-        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
+    std::span<const std::byte> size_span(reinterpret_cast<const std::byte*>(combined_data.data()),
+                                         Bytes14Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<const std::byte> data_span(
+        reinterpret_cast<const std::byte*>(combined_data.data()) + size_span.size(),
         combined_data.size() - size_span.size());
 
     LayeredInStreams<Bytes14Encoder::NUM_LAYERS> in_streams(size_span, data_span);
@@ -105,10 +105,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       combined_data = combined_stream.str();
     }
 
-    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
-                                   Bytes14Encoder::NUM_LAYERS * sizeof(uint32_t));
-    std::span<std::byte> data_span(
-        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
+    std::span<const std::byte> size_span(reinterpret_cast<const std::byte*>(combined_data.data()),
+                                         Bytes14Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<const std::byte> data_span(
+        reinterpret_cast<const std::byte*>(combined_data.data()) + size_span.size(),
         combined_data.size() - size_span.size());
 
     LayeredInStreams<Bytes14Encoder::NUM_LAYERS> in_streams(size_span, data_span);
@@ -145,10 +145,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       combined_data = combined_stream.str();
     }
 
-    std::span<std::byte> size_span(reinterpret_cast<std::byte*>(combined_data.data()),
-                                   Bytes14Encoder::NUM_LAYERS * sizeof(uint32_t));
-    std::span<std::byte> data_span(
-        reinterpret_cast<std::byte*>(combined_data.data()) + size_span.size(),
+    std::span<const std::byte> size_span(reinterpret_cast<const std::byte*>(combined_data.data()),
+                                         Bytes14Encoder::NUM_LAYERS * sizeof(uint32_t));
+    std::span<const std::byte> data_span(
+        reinterpret_cast<const std::byte*>(combined_data.data()) + size_span.size(),
         combined_data.size() - size_span.size());
 
     LayeredInStreams<Bytes14Encoder::NUM_LAYERS> in_streams(size_span, data_span);

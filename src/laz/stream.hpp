@@ -123,7 +123,7 @@ class InStream : StreamVariables {
   std::vector<std::byte> m_owned_data;
 
   [[nodiscard]] std::byte read_byte() noexcept {
-    LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer");
+    LASPP_DEBUG_ASSERT(m_ptr < m_end, "InStream: read past end of buffer");
     return *m_ptr++;
   }
 
@@ -176,7 +176,7 @@ class InStream : StreamVariables {
   // is very cheap on average.
   uint32_t get_value() noexcept {
     if (m_length < (1u << 8)) {
-      LASPP_ASSERT(m_ptr + 3 <= m_end, "InStream: read past end of buffer (need 3 bytes)");
+      LASPP_DEBUG_ASSERT(m_ptr + 3 <= m_end, "InStream: read past end of buffer (need 3 bytes)");
       m_value <<= 24;
       m_length <<= 24;
       // Read 3 bytes big-endian.
@@ -185,7 +185,7 @@ class InStream : StreamVariables {
                  static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2]));
       m_ptr += 3;
     } else if (m_length < (1u << 16)) {
-      LASPP_ASSERT(m_ptr + 2 <= m_end, "InStream: read past end of buffer (need 2 bytes)");
+      LASPP_DEBUG_ASSERT(m_ptr + 2 <= m_end, "InStream: read past end of buffer (need 2 bytes)");
       m_value <<= 16;
       m_length <<= 16;
       // Read 2 bytes big-endian.
@@ -193,7 +193,7 @@ class InStream : StreamVariables {
                  static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1]));
       m_ptr += 2;
     } else if (m_length < (1u << 24)) {
-      LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer (need 1 byte)");
+      LASPP_DEBUG_ASSERT(m_ptr < m_end, "InStream: read past end of buffer (need 1 byte)");
       m_value <<= 8;
       m_length <<= 8;
       m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
@@ -275,7 +275,7 @@ class OutStream : StreamVariables {
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
-    LASPP_ASSERT(!m_finalized);
+    LASPP_DEBUG_ASSERT(!m_finalized);
     if ((static_cast<uint64_t>(m_base) + static_cast<uint64_t>(lower)) >=
         (static_cast<uint64_t>(1) << 32)) {
       propogate_carry();
