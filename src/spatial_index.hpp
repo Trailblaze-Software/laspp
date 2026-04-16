@@ -289,11 +289,6 @@ class QuadtreeSpatialIndex {
     double scale_y = header.transform().scale_factors().y();
     double offset_y = header.transform().offsets().y();
 
-    // Helper to convert int32 coordinates to double using scale/offset
-    auto int32_to_double = [](int32_t coord, double scale, double offset) {
-      return coord * scale + offset;
-    };
-
     // Group points by quadtree cell
     std::map<int32_t, std::vector<uint32_t>> cell_to_points;
     for (size_t i = 0; i < points.size(); ++i) {

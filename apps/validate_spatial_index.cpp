@@ -15,11 +15,6 @@
 
 using namespace laspp;
 
-// Helper to convert int32 coordinates to double using scale/offset
-static inline double int32_to_double(int32_t coord, double scale, double offset) {
-  return coord * scale + offset;
-}
-
 // Check if a point index is within any interval of a cell
 static bool point_in_intervals(uint32_t point_index, const CellIntervals& cell) {
   for (const auto& interval : cell.intervals) {

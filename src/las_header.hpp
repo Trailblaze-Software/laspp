@@ -104,6 +104,10 @@ class Transform {
   }
 };
 
+inline double int32_to_double(int32_t coord, double scale, double offset) {
+  return coord * scale + offset;
+}
+
 template <size_t N>
 void string_to_arr(const std::string& str, char (&arr)[N]) {
   for (size_t i = 0; i < N; ++i) {

@@ -413,11 +413,6 @@ class LASWriter {
   }
 
  private:
-  // Helper to convert int32 coordinates to double using scale/offset
-  static inline double int32_to_double(int32_t coord, double scale, double offset) {
-    return coord * scale + offset;
-  }
-
   template <typename PointType>
   void copy_points_with_spatial_index(LASReader& reader, bool add_spatial_index) {
     if (!add_spatial_index) {
@@ -475,6 +470,7 @@ class LASWriter {
       point_cell_pairs.push_back({cell_index, i});
     }
 
+    // Sort by cell index, then by original index
     std::sort(point_cell_pairs.begin(), point_cell_pairs.end());
 
     std::vector<PointType> reordered_points;
