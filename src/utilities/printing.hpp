@@ -57,8 +57,11 @@ inline std::ostream& operator<<(std::ostream& os, const std::array<T, N>& arr) {
 template <typename T>
 inline std::ostream& operator<<(std::ostream& os, const std::set<T>& set) {
   os << "{";
+  bool first = true;
   for (const T& elem : set) {
-    os << elem << ", ";
+    if (!first) os << ", ";
+    os << elem;
+    first = false;
   }
   return os << "}";
 }
@@ -85,8 +88,11 @@ inline std::ostream& operator<<(std::ostream& os, const std::tuple<Args...>& tup
 template <typename K, typename V>
 inline std::ostream& operator<<(std::ostream& os, const std::map<K, V>& map) {
   os << "{";
+  bool first = true;
   for (const auto& [k, v] : map) {
-    os << k << ": " << v << ", ";
+    if (!first) os << ", ";
+    os << k << ": " << v;
+    first = false;
   }
   return os << "}";
 }
@@ -111,7 +117,7 @@ class LimitedMap {
       if (count++ >= limited.m_limit) {
         break;
       }
-      os << kv.second << '\n';
+      os << kv.first << ": " << kv.second << '\n';
     }
     if (limited.m_show_remaining && limited.m_map.size() > limited.m_limit) {
       os << "... (" << (limited.m_map.size() - limited.m_limit) << " more)" << '\n';

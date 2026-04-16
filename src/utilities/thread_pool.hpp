@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "assert.hpp"
 #include "env.hpp"
 
 namespace laspp {
@@ -94,6 +95,7 @@ class ThreadPool {
   // chunk_size: number of indices to process per atomic increment (default: 1)
   template <typename Func>
   void parallel_for(size_t begin, size_t end, Func func, size_t chunk_size = 1) {
+    LASPP_ASSERT(chunk_size > 0, "chunk_size must be positive");
     if (begin >= end) {
       return;
     }
@@ -143,6 +145,7 @@ class ThreadPool {
   template <typename T, typename Func>
   void parallel_for_reduction(size_t begin, size_t end, T& result, Func func,
                               size_t chunk_size = 1) {
+    LASPP_ASSERT(chunk_size > 0, "chunk_size must be positive");
     if (begin >= end) {
       return;
     }

@@ -143,8 +143,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::ostringstream oss;
     oss << indented(limited_map(map, 2), "    ");
     std::string result = oss.str();
-    LASPP_ASSERT(result.find("    one") != std::string::npos);
-    LASPP_ASSERT(result.find("    two") != std::string::npos);
+    LASPP_ASSERT(result.find("    1: one") != std::string::npos);
+    LASPP_ASSERT(result.find("    2: two") != std::string::npos);
     LASPP_ASSERT(result.find("    ...") != std::string::npos);
   }
 

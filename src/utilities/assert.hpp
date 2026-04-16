@@ -109,40 +109,46 @@ inline void _LASPP_FAILBinOp(const A &a, const B &b, const std::string &a_str,
 // LASPP_DEBUG_ASSERT compiles out entirely in release (zero overhead on hot paths).
 // In debug builds it is identical to LASPP_ASSERT.
 #ifdef LASPP_DEBUG_ASSERTS
-#define LASPP_DEBUG_ASSERT(condition, ...) LASPP_ASSERT(condition, __VA_ARGS__)
+#define LASPP_DEBUG_ASSERT(condition, ...) LASPP_ASSERT(condition __VA_OPT__(, ) __VA_ARGS__)
 #define LASPP_DEBUG_ASSERT_BIN_OP(a, b, op, nop, ...) \
-  LASPP_ASSERT_BIN_OP(a, b, op, nop, __VA_ARGS__)
+  LASPP_ASSERT_BIN_OP(a, b, op, nop __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define LASPP_DEBUG_ASSERT(condition, ...)
 #define LASPP_DEBUG_ASSERT_BIN_OP(a, b, op, nop, ...)
 #endif
 
-#define LASPP_FAIL(...)             \
-  LASPP_ASSERT(false, __VA_ARGS__); \
+#define LASPP_FAIL(...)                           \
+  LASPP_ASSERT(false __VA_OPT__(, ) __VA_ARGS__); \
   UNREACHABLE()  // LCOV_EXCL_LINE
 
 #define LASPP_UNIMPLEMENTED(...) LASPP_FAIL("LASPP_UNIMPLEMENTED")
 
-#define LASPP_ASSERT_GE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, >=, <, __VA_ARGS__)
-#define LASPP_ASSERT_LE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, <=, >, __VA_ARGS__)
-#define LASPP_ASSERT_GT(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, >, <=, __VA_ARGS__)
-#define LASPP_ASSERT_LT(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, <, >=, __VA_ARGS__)
-#define LASPP_ASSERT_EQ(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, ==, !=, __VA_ARGS__)
-#define LASPP_ASSERT_NE(expr, val, ...) LASPP_ASSERT_BIN_OP(expr, val, !=, ==, __VA_ARGS__)
+#define LASPP_ASSERT_GE(expr, val, ...) \
+  LASPP_ASSERT_BIN_OP(expr, val, >=, < __VA_OPT__(, ) __VA_ARGS__)
+#define LASPP_ASSERT_LE(expr, val, ...) \
+  LASPP_ASSERT_BIN_OP(expr, val, <=, > __VA_OPT__(, ) __VA_ARGS__)
+#define LASPP_ASSERT_GT(expr, val, ...) \
+  LASPP_ASSERT_BIN_OP(expr, val, >, <= __VA_OPT__(, ) __VA_ARGS__)
+#define LASPP_ASSERT_LT(expr, val, ...) \
+  LASPP_ASSERT_BIN_OP(expr, val, <, >= __VA_OPT__(, ) __VA_ARGS__)
+#define LASPP_ASSERT_EQ(expr, val, ...) \
+  LASPP_ASSERT_BIN_OP(expr, val, ==, != __VA_OPT__(, ) __VA_ARGS__)
+#define LASPP_ASSERT_NE(expr, val, ...) \
+  LASPP_ASSERT_BIN_OP(expr, val, !=, == __VA_OPT__(, ) __VA_ARGS__)
 
 // Debug-only binary-op shorthands — compile out entirely in release builds.
 #define LASPP_DEBUG_ASSERT_GE(expr, val, ...) \
-  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, >=, <, __VA_ARGS__)
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, >=, < __VA_OPT__(, ) __VA_ARGS__)
 #define LASPP_DEBUG_ASSERT_LE(expr, val, ...) \
-  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, <=, >, __VA_ARGS__)
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, <=, > __VA_OPT__(, ) __VA_ARGS__)
 #define LASPP_DEBUG_ASSERT_GT(expr, val, ...) \
-  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, >, <=, __VA_ARGS__)
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, >, <= __VA_OPT__(, ) __VA_ARGS__)
 #define LASPP_DEBUG_ASSERT_LT(expr, val, ...) \
-  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, <, >=, __VA_ARGS__)
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, <, >= __VA_OPT__(, ) __VA_ARGS__)
 #define LASPP_DEBUG_ASSERT_EQ(expr, val, ...) \
-  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, ==, !=, __VA_ARGS__)
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, ==, != __VA_OPT__(, ) __VA_ARGS__)
 #define LASPP_DEBUG_ASSERT_NE(expr, val, ...) \
-  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, !=, ==, __VA_ARGS__)
+  LASPP_DEBUG_ASSERT_BIN_OP(expr, val, !=, == __VA_OPT__(, ) __VA_ARGS__)
 
 #if defined(_MSC_VER) && !defined(__clang__)  // MSVC
 #define UNREACHABLE() __assume(false)
