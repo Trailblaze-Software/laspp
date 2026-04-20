@@ -39,12 +39,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     const_cast<Bound3D&>(header.bounds()).update({0.0, 0.0, 0.0});
     const_cast<Bound3D&>(header.bounds()).update({100.0, 100.0, 0.0});
 
-    // Create points at different locations to generate cells
-    std::vector<LASPointFormat0> points(200);
+    // Create points at different locations to generate cells.
+    // With scale 0.001: x = (i%10)*10000 -> 0-90, y = (i/10)*10000 -> 0-90 (i < 100).
+    std::vector<LASPointFormat0> points(100);
     for (size_t i = 0; i < points.size(); ++i) {
-      // Spread points across the bounds
       points[i].x = static_cast<int32_t>((i % 10) * 10000);  // 0.001 scale -> 0-90
-      points[i].y = static_cast<int32_t>((i / 10) * 10000);  // 0.001 scale -> 0-190
+      points[i].y = static_cast<int32_t>((i / 10) * 10000);  // 0.001 scale -> 0-90
       points[i].z = 0;
     }
 

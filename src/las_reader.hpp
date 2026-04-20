@@ -190,7 +190,12 @@ class LASReader {
         ss.write(reinterpret_cast<const char*>(data.data()), static_cast<int64_t>(data.size()));
         ss.seekg(0);  // Rewind to beginning for reading
         LASPP_ASSERT(!m_spatial_index.has_value(), "Multiple spatial index EVLRs found");
-        m_spatial_index.emplace(ss);
+        try {
+          m_spatial_index.emplace(ss);
+        } catch (...) {
+          // If the EVLR payload is corrupted, leave m_spatial_index empty so the
+          // file can still be opened (mirrors the .lax fallback behaviour)
+        }
         break;
       }
     }

@@ -4,6 +4,7 @@
  */
 
 #include <cmath>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -67,9 +68,12 @@ void validate_spatial_index_for_points(LASReader& reader, const QuadtreeSpatialI
     const auto& point = points[i];
     uint32_t point_index = static_cast<uint32_t>(i);
 
-    // Convert coordinates to double
-    double x = int32_to_double(point.x, scale_x, offset_x);
-    double y = int32_to_double(point.y, scale_y, offset_y);
+    // Read x, y using memcpy to avoid alignment issues with packed structures
+    int32_t x_raw, y_raw;
+    std::memcpy(&x_raw, &point.x, sizeof(x_raw));
+    std::memcpy(&y_raw, &point.y, sizeof(y_raw));
+    double x = int32_to_double(x_raw, scale_x, offset_x);
+    double y = int32_to_double(y_raw, scale_y, offset_y);
 
     // Get the cell index for this point (searching up the tree if needed)
     int32_t cell_index = index.find_cell_index(x, y);

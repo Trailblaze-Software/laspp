@@ -76,8 +76,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       writer.copy_header_metadata(LASHeader());
       writer.header().transform() = Transform({0.001, 0.001, 0.001}, {0.0, 0.0, 0.0});
       // Use const_cast to get non-const access to bounds for testing
+      // x: (i%10)*10000 * 0.001 → [0, 90], y: (i/10)*10000 * 0.001 → [0, 190], z: i*10 * 0.001 →
+      // [0, 1.99]
       const_cast<Bound3D&>(writer.header().bounds()).update({0.0, 0.0, 0.0});
-      const_cast<Bound3D&>(writer.header().bounds()).update({100.0, 100.0, 10.0});
+      const_cast<Bound3D&>(writer.header().bounds()).update({90.0, 190.0, 1.99});
 
       std::vector<LASPointFormat0> points;
       for (int i = 0; i < 200; ++i) {
