@@ -137,6 +137,8 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
       add_compile_options(
         "/W4"
         "/WX"
+        # Enable the conformant preprocessor so __VA_OPT__ works (C++20).
+        "/Zc:preprocessor"
         # C4267/C4244: size_t/type narrowing inside MSVC STL template bodies.
         "/wd4267" # size_t narrowing in MSVC STL <xutility> template
                   # instantiations
@@ -265,6 +267,14 @@ if(LASPP_BUILD_TESTS)
     endif()
 
     link_target_to_laszip(test_laszip_interop)
+
+    # LASzip's LASinterval allocator has a new/delete type-size mismatch that
+    # triggers ASan when laszip_write_indexed_point is used.  This is a bug in
+    # LASzip itself (third-party code), so we suppress only that specific check
+    # rather than disabling address sanitization for the whole test.
+    set_tests_properties(
+      test_laszip_interop PROPERTIES ENVIRONMENT
+                                     "ASAN_OPTIONS=new_delete_type_mismatch=0")
   endif()
 endif()
 

@@ -212,15 +212,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     uint32_t level0 = index.get_cell_level_from_index(0);
     LASPP_ASSERT_EQ(level0, 0u);
 
-    // Level 1 cells (indices 1-4) -> level 0 (0-based, so level 1 = index 0)
+    // Level 1 cells (indices 1-4) -> level 1 (first subdivision)
     int32_t cell1 = index.get_cell_index_at_level(25.0, 25.0, 1);
     uint32_t level1 = index.get_cell_level_from_index(cell1);
-    LASPP_ASSERT_EQ(level1, 0u);  // First subdivision is level 0 (0-based)
+    LASPP_ASSERT_EQ(level1, 1u);
 
-    // Level 2 cells (indices 5-20) -> level 1 (0-based, so level 2 = index 1)
+    // Level 2 cells (indices 5-20) -> level 2 (second subdivision)
     int32_t cell2 = index.get_cell_index_at_level(12.5, 12.5, 2);
     uint32_t level2 = index.get_cell_level_from_index(cell2);
-    LASPP_ASSERT_EQ(level2, 1u);  // Second subdivision is level 1 (0-based)
+    LASPP_ASSERT_EQ(level2, 2u);
   }
 
   // Test get_cell_index_at_level

@@ -440,19 +440,14 @@ class QuadtreeSpatialIndex {
   }
 
   // Determine which level a cell index belongs to
-  // Returns the 0-based level: 0 = root, 1 = first subdivision, 2 = second subdivision, etc.
+  // Returns the 0-based level: 0 = root (cell_index 0), 1 = first subdivision, 2 = second, etc.
+  // Level offsets: offset[0]=0, offset[1]=1, offset[2]=5, offset[3]=21, etc.
   uint32_t get_cell_level_from_index(int32_t cell_index) const {
     if (m_quadtree_header.levels == 0 || cell_index == 0) return 0;
 
-    // Find the highest level offset that is <= cell_index
-    // Level offsets: offset[0]=0, offset[1]=1, offset[2]=5, offset[3]=21, etc.
-    // Cell index 1 is at level 1 (first subdivision), which is 0-indexed as level 0
-    // But we want to return the actual level number (1-based converted to 0-based)
     for (uint32_t level = m_quadtree_header.levels; level > 0; --level) {
-      uint32_t offset = calculate_level_offset(level);
-      if (static_cast<uint32_t>(cell_index) >= offset) {
-        // level is 1-based here, so level 1 -> return 0, level 2 -> return 1, etc.
-        return level - 1;
+      if (static_cast<uint32_t>(cell_index) >= calculate_level_offset(level)) {
+        return level;
       }
     }
     return 0;  // Root level
@@ -539,16 +534,9 @@ class QuadtreeSpatialIndex {
                      static_cast<double>(m_quadtree_header.max_y));
     }
 
-    // Determine which level this cell belongs to
-    // get_cell_level_from_index returns 0-based level (0=root, 1=first subdivision, etc.)
+    // get_cell_level_from_index returns 0=root, 1=first subdivision, 2=second, etc.
     uint32_t cell_level = get_cell_level_from_index(cell_index);
-
-    // Find the level offset for this cell's level
-    // The level offset for level L is calculate_level_offset(L+1) where L is 0-based
-    // For example: level 0 (root) has offset 0, level 1 has offset 1, level 2 has offset 5
-    // But get_cell_level_from_index returns 0 for level 1, so we need to add 1
-    uint32_t actual_level = cell_level + 1;  // Convert to 1-based for offset calculation
-    uint32_t level_offset = calculate_level_offset(actual_level);
+    uint32_t level_offset = calculate_level_offset(cell_level);
     uint32_t cell_path = static_cast<uint32_t>(cell_index) - level_offset;
 
     double min_x = static_cast<double>(m_quadtree_header.min_x);
@@ -567,15 +555,10 @@ class QuadtreeSpatialIndex {
     double current_min_x = min_x;
     double current_min_y = min_y;
 
-    // Extract bits from cell_path to determine cell position
-    // The path is built with root at MSB, so we extract from MSB to LSB
-    // Only process levels up to the cell's level
-    // Note: cell_level is 0-based, so for level 1 (first subdivision), cell_level=0
-    // We need to process (cell_level + 1) levels to get to the actual level
-    uint32_t num_levels_to_process = cell_level + 1;
+    // Extract bits from cell_path to determine cell position.
+    // The path is built with root at MSB, so we extract from MSB to LSB.
+    uint32_t num_levels_to_process = cell_level;
     for (uint32_t level = 0; level < num_levels_to_process; ++level) {
-      // Calculate shift to get the bits for this level (from MSB)
-      // For level 1 (cell_level=0), we have 1 level to process, so shift = 2 * (0 - 0) = 0
       uint32_t shift = 2 * (num_levels_to_process - 1 - level);
       uint32_t bits = (cell_path >> shift) & 3;
 

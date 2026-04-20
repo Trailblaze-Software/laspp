@@ -368,5 +368,79 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
   }
 
+  // Test copy_from_reader skips existing spatial index stored as a VLR.
+  // LAS 1.2-era files can carry the LAStools index as a VLR (record_id 30)
+  // rather than an EVLR.  When add_spatial_index=true the old VLR must be
+  // dropped so only the freshly-built EVLR appears in the output.
+  {
+    std::stringstream input_stream;
+    {
+      LASWriter writer(input_stream, 0, 0);
+      writer.copy_header_metadata(LASHeader());
+      writer.header().transform() = Transform({0.001, 0.001, 0.001}, {0.0, 0.0, 0.0});
+      const_cast<Bound3D&>(writer.header().bounds()).update({0.0, 0.0, 0.0});
+      const_cast<Bound3D&>(writer.header().bounds()).update({100.0, 100.0, 10.0});
+
+      // Plant a dummy LAStools spatial-index VLR (record_id 30) before points.
+      LASVLR index_vlr;
+      index_vlr.reserved = 0;
+      string_to_arr("LAStools", index_vlr.user_id);
+      index_vlr.record_id = 30;
+      const std::byte dummy_byte{0};
+      index_vlr.record_length_after_header = 1;
+      string_to_arr("LAX spatial index", index_vlr.description);
+      writer.write_vlr(index_vlr, std::span<const std::byte>(&dummy_byte, 1));
+
+      std::vector<LASPointFormat0> points;
+      for (int i = 0; i < 50; ++i) {
+        LASPointFormat0 point;
+        point.x = i * 1000;
+        point.y = i * 1000;
+        point.z = 0;
+        point.intensity = 0;
+        point.bit_byte = 0;
+        point.classification_byte = 0;
+        point.scan_angle_rank = 0;
+        point.user_data = 0;
+        point.point_source_id = 0;
+        points.push_back(point);
+      }
+      writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    // Verify the input has exactly one spatial-index VLR.
+    input_stream.seekg(0);
+    LASReader reader(input_stream);
+    size_t in_vlr_count = 0;
+    for (const auto& vlr : reader.vlr_headers()) {
+      if (vlr.is_lastools_spatial_index_vlr()) in_vlr_count++;
+    }
+    LASPP_ASSERT_EQ(in_vlr_count, 1u);
+
+    // Copy with add_spatial_index=true — the old VLR must NOT be forwarded.
+    std::stringstream output_stream;
+    {
+      LASWriter writer(output_stream, 0, 0);
+      writer.copy_from_reader(reader, true);
+    }
+
+    output_stream.seekg(0);
+    LASReader output_reader(output_stream);
+
+    // No LAStools spatial-index VLR in the output.
+    size_t out_vlr_count = 0;
+    for (const auto& vlr : output_reader.vlr_headers()) {
+      if (vlr.is_lastools_spatial_index_vlr()) out_vlr_count++;
+    }
+    LASPP_ASSERT_EQ(out_vlr_count, 0u);
+
+    // Exactly one spatial-index EVLR (the freshly-built one).
+    size_t out_evlr_count = 0;
+    for (const auto& evlr : output_reader.evlr_headers()) {
+      if (evlr.is_lastools_spatial_index_evlr()) out_evlr_count++;
+    }
+    LASPP_ASSERT_EQ(out_evlr_count, 1u);
+  }
+
   return 0;
 }

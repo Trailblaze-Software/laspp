@@ -330,37 +330,6 @@ class LASWriter {
     }
   }
 
-  // Write raw point data (for cases where you have raw bytes, e.g., with extra bytes)
-  // This updates the point count and offset automatically
-  void write_raw_point_data(std::span<const std::byte> raw_point_data, size_t num_points) {
-    LASPP_ASSERT_LE(m_stage, WritingStage::POINTS);
-    LASPP_ASSERT(!m_header.is_laz_compressed(),
-                 "Raw point data writing not supported for compressed files");
-    LASPP_ASSERT_EQ(raw_point_data.size(), num_points * m_header.point_data_record_length(),
-                    "Raw point data size doesn't match expected size");
-
-    // Set stage to POINTS if not already there
-    if (m_stage < WritingStage::POINTS) {
-      m_stage = WritingStage::POINTS;
-      // Update offset_to_point_data to current stream position
-      header().m_offset_to_point_data = static_cast<uint32_t>(m_output_stream.tellp());
-    }
-
-    // Write raw point data
-    m_output_stream.write(reinterpret_cast<const char*>(raw_point_data.data()),
-                          static_cast<int64_t>(raw_point_data.size()));
-
-    // Update point count (normally done automatically by write_points())
-    header().m_number_of_point_records = num_points;
-    if (header().m_number_of_point_records < std::numeric_limits<uint32_t>::max() &&
-        (header().point_format() < 6 ||
-         (header().point_format() >= 128 && header().point_format() < 128 + 6))) {
-      header().m_legacy_number_of_point_records = static_cast<uint32_t>(num_points);
-    } else {
-      header().m_legacy_number_of_point_records = 0;
-    }
-  }
-
  private:
   void write_chunktable() {
     if (header().is_laz_compressed() && !m_written_chunktable) {
@@ -492,10 +461,14 @@ class LASWriter {
     // Copy header metadata (preserves writer-managed fields)
     copy_header_metadata(reader.header());
 
-    // Copy VLRs (skip LAZ VLR since compression is handled by point format)
+    // Copy VLRs (skip LAZ VLR since compression is handled by point format;
+    // skip existing LAStools spatial index VLR when we're building a new one)
     for (const auto& vlr : reader.vlr_headers()) {
       if (vlr.is_laz_vlr()) {
         continue;
+      }
+      if (add_spatial_index && vlr.is_lastools_spatial_index_vlr()) {
+        continue;  // Skip existing spatial index, we'll write a new one
       }
       write_vlr(vlr, reader.read_vlr_data(vlr));
     }
