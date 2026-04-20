@@ -137,8 +137,6 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
       add_compile_options(
         "/W4"
         "/WX"
-        # Enable the conformant preprocessor so __VA_OPT__ works (C++20).
-        "/Zc:preprocessor"
         # C4267/C4244: size_t/type narrowing inside MSVC STL template bodies.
         "/wd4267" # size_t narrowing in MSVC STL <xutility> template
                   # instantiations
@@ -192,6 +190,13 @@ set(LIBRARY_NAME las++)
 add_library(${LIBRARY_NAME} INTERFACE)
 
 target_include_directories(${LIBRARY_NAME} INTERFACE src)
+
+# Public headers use __VA_OPT__ (C++20), which requires MSVC's conformant
+# preprocessor. Attach this as an INTERFACE option so consumers that add las++
+# via add_subdirectory() inherit it automatically, regardless of whether they
+# set /Zc:preprocessor themselves.
+target_compile_options(${LIBRARY_NAME}
+                       INTERFACE $<$<CXX_COMPILER_ID:MSVC>:/Zc:preprocessor>)
 
 if(LASPP_DEBUG_ASSERTS)
   message(WARNING "Enabling LAS++ debugging asserts. May be slow.")

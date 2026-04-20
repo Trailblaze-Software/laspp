@@ -77,15 +77,15 @@ void validate_spatial_index_for_points(LASReader& reader, const QuadtreeSpatialI
 
     // Get the cell index for this point (searching up the tree if needed)
     int32_t cell_index = index.find_cell_index(x, y);
-    LASPP_ASSERT(index.get_cell_bounds(cell_index).contains(x, y),
-                 "find_cell_index returned a cell that does not contain the point", x, " ", y, " ",
-                 cell_index);
     if (cell_index < 0) {
       std::cerr << "ERROR: No cell found for point " << i << " at (" << x << ", " << y << ")"
                 << std::endl;
       points_with_missing_cells++;
       continue;
     }
+    LASPP_ASSERT(index.get_cell_bounds(cell_index).contains(x, y),
+                 "find_cell_index returned a cell that does not contain the point", x, " ", y, " ",
+                 cell_index);
     calculated_cell_indices[cell_index]++;
 
     // find_cell_index already found the cell, so it must exist
