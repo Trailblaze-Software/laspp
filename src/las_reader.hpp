@@ -192,9 +192,11 @@ class LASReader {
         LASPP_ASSERT(!m_spatial_index.has_value(), "Multiple spatial index EVLRs found");
         try {
           m_spatial_index.emplace(ss);
-        } catch (...) {
-          // If the EVLR payload is corrupted, leave m_spatial_index empty so the
-          // file can still be opened (mirrors the .lax fallback behaviour)
+        } catch (const std::runtime_error&) {
+          // Corrupted or unrecognised EVLR payload: leave m_spatial_index empty so
+          // the file can still be opened (mirrors the .lax fallback behaviour).
+          // Note: std::ios_base::failure (truncated payload) is also caught here
+          // because on libstdc++ it derives from std::system_error → std::runtime_error.
         }
         break;
       }
@@ -210,9 +212,11 @@ class LASReader {
         if (lax_file.is_open()) {
           try {
             m_spatial_index.emplace(lax_file);
-          } catch (...) {
-            // If reading fails, just leave m_spatial_index as empty
-            // This allows the file to be read even if .lax is corrupted
+          } catch (const std::runtime_error&) {
+            // Corrupted or unrecognised .lax content: leave m_spatial_index empty
+            // so the file can still be read without its spatial index.
+            // Note: std::ios_base::failure (truncated file) is also caught here
+            // because on libstdc++ it derives from std::system_error → std::runtime_error.
           }
         }
       }

@@ -181,6 +181,24 @@ class QuadtreeSpatialIndex {
     LASPP_ASSERT(memcmp(m_quadtree_header.quadtree_signature, "LASQ", 4) == 0,
                  "Invalid quadtree signature");
 
+    // Validate levels: each level uses 2 bits of a 32-bit cell index, so >16 levels would
+    // cause calculate_level_offset and get_cell_index* to produce shifts/overflows.
+    if (m_quadtree_header.levels > 16u) {
+      throw std::runtime_error(
+          "Invalid quadtree levels in spatial index: " + std::to_string(m_quadtree_header.levels) +
+          " (maximum supported is 16)");
+    }
+
+    // Validate bounds: inverted bounds make all cell-index calculations nonsensical.
+    if (m_quadtree_header.min_x > m_quadtree_header.max_x ||
+        m_quadtree_header.min_y > m_quadtree_header.max_y) {
+      throw std::runtime_error("Inverted bounds in spatial index quadtree header: x=[" +
+                               std::to_string(m_quadtree_header.min_x) + ", " +
+                               std::to_string(m_quadtree_header.max_x) + "] y=[" +
+                               std::to_string(m_quadtree_header.min_y) + ", " +
+                               std::to_string(m_quadtree_header.max_y) + "]");
+    }
+
     // Read interval header
     char interval_signature[4];
     LASPP_CHECK_READ(is, interval_signature, 4);
@@ -225,16 +243,34 @@ class QuadtreeSpatialIndex {
       cell.intervals.reserve(number_intervals);
 
       // Read intervals
+      uint64_t computed_points = 0;
       for (uint32_t j = 0; j < number_intervals; ++j) {
         PointInterval interval;
         LASPP_CHECK_READ(is, &interval.start, 4);
         LASPP_CHECK_READ(is, &interval.end, 4);
+
+        if (interval.start > interval.end) {
+          throw std::runtime_error(
+              "Invalid interval in spatial index cell " + std::to_string(cell_index) + ": start (" +
+              std::to_string(interval.start) + ") > end (" + std::to_string(interval.end) + ")");
+        }
+
+        computed_points += static_cast<uint64_t>(interval.end - interval.start) + 1u;
         cell.intervals.push_back(interval);
       }
 
-      // Use try_emplace to construct in place, avoiding unnecessary copy
-      // try_emplace doesn't move from cell if key already exists
-      m_cells.try_emplace(cell_index, std::move(cell));
+      if (computed_points != static_cast<uint64_t>(number_points)) {
+        throw std::runtime_error("Point count mismatch in spatial index cell " +
+                                 std::to_string(cell_index) +
+                                 ": number_points=" + std::to_string(number_points) +
+                                 " but sum of interval lengths=" + std::to_string(computed_points));
+      }
+
+      auto [it, inserted] = m_cells.try_emplace(cell_index, std::move(cell));
+      if (!inserted) {
+        throw std::runtime_error("Duplicate cell_index " + std::to_string(cell_index) +
+                                 " in spatial index interval section");
+      }
     }
   }
 

@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <sstream>
+#include <stdexcept>
 
 #include "las_header.hpp"
 #include "las_point.hpp"
@@ -12,6 +13,58 @@
 #include "utilities/assert.hpp"
 
 using namespace laspp;
+
+struct TestInterval {
+  uint32_t start;
+  uint32_t end;
+};
+
+// Write a minimal spatial index stream. The quadtree header uses valid bounds and the given
+// levels. The interval section contains the provided cells; each cell carries the given
+// number_points header field and intervals verbatim (no fixup), allowing injection of bad data.
+static std::stringstream make_spatial_index_stream(
+    uint32_t levels, float min_x, float max_x, float min_y, float max_y,
+    // Each entry: {cell_index, number_points_field, intervals}
+    const std::vector<std::tuple<int32_t, uint32_t, std::vector<TestInterval>>>& cells = {}) {
+  std::stringstream ss;
+
+  auto write_u32 = [&](uint32_t v) { ss.write(reinterpret_cast<const char*>(&v), 4); };
+  auto write_i32 = [&](int32_t v) { ss.write(reinterpret_cast<const char*>(&v), 4); };
+  auto write_f32 = [&](float v) { ss.write(reinterpret_cast<const char*>(&v), 4); };
+
+  // LASX outer header
+  ss.write("LASX", 4);
+  write_u32(0);  // version
+
+  // QuadtreeHeader
+  ss.write("LASS", 4);
+  write_u32(0);  // type
+  ss.write("LASQ", 4);
+  write_u32(0);  // version
+  write_u32(levels);
+  write_u32(0);  // level_index
+  write_u32(0);  // implicit_levels
+  write_f32(min_x);
+  write_f32(max_x);
+  write_f32(min_y);
+  write_f32(max_y);
+
+  // Interval section
+  ss.write("LASV", 4);
+  write_u32(0);  // version
+  write_u32(static_cast<uint32_t>(cells.size()));
+  for (const auto& [cell_index, number_points, intervals] : cells) {
+    write_i32(cell_index);
+    write_u32(static_cast<uint32_t>(intervals.size()));
+    write_u32(number_points);  // written verbatim — may not match actual intervals
+    for (const auto& iv : intervals) {
+      write_u32(iv.start);
+      write_u32(iv.end);
+    }
+  }
+
+  return ss;
+}
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   // Test default constructor
@@ -241,6 +294,114 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     // Level 2 should be more specific (higher index due to level offset)
     LASPP_ASSERT_GT(cell_level2, cell_level1);
+  }
+
+  // Test that levels > 16 is rejected when loading from stream
+  {
+    bool caught = false;
+    try {
+      auto ss = make_spatial_index_stream(17u, 0.0f, 100.0f, 0.0f, 100.0f);
+      QuadtreeSpatialIndex bad_index(ss);
+    } catch (const std::runtime_error& e) {
+      caught = true;
+      std::string msg = e.what();
+      LASPP_ASSERT(msg.find("levels") != std::string::npos,
+                   "Expected 'levels' in error message, got: ", msg);
+    }
+    LASPP_ASSERT(caught, "Expected std::runtime_error for levels > 16");
+  }
+
+  // Test that inverted X bounds are rejected when loading from stream
+  {
+    bool caught = false;
+    try {
+      auto ss = make_spatial_index_stream(4u, 100.0f, 0.0f, 0.0f, 100.0f);  // min_x > max_x
+      QuadtreeSpatialIndex bad_index(ss);
+    } catch (const std::runtime_error& e) {
+      caught = true;
+      std::string msg = e.what();
+      LASPP_ASSERT(msg.find("Inverted bounds") != std::string::npos,
+                   "Expected 'Inverted bounds' in error message, got: ", msg);
+    }
+    LASPP_ASSERT(caught, "Expected std::runtime_error for inverted X bounds");
+  }
+
+  // Test that inverted Y bounds are rejected when loading from stream
+  {
+    bool caught = false;
+    try {
+      auto ss = make_spatial_index_stream(4u, 0.0f, 100.0f, 100.0f, 0.0f);  // min_y > max_y
+      QuadtreeSpatialIndex bad_index(ss);
+    } catch (const std::runtime_error& e) {
+      caught = true;
+      std::string msg = e.what();
+      LASPP_ASSERT(msg.find("Inverted bounds") != std::string::npos,
+                   "Expected 'Inverted bounds' in error message, got: ", msg);
+    }
+    LASPP_ASSERT(caught, "Expected std::runtime_error for inverted Y bounds");
+  }
+
+  // Test that a well-formed cell with valid intervals loads correctly
+  {
+    // Cell 5 (level-2 leaf), intervals [0,4] and [10,14] -> 10 points total
+    auto ss = make_spatial_index_stream(2u, 0.0f, 100.0f, 0.0f, 100.0f,
+                                        {{5, 10u, {{0u, 4u}, {10u, 14u}}}});
+    QuadtreeSpatialIndex ok_index(ss);
+    LASPP_ASSERT_EQ(ok_index.num_cells(), 1u);
+    const auto& cell = ok_index.cells().at(5);
+    LASPP_ASSERT_EQ(cell.number_points, 10u);
+    LASPP_ASSERT_EQ(cell.intervals.size(), 2u);
+  }
+
+  // Test that an inverted interval (start > end) is rejected
+  {
+    bool caught = false;
+    try {
+      // Interval [20, 10] is inverted; number_points field is set consistently to avoid
+      // masking the start>end error with a point-count mismatch error first.
+      auto ss = make_spatial_index_stream(2u, 0.0f, 100.0f, 0.0f, 100.0f, {{5, 0u, {{20u, 10u}}}});
+      QuadtreeSpatialIndex bad_index(ss);
+    } catch (const std::runtime_error& e) {
+      caught = true;
+      std::string msg = e.what();
+      LASPP_ASSERT(msg.find("start") != std::string::npos && msg.find("end") != std::string::npos,
+                   "Expected 'start'/'end' in error message, got: ", msg);
+    }
+    LASPP_ASSERT(caught, "Expected std::runtime_error for inverted interval start > end");
+  }
+
+  // Test that a number_points mismatch is rejected
+  {
+    bool caught = false;
+    try {
+      // Intervals [0,4] give 5 points; number_points header says 99 -> mismatch
+      auto ss = make_spatial_index_stream(2u, 0.0f, 100.0f, 0.0f, 100.0f, {{5, 99u, {{0u, 4u}}}});
+      QuadtreeSpatialIndex bad_index(ss);
+    } catch (const std::runtime_error& e) {
+      caught = true;
+      std::string msg = e.what();
+      LASPP_ASSERT(msg.find("mismatch") != std::string::npos ||
+                       msg.find("number_points") != std::string::npos,
+                   "Expected 'mismatch'/'number_points' in error message, got: ", msg);
+    }
+    LASPP_ASSERT(caught, "Expected std::runtime_error for number_points mismatch");
+  }
+
+  // Test that duplicate cell_index entries in the stream are rejected
+  {
+    bool caught = false;
+    try {
+      // Two cells both claiming cell_index 5; each has a valid, consistent interval.
+      auto ss = make_spatial_index_stream(2u, 0.0f, 100.0f, 0.0f, 100.0f,
+                                          {{5, 5u, {{0u, 4u}}}, {5, 3u, {{10u, 12u}}}});
+      QuadtreeSpatialIndex bad_index(ss);
+    } catch (const std::runtime_error& e) {
+      caught = true;
+      std::string msg = e.what();
+      LASPP_ASSERT(msg.find("Duplicate") != std::string::npos,
+                   "Expected 'Duplicate' in error message, got: ", msg);
+    }
+    LASPP_ASSERT(caught, "Expected std::runtime_error for duplicate cell_index");
   }
 
   return 0;
