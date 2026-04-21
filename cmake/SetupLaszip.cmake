@@ -58,15 +58,16 @@ function(setup_laszip)
 
   # Quiet warnings coming from LASzip itself.
   if(NOT MSVC)
-    target_compile_options(
-      ${_lz_lib}
-      PRIVATE -Wno-maybe-uninitialized -Wno-format -Wno-format-security
-              -Wno-switch -Wno-stringop-truncation -Wno-format-overflow)
+    # Common flags for both GCC and Clang
+    set(_common_flags -Wno-format -Wno-format-security -Wno-switch)
+    # GCC-specific flags
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      list(APPEND _common_flags -Wno-maybe-uninitialized
+           -Wno-stringop-truncation -Wno-format-overflow)
+    endif()
+    target_compile_options(${_lz_lib} PRIVATE ${_common_flags})
     if(_lz_api)
-      target_compile_options(
-        ${_lz_api}
-        PRIVATE -Wno-maybe-uninitialized -Wno-format -Wno-format-security
-                -Wno-switch -Wno-stringop-truncation -Wno-format-overflow)
+      target_compile_options(${_lz_api} PRIVATE ${_common_flags})
     endif()
   endif()
 endfunction()

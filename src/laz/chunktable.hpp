@@ -38,6 +38,8 @@ struct LASPP_PACKED LAZChunkTableHeader {
   }
 };
 
+#pragma pack(pop)
+
 class LAZChunkTable : LAZChunkTableHeader {
   std::vector<uint32_t> m_compressed_chunk_size;
   std::optional<uint32_t> m_constant_chunk_size;
@@ -152,7 +154,5 @@ class LAZChunkTable : LAZChunkTableHeader {
     return os;
   }
 };
-
-#pragma pack(pop)
 
 }  // namespace laspp

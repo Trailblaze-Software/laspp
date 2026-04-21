@@ -6,18 +6,22 @@
 #pragma once
 
 #include <algorithm>
-#include <execution>
+#include <cstring>
 #include <numeric>
 #include <span>
+#include <sstream>
 #include <type_traits>
 #include <vector>
 
 #include "example_custom_las_point.hpp"
 #include "las_header.hpp"
 #include "las_point.hpp"
+#include "las_reader.hpp"
 #include "laz/laz_vlr.hpp"
 #include "laz/laz_writer.hpp"
+#include "spatial_index.hpp"
 #include "utilities/assert.hpp"
+#include "utilities/thread_pool.hpp"
 #include "vlr.hpp"
 
 namespace laspp {
@@ -79,6 +83,19 @@ class LASWriter {
 
   const LASHeader& header() const { return m_header; }
   LASHeader& header() { return m_header; }
+
+  // Copy header metadata from another header (preserves writer-managed fields)
+  void copy_header_metadata(const LASHeader& source_header) {
+    m_header.m_file_source_id = source_header.m_file_source_id;
+    m_header.m_global_encoding = source_header.m_global_encoding;
+    m_header.m_project_id_1 = source_header.m_project_id_1;
+    m_header.m_project_id_2 = source_header.m_project_id_2;
+    m_header.m_project_id_3 = source_header.m_project_id_3;
+    std::memcpy(m_header.m_project_id_4, source_header.m_project_id_4,
+                sizeof(m_header.m_project_id_4));
+    std::memcpy(m_header.m_system_id, source_header.m_system_id, sizeof(m_header.m_system_id));
+    m_header.transform() = source_header.transform();
+  }
 
   void write_vlr(const LASVLR& vlr, std::span<const std::byte> data) {
     LASPP_ASSERT_EQ(m_stage, WritingStage::VLRS);
@@ -188,21 +205,18 @@ class LASWriter {
     static_assert(is_copy_assignable<LASPointFormat0, ExampleFullLASPoint>());
     static_assert(is_copy_fromable<GPSTime, ExampleFullLASPoint>());
 
-    std::vector<size_t> point_indices(points.size());
-    std::iota(point_indices.begin(), point_indices.end(), size_t{0});
-
     // Parallel copy from user point type into the serialisable PointType buffer.
-    std::for_each(std::execution::par_unseq, point_indices.begin(), point_indices.end(),
-                  [&](size_t i) {
-                    copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
-                    copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
-                    copy_if_possible<GPSTime>(points_to_write[i], points[i]);
-                    copy_if_possible<ColorData>(points_to_write[i], points[i]);
-                    copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
-                  });
+    utilities::parallel_for(size_t{0}, points.size(), [&](size_t i) {
+      copy_if_possible<LASPointFormat0>(points_to_write[i], points[i]);
+      copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
+      copy_if_possible<GPSTime>(points_to_write[i], points[i]);
+      copy_if_possible<ColorData>(points_to_write[i], points[i]);
+      copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
+    });
 
     // Parallel reduction to accumulate per-return counts and bounding box.
-    if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+    if constexpr (std::is_base_of_v<LASPointFormat0, PointType> ||
+                  std::is_base_of_v<LASPointFormat6, PointType>) {
       struct PointStats {
         size_t points_by_return[15]{};
         int32_t min_pos[3]{std::numeric_limits<int32_t>::max(), std::numeric_limits<int32_t>::max(),
@@ -210,28 +224,51 @@ class LASWriter {
         int32_t max_pos[3]{std::numeric_limits<int32_t>::lowest(),
                            std::numeric_limits<int32_t>::lowest(),
                            std::numeric_limits<int32_t>::lowest()};
+
+        void combine(const PointStats& other) {
+          for (size_t j = 0; j < 15; j++) {
+            points_by_return[j] += other.points_by_return[j];
+          }
+          for (size_t j = 0; j < 3; j++) {
+            min_pos[j] = std::min(min_pos[j], other.min_pos[j]);
+            max_pos[j] = std::max(max_pos[j], other.max_pos[j]);
+          }
+        }
       };
 
-      PointStats result = std::transform_reduce(
-          std::execution::par_unseq, point_indices.begin(), point_indices.end(), PointStats{},
-          [](PointStats a, const PointStats& b) {
-            for (size_t j = 0; j < 15; j++) a.points_by_return[j] += b.points_by_return[j];
-            for (size_t j = 0; j < 3; j++) {
-              a.min_pos[j] = std::min(a.min_pos[j], b.min_pos[j]);
-              a.max_pos[j] = std::max(a.max_pos[j], b.max_pos[j]);
+      PointStats result;
+      // Use chunking internally: process 1000 points per chunk for better cache locality
+      constexpr size_t reduction_chunk_size = 1000;
+      const size_t num_chunks = (points.size() + reduction_chunk_size - 1) / reduction_chunk_size;
+      utilities::parallel_for_reduction(
+          size_t{0}, num_chunks, result, [&](size_t chunk_idx, PointStats& local_stats) {
+            // Process all points in this chunk
+            const size_t chunk_start = chunk_idx * reduction_chunk_size;
+            const size_t chunk_end = std::min(chunk_start + reduction_chunk_size, points.size());
+            for (size_t i = chunk_start; i < chunk_end; ++i) {
+              // Accumulate stats for this point
+              if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
+                if (points_to_write[i].bit_byte.return_number < 16 &&
+                    points_to_write[i].bit_byte.return_number > 0) {
+                  local_stats.points_by_return[points_to_write[i].bit_byte.return_number - 1]++;
+                }
+              } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+                if (points_to_write[i].return_number < 16 && points_to_write[i].return_number > 0) {
+                  local_stats.points_by_return[points_to_write[i].return_number - 1]++;
+                }
+              }
+              // Read x, y, z using memcpy to avoid alignment issues with packed structures
+              int32_t x, y, z;
+              std::memcpy(&x, &points_to_write[i].x, sizeof(x));
+              std::memcpy(&y, &points_to_write[i].y, sizeof(y));
+              std::memcpy(&z, &points_to_write[i].z, sizeof(z));
+              local_stats.min_pos[0] = std::min(local_stats.min_pos[0], x);
+              local_stats.min_pos[1] = std::min(local_stats.min_pos[1], y);
+              local_stats.min_pos[2] = std::min(local_stats.min_pos[2], z);
+              local_stats.max_pos[0] = std::max(local_stats.max_pos[0], x);
+              local_stats.max_pos[1] = std::max(local_stats.max_pos[1], y);
+              local_stats.max_pos[2] = std::max(local_stats.max_pos[2], z);
             }
-            return a;
-          },
-          [&](size_t i) {
-            PointStats s;
-            if (points_to_write[i].bit_byte.return_number < 16 &&
-                points_to_write[i].bit_byte.return_number > 0) {
-              s.points_by_return[points_to_write[i].bit_byte.return_number - 1] = 1;
-            }
-            s.min_pos[0] = s.max_pos[0] = points_to_write[i].x;
-            s.min_pos[1] = s.max_pos[1] = points_to_write[i].y;
-            s.min_pos[2] = s.max_pos[2] = points_to_write[i].z;
-            return s;
           });
 
       for (size_t j = 0; j < 15; j++) points_by_return[j] = result.points_by_return[j];
@@ -311,7 +348,7 @@ class LASWriter {
   }
 
  public:
-  void write_evlr(const LASEVLR& evlr, const std::vector<std::byte>& data) {
+  void write_evlr(const LASEVLR& evlr, const std::span<const std::byte>& data) {
     write_chunktable();
     LASPP_ASSERT_LE(m_stage, WritingStage::EVLRS);
     if (m_stage < WritingStage::EVLRS) {
@@ -324,6 +361,130 @@ class LASWriter {
     m_output_stream.write(reinterpret_cast<const char*>(data.data()),
                           static_cast<int64_t>(evlr.record_length_after_header));
     header().m_number_of_extended_variable_length_records++;
+  }
+
+  void write_lastools_spatial_index(const QuadtreeSpatialIndex& spatial_index) {
+    // Write spatial index to a buffer first to get the size
+    std::stringstream index_stream;
+    spatial_index.write(index_stream);
+    std::vector<char> index_data((std::istreambuf_iterator<char>(index_stream)),
+                                 std::istreambuf_iterator<char>());
+
+    // Create EVLR header
+    LASEVLR evlr;
+    evlr.reserved = 0;
+    string_to_arr("LAStools", evlr.user_id);
+    evlr.record_id = 30;
+    evlr.record_length_after_header = index_data.size();
+    string_to_arr("LAX spatial indexing (LASindex)", evlr.description);
+
+    write_evlr(evlr, std::span(reinterpret_cast<std::byte*>(index_data.data()), index_data.size()));
+  }
+
+ private:
+  template <typename PointType>
+  void copy_points_with_spatial_index(LASReader& reader, bool add_spatial_index) {
+    if (!add_spatial_index) {
+      // Streaming fast path: process one batch of chunks at a time.
+      // Each batch is decompressed in parallel (read_chunks uses parallel_for
+      // internally), so throughput matches the bulk path while peak memory is
+      // bounded to O(batch_size * chunk_pts) instead of O(total_points).
+      const auto ppc = reader.points_per_chunk();
+      if (ppc.empty()) return;
+
+      const size_t n_chunks = reader.num_chunks();
+      const size_t batch_size = 20 * utilities::get_num_threads();
+
+      // Compute the exact maximum point count across all batches so the buffer
+      // is neither over- nor under-allocated (matters for single-chunk non-LAZ
+      // files where max_chunk_pts == num_points).
+      size_t max_batch_pts = 0;
+      for (size_t b = 0; b < n_chunks; b += batch_size) {
+        size_t pts = 0;
+        for (size_t i = b, end = std::min(b + batch_size, n_chunks); i < end; ++i) pts += ppc[i];
+        max_batch_pts = std::max(max_batch_pts, pts);
+      }
+
+      std::vector<PointType> batch_buf(max_batch_pts);
+      for (size_t b = 0; b < n_chunks; b += batch_size) {
+        auto pts =
+            reader.read_chunks<PointType>(batch_buf, {b, std::min(b + batch_size, n_chunks)});
+        write_points<PointType>(pts);
+      }
+      return;
+    }
+
+    // Spatial-index path: reordering requires the full point set in memory.
+    std::vector<PointType> points(reader.num_points());
+    reader.read_chunks<PointType>(points, {0, reader.num_chunks()});
+
+    double scale_x = reader.header().transform().scale_factors().x();
+    double offset_x = reader.header().transform().offsets().x();
+    double scale_y = reader.header().transform().scale_factors().y();
+    double offset_y = reader.header().transform().offsets().y();
+
+    QuadtreeSpatialIndex temp_index(reader.header(), points);
+
+    std::vector<std::pair<int32_t, size_t>> point_cell_pairs;
+    point_cell_pairs.reserve(points.size());
+
+    for (size_t i = 0; i < points.size(); ++i) {
+      int32_t x_raw;
+      int32_t y_raw;
+      std::memcpy(&x_raw, &points[i].x, sizeof(x_raw));
+      std::memcpy(&y_raw, &points[i].y, sizeof(y_raw));
+      double x = int32_to_double(x_raw, scale_x, offset_x);
+      double y = int32_to_double(y_raw, scale_y, offset_y);
+      int32_t cell_index = temp_index.get_cell_index(x, y);
+      point_cell_pairs.push_back({cell_index, i});
+    }
+
+    // Sort by cell index, then by original index
+    std::sort(point_cell_pairs.begin(), point_cell_pairs.end());
+
+    std::vector<PointType> reordered_points;
+    reordered_points.reserve(points.size());
+    for (const auto& pair : point_cell_pairs) {
+      reordered_points.push_back(points[pair.second]);
+    }
+    points = std::move(reordered_points);
+
+    QuadtreeSpatialIndex spatial_index(reader.header(), points);
+
+    write_points<PointType>(points, 50000);
+    write_lastools_spatial_index(spatial_index);
+  }
+
+ public:
+  // Copy all data from a reader to this writer
+  void copy_from_reader(LASReader& reader, bool add_spatial_index = false) {
+    // Copy header metadata (preserves writer-managed fields)
+    copy_header_metadata(reader.header());
+
+    // Copy VLRs (skip LAZ VLR since compression is handled by point format;
+    // skip existing LAStools spatial index VLR when we're building a new one)
+    for (const auto& vlr : reader.vlr_headers()) {
+      if (vlr.is_laz_vlr()) {
+        continue;
+      }
+      if (add_spatial_index && vlr.is_lastools_spatial_index_vlr()) {
+        continue;  // Skip existing spatial index, we'll write a new one
+      }
+      write_vlr(vlr, reader.read_vlr_data(vlr));
+    }
+
+    // Read and write points (with optional spatial index)
+    LASPP_SWITCH_OVER_POINT_TYPE(reader.header().point_format(), copy_points_with_spatial_index,
+                                 reader, add_spatial_index);
+
+    // Copy EVLRs (skip spatial index EVLR if we're adding a new one)
+    for (const auto& evlr : reader.evlr_headers()) {
+      if (add_spatial_index && evlr.is_lastools_spatial_index_evlr()) {
+        continue;  // Skip existing spatial index, we'll write a new one
+      }
+      auto data = reader.read_evlr_data(evlr);
+      write_evlr(evlr, data);
+    }
   }
 
   ~LASWriter() {

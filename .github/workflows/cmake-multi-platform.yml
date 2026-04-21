@@ -41,9 +41,6 @@ jobs:
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> \
           "$GITHUB_OUTPUT"
-      - name: Install OpenMP
-        run: sudo apt -y install libomp-18-dev
-        if: matrix.cpp_compiler == 'clang++'
       - name: Configure CMake
         run: >
           cmake -B ${{ steps.strings.outputs.build-output-dir }}  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }}

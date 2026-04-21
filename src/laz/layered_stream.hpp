@@ -57,8 +57,8 @@ class LayeredInStreams {
   // Dummy buffer for empty layers (InStream requires at least 4 bytes to initialize).
   // This is only used for layers with size 0 or < 4, which should never be read from
   // (non_empty() check prevents access).
-  static constexpr std::array<std::byte, 4> s_empty_layer_buffer = {std::byte{0}, std::byte{0},
-                                                                    std::byte{0}, std::byte{0}};
+  static constexpr std::array<std::byte, 4> s_empty_layer_buffer = {
+      {std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}}};
 
  public:
   LayeredInStreams(std::span<const std::byte>& layer_sizes,

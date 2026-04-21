@@ -73,12 +73,12 @@ int main(int argc, char* argv[]) {
 
   // Format 1 with compression (0x81)
   LASWriter writer(ofs, 0x81);
-  writer.header().transform().m_scale_factors.x() = 0.01;
-  writer.header().transform().m_scale_factors.y() = 0.01;
-  writer.header().transform().m_scale_factors.z() = 0.01;
-  writer.header().transform().m_offsets.x() = 0.0;
-  writer.header().transform().m_offsets.y() = 0.0;
-  writer.header().transform().m_offsets.z() = 0.0;
+  writer.header().transform().scale_factors().x() = 0.01;
+  writer.header().transform().scale_factors().y() = 0.01;
+  writer.header().transform().scale_factors().z() = 0.01;
+  writer.header().transform().offsets().x() = 0.0;
+  writer.header().transform().offsets().y() = 0.0;
+  writer.header().transform().offsets().z() = 0.0;
 
   writer.write_points<LASPointFormat1>(std::span<const LASPointFormat1>(points), 50000);
 

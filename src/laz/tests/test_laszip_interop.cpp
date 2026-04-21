@@ -363,13 +363,7 @@ void write_points_with_laspp(const std::vector<PointT>& points, const std::files
   LASPP_ASSERT(writer.header().is_laz_compressed(), "File should be LAZ compressed");
 
   // Set scale factors and offsets (LASWriter handles point counts and bounds automatically)
-  const double scale = 0.27;
-  writer.header().transform().m_scale_factors.x() = scale;
-  writer.header().transform().m_scale_factors.y() = scale;
-  writer.header().transform().m_scale_factors.z() = scale;
-  writer.header().transform().m_offsets.x() = 146;
-  writer.header().transform().m_offsets.y() = -25.4;
-  writer.header().transform().m_offsets.z() = 512;
+  writer.header().transform() = Transform({0.27, 0.35, -26}, {146, -25.4, 512});
 
   writer.write_points(std::span<const PointT>(points.data(), points.size()), ChunkSize);
 }
@@ -561,6 +555,136 @@ void run_laszip_internal_roundtrip(size_t n_points) {
   }
 }
 
+// Test: LASzip writes a .laz with a spatial-index sidecar (.lax);
+//       las++ reads the sidecar and verifies structural + geometric integrity.
+//
+// Two point clusters 700 units apart ensure the spatial index produces at least
+// two distinct cells.  scale = 1.0, offset = 0.0 → integer coord == real coord.
+void test_spatial_index_laszip_creates_laspp_reads() {
+  constexpr int32_t kNPerCluster = 200;
+  constexpr double kClusterA = 150.0;  // centre of cluster A, indices [0,   199]
+  constexpr double kClusterB = 850.0;  // centre of cluster B, indices [200, 399]
+
+  std::vector<LASPointFormat0> points;
+  points.reserve(static_cast<size_t>(kNPerCluster * 2));
+  for (int32_t i = 0; i < kNPerCluster; ++i) {
+    LASPointFormat0 pt{};
+    pt.x = static_cast<int32_t>(kClusterA) - kNPerCluster / 2 + i;  // [50, 249]
+    pt.y = pt.x;
+    points.push_back(pt);
+  }
+  for (int32_t i = 0; i < kNPerCluster; ++i) {
+    LASPointFormat0 pt{};
+    pt.x = static_cast<int32_t>(kClusterB) - kNPerCluster / 2 + i;  // [750, 949]
+    pt.y = pt.x;
+    points.push_back(pt);
+  }
+
+  TempFile temp_laz("spatial_interop");
+  auto lax_path = temp_laz.path();
+  lax_path.replace_extension(".lax");
+  struct LaxGuard {
+    std::filesystem::path p;
+    ~LaxGuard() {
+      std::error_code ec;
+      std::filesystem::remove(p, ec);
+    }
+  } lax_guard{lax_path};
+
+  // ── Write with LASzip, enabling spatial index creation ───────────────────
+  {
+    laszip_POINTER writer;
+    LASPP_ASSERT_EQ(laszip_create(&writer), 0);
+
+    laszip_header* hdr;
+    LASPP_ASSERT_EQ(laszip_get_header_pointer(writer, &hdr), 0);
+    std::memset(hdr, 0, sizeof(laszip_header));
+    hdr->version_major = 1;
+    hdr->version_minor = 2;
+    hdr->header_size = 227;
+    hdr->offset_to_point_data = 227;
+    hdr->point_data_format = static_cast<laszip_U8>(LASPointFormat0::PointFormat);
+    hdr->point_data_record_length = static_cast<laszip_U16>(sizeof(LASPointFormat0));
+    hdr->number_of_point_records = static_cast<laszip_U32>(points.size());
+    hdr->extended_number_of_point_records = points.size();
+    // scale=1.0, offset=0.0 → integer coordinate == real coordinate
+    hdr->x_scale_factor = 1.0;
+    hdr->y_scale_factor = 1.0;
+    hdr->z_scale_factor = 1.0;
+    // bounding box covers both clusters
+    hdr->min_x = 50.0;
+    hdr->max_x = 949.0;
+    hdr->min_y = 50.0;
+    hdr->max_y = 949.0;
+    hdr->min_z = 0.0;
+    hdr->max_z = 0.0;
+    LASPP_ASSERT_EQ(laszip_set_header(writer, hdr), 0);
+
+    // laszip_create_spatial_index must be called after set_header and before open_writer
+    LASPP_ASSERT_EQ(laszip_create_spatial_index(writer, 1 /*create*/, 0 /*append*/), 0);
+    LASPP_ASSERT_EQ(laszip_open_writer(writer, temp_laz.path().string().c_str(), 1 /*compress*/),
+                    0);
+
+    laszip_point* las_pt;
+    LASPP_ASSERT_EQ(laszip_get_point_pointer(writer, &las_pt), 0);
+    for (size_t i = 0; i < points.size(); ++i) {
+      populate_laszip_point(points[i], *las_pt);
+      // laszip_write_indexed_point feeds coordinates into the spatial index
+      LASPP_ASSERT_EQ(laszip_write_indexed_point(writer), 0, "indexed write failed at ", i);
+    }
+
+    LASPP_ASSERT_EQ(laszip_close_writer(writer), 0);  // writes the .lax sidecar
+    LASPP_ASSERT_EQ(laszip_destroy(writer), 0);
+  }
+
+  LASPP_ASSERT(std::filesystem::exists(lax_path), "LASzip did not create the .lax sidecar");
+
+  // ── Read with las++ via file path (auto-discovers the .lax) ──────────────
+  LASReader reader(temp_laz.path());
+  LASPP_ASSERT(reader.has_lastools_spatial_index(),
+               "las++ should load the LASzip-generated .lax sidecar");
+
+  const auto& index = reader.lastools_spatial_index();
+  LASPP_ASSERT_GT(index.num_cells(), 0u, "spatial index must contain at least one cell");
+
+  // Every interval endpoint must reference a valid point position
+  const auto n_pts = static_cast<uint32_t>(points.size());
+  for (const auto& [cell_idx, cell] : index.cells()) {
+    for (const auto& iv : cell.intervals) {
+      LASPP_ASSERT_LT(iv.start, n_pts, "interval start out of range in cell ", cell_idx);
+      LASPP_ASSERT_LT(iv.end, n_pts, "interval end out of range in cell ", cell_idx);
+      LASPP_ASSERT_LE(iv.start, iv.end, "interval start > end in cell ", cell_idx);
+    }
+  }
+
+  // The clusters are ~700 units apart; with LASzip's default cell size of 100
+  // they must fall in different cells
+  const int32_t cell_a = index.find_cell_index(kClusterA, kClusterA);
+  const int32_t cell_b = index.find_cell_index(kClusterB, kClusterB);
+  LASPP_ASSERT_GE(cell_a, 0, "no cell found for cluster A centre");
+  LASPP_ASSERT_GE(cell_b, 0, "no cell found for cluster B centre");
+  LASPP_ASSERT_NE(cell_a, cell_b, "clusters A and B must map to different cells");
+
+  // Cell bounds must geometrically contain the cluster centres
+  const Bound2D ba = index.get_cell_bounds(cell_a);
+  const Bound2D bb = index.get_cell_bounds(cell_b);
+  LASPP_ASSERT(ba.contains(kClusterA, kClusterA), "cell for cluster A must contain its centre");
+  LASPP_ASSERT(bb.contains(kClusterB, kClusterB), "cell for cluster B must contain its centre");
+
+  // Cluster-A write-order indices are [0, kNPerCluster); the cell that contains
+  // cluster A's centre must reference at least one of those indices
+  bool cell_a_has_cluster_a_pt = false;
+  for (const auto& iv : index.cells().at(cell_a).intervals) {
+    if (iv.start < static_cast<uint32_t>(kNPerCluster) ||
+        iv.end < static_cast<uint32_t>(kNPerCluster)) {
+      cell_a_has_cluster_a_pt = true;
+      break;
+    }
+  }
+  LASPP_ASSERT(cell_a_has_cluster_a_pt,
+               "cell for cluster A must reference at least one cluster-A point index");
+}
+
 }  // namespace
 
 int main() {
@@ -612,6 +736,9 @@ int main() {
   run_laspp_file_roundtrip<LASPointFormat7>(SmallPointCount);
   run_laspp_file_roundtrip<LASPointFormat7>(MediumPointCount);
   run_laspp_file_roundtrip<LASPointFormat7>(LargePointCount);
+
+  // Spatial index interop: LASzip writes .lax sidecar, las++ reads and validates it
+  test_spatial_index_laszip_creates_laspp_reads();
 
   return 0;
 }

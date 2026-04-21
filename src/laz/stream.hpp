@@ -12,6 +12,7 @@
 #include <istream>
 #include <limits>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 #include "utilities/assert.hpp"
@@ -38,6 +39,29 @@ class PointerStreamBuffer : public std::streambuf {
     // Return EOF to indicate failure (standard library convention)
     return traits_type::eof();
 #endif
+  }
+
+  // Override xsgetn to ensure proper bounds checking when reading
+  std::streamsize xsgetn(char* s, std::streamsize n) override {
+    char* base = eback();
+    char* current = gptr();
+    char* end = egptr();
+    if (current == nullptr || end == nullptr || base == nullptr) {
+      return 0;  // No data available
+    }
+
+    std::streamsize available = end - current;
+    std::streamsize to_read = (n < available) ? n : available;
+
+    if (to_read > 0) {
+      std::memcpy(s, current, static_cast<size_t>(to_read));
+      // Update get pointer
+      setg(base, current + to_read, end);
+    }
+
+    // Return the number of bytes actually read
+    // If to_read < n, LASPP_CHECK_READ will detect this via gcount()
+    return to_read;
   }
 
  protected:
@@ -69,7 +93,7 @@ class PointerStreamBuffer : public std::streambuf {
     // Safe to convert to pointer now
     char* new_gptr = const_cast<char*>(base) + new_index;
     setg(const_cast<char*>(base), new_gptr, const_cast<char*>(end));
-    return pos_type(static_cast<off_type>(new_index));
+    return pos_type(new_index);
   }
 
   pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in) override {
@@ -99,8 +123,9 @@ class InStream : StreamVariables {
   // Owned buffer used only by the std::istream& constructor.
   std::vector<std::byte> m_owned_data;
 
-  [[nodiscard]] std::byte read_byte() noexcept {
-    LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer");
+  [[nodiscard]] std::byte read_byte() {
+    if (m_ptr >= m_end) [[unlikely]]
+      throw std::runtime_error("InStream: read past end of buffer");
     return *m_ptr++;
   }
 
@@ -112,7 +137,7 @@ class InStream : StreamVariables {
 
   // Fast path: construct directly from in-memory data.  No copies, no virtual dispatch.
   // Requires at least 4 bytes to initialize the range coder state.
-  InStream(const std::byte* data, size_t size) noexcept : m_ptr(data), m_end(data + size) {
+  InStream(const std::byte* data, size_t size) : m_ptr(data), m_end(data + size) {
     LASPP_ASSERT_GE(size, 4u, "InStream: buffer too small (need at least 4 bytes)");
     for (int i = 0; i < 4; i++) {
       m_value <<= 8;
@@ -151,9 +176,13 @@ class InStream : StreamVariables {
   // Renormalise the range coder and return the current value.  Reads 0, 1, 2 or 3 bytes
   // from the in-memory pointer — the common case (length >= 2^24) reads nothing, so this
   // is very cheap on average.
-  uint32_t get_value() noexcept {
+  //
+  // The bounds checks use [[unlikely]] so the compiler keeps them out of the hot path and
+  // the branch predictor treats them as never-taken.
+  uint32_t get_value() {
     if (m_length < (1u << 8)) {
-      LASPP_ASSERT(m_ptr + 3 <= m_end, "InStream: read past end of buffer (need 3 bytes)");
+      if (m_ptr + 3 > m_end) [[unlikely]]
+        throw std::runtime_error("InStream: read past end of buffer (need 3 bytes)");
       m_value <<= 24;
       m_length <<= 24;
       // Read 3 bytes big-endian.
@@ -162,7 +191,8 @@ class InStream : StreamVariables {
                  static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2]));
       m_ptr += 3;
     } else if (m_length < (1u << 16)) {
-      LASPP_ASSERT(m_ptr + 2 <= m_end, "InStream: read past end of buffer (need 2 bytes)");
+      if (m_ptr + 2 > m_end) [[unlikely]]
+        throw std::runtime_error("InStream: read past end of buffer (need 2 bytes)");
       m_value <<= 16;
       m_length <<= 16;
       // Read 2 bytes big-endian.
@@ -170,7 +200,8 @@ class InStream : StreamVariables {
                  static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1]));
       m_ptr += 2;
     } else if (m_length < (1u << 24)) {
-      LASPP_ASSERT(m_ptr < m_end, "InStream: read past end of buffer (need 1 byte)");
+      if (m_ptr >= m_end) [[unlikely]]
+        throw std::runtime_error("InStream: read past end of buffer (need 1 byte)");
       m_value <<= 8;
       m_length <<= 8;
       m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
@@ -252,7 +283,7 @@ class OutStream : StreamVariables {
   }
 
   void update_range(uint32_t lower, uint32_t upper) {
-    LASPP_ASSERT(!m_finalized);
+    LASPP_DEBUG_ASSERT(!m_finalized);
     if ((static_cast<uint64_t>(m_base) + static_cast<uint64_t>(lower)) >=
         (static_cast<uint64_t>(1) << 32)) {
       propogate_carry();

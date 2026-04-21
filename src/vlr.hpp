@@ -5,11 +5,15 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <map>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -142,6 +146,17 @@ class LASGeoKeys {
   }
 };
 
+// Fixed-width LAS string (user_id, description, ...): may omit a trailing NUL.
+inline std::string_view las_packed_string(std::string_view raw) {
+  const auto z = raw.find('\0');
+  return z == std::string_view::npos ? raw : raw.substr(0, z);
+}
+
+template <std::size_t N>
+inline std::string_view las_packed_string(const char (&arr)[N]) {
+  return las_packed_string(std::string_view(arr, N));
+}
+
 #pragma pack(push, 1)
 
 struct LASPP_PACKED ExtraBytesInfo {
@@ -189,14 +204,14 @@ struct LASPP_PACKED LASVariableLengthRecord {
 
   friend std::ostream& operator<<(std::ostream& os, const LASVariableLengthRecord& vlr) {
     os << "Reserved: " << vlr.reserved << std::endl;
-    os << "User ID: " << vlr.user_id << std::endl;
+    os << "User ID: \"" << las_packed_string(vlr.user_id) << "\"" << std::endl;
     os << "Record ID: " << vlr.record_id << std::endl;
     os << "Record length after header: " << vlr.record_length_after_header << std::endl;
-    os << "Description: " << vlr.description << std::endl;
+    os << "Description: \"" << las_packed_string(vlr.description) << "\"" << std::endl;
     return os;
   }
 
-  bool is_projection() const { return std::string(user_id) == "LASF_Projection"; }
+  bool is_projection() const { return las_packed_string(user_id) == "LASF_Projection"; }
 
   bool is_ogc_math_transform_wkt() const { return is_projection() && record_id == 2111; }
 
@@ -208,7 +223,7 @@ struct LASPP_PACKED LASVariableLengthRecord {
 
   bool is_geo_ascii_params() const { return is_projection() && record_id == 34737; }
 
-  bool is_spec() const { return std::string(user_id) == "LASF_Spec"; }
+  bool is_spec() const { return las_packed_string(user_id) == "LASF_Spec"; }
 
   bool is_classification_lookup() const { return is_spec() && record_id == 0; }
 
@@ -231,9 +246,13 @@ struct LASPP_PACKED LASVariableLengthRecord {
   bool is_waveform_data_packets() const { return is_spec() && record_id == 65535; }
 
   bool is_laz_vlr() const {
+    const std::string_view uid = las_packed_string(user_id);
     return (reserved == 0 || reserved == 0xAABB) &&  // 43707
-           (std::string(user_id) == "LAZ encoded" || std::string(user_id) == "laszip encoded") &&
-           record_id == 22204;
+           (uid == "LAZ encoded" || uid == "laszip encoded") && record_id == 22204;
+  }
+
+  bool is_lastools_spatial_index_vlr() const {
+    return las_packed_string(user_id) == "LAStools" && record_id == 30;
   }
 };
 
@@ -260,11 +279,21 @@ struct LASPP_PACKED LASExtendedVariableLengthRecord {
 
   friend std::ostream& operator<<(std::ostream& os, const LASExtendedVariableLengthRecord& evlr) {
     os << "Reserved: " << evlr.reserved << std::endl;
-    os << "User ID: " << evlr.user_id << std::endl;
+    os << "User ID: \"" << las_packed_string(evlr.user_id) << "\"" << std::endl;
     os << "Record ID: " << evlr.record_id << std::endl;
     os << "Record length after header: " << evlr.record_length_after_header << std::endl;
-    os << "Description: " << evlr.description << std::endl;
+    os << "Description: \"" << las_packed_string(evlr.description) << "\"" << std::endl;
     return os;
+  }
+
+  bool is_laz_vlr() const {
+    const std::string_view uid = las_packed_string(user_id);
+    return (reserved == 0 || reserved == 0xAABB) &&
+           (uid == "LAZ encoded" || uid == "laszip encoded") && record_id == 22204;
+  }
+
+  bool is_lastools_spatial_index_evlr() const {
+    return las_packed_string(user_id) == "LAStools" && record_id == 30;
   }
 };
 

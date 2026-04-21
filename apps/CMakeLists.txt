@@ -7,12 +7,31 @@ add_executable(${LAS2LAS++_EXE_NAME} las2las++.cpp)
 
 target_link_libraries(${LAS2LAS++_EXE_NAME} ${LIBRARY_NAME})
 
+# MSVC needs /bigobj for large translation units in debug mode
+if(MSVC)
+  target_compile_options(${LAS2LAS++_EXE_NAME}
+                         PRIVATE $<$<CONFIG:Debug>:/bigobj>)
+endif()
+
 # Utility to create test files for benchmarking
 add_executable(create_test_file create_test_file.cpp)
 target_link_libraries(create_test_file PRIVATE ${LIBRARY_NAME})
 
+set(INSPECT_VLRS_EXE_NAME las++-inspect-vlrs)
+
+add_executable(${INSPECT_VLRS_EXE_NAME} inspect_vlrs.cpp)
+
+target_link_libraries(${INSPECT_VLRS_EXE_NAME} ${LIBRARY_NAME})
+
+set(VALIDATE_SPATIAL_INDEX_EXE_NAME las++-validate-spatial-index)
+
+add_executable(${VALIDATE_SPATIAL_INDEX_EXE_NAME} validate_spatial_index.cpp)
+
+target_link_libraries(${VALIDATE_SPATIAL_INDEX_EXE_NAME} ${LIBRARY_NAME})
+
 install(
-  TARGETS ${LAS2LAS++_EXE_NAME}
+  TARGETS ${LAS2LAS++_EXE_NAME} ${INSPECT_VLRS_EXE_NAME}
+          ${VALIDATE_SPATIAL_INDEX_EXE_NAME}
   DESTINATION bin
   COMPONENT applications)
 
