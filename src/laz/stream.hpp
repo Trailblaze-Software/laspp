@@ -125,7 +125,7 @@ class InStream : StreamVariables {
 
   [[nodiscard]] std::byte read_byte() {
     if (m_ptr >= m_end) [[unlikely]]
-      throw std::runtime_error("InStream: read past end of buffer");
+      return std::byte{0};
     return *m_ptr++;
   }
 
@@ -181,30 +181,30 @@ class InStream : StreamVariables {
   // the branch predictor treats them as never-taken.
   uint32_t get_value() {
     if (m_length < (1u << 8)) {
-      if (m_ptr + 3 > m_end) [[unlikely]]
-        throw std::runtime_error("InStream: read past end of buffer (need 3 bytes)");
       m_value <<= 24;
       m_length <<= 24;
-      // Read 3 bytes big-endian.
-      m_value |= (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) << 16) |
-                 (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1])) << 8) |
-                 static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2]));
+      // Read 3 bytes big-endian; treat out-of-bounds bytes as zero.
+      auto b0 = (m_ptr + 0 < m_end) ? static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) : 0u;
+      auto b1 = (m_ptr + 1 < m_end) ? static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1])) : 0u;
+      auto b2 = (m_ptr + 2 < m_end) ? static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[2])) : 0u;
+      m_value |= (b0 << 16) | (b1 << 8) | b2;
       m_ptr += 3;
     } else if (m_length < (1u << 16)) {
-      if (m_ptr + 2 > m_end) [[unlikely]]
-        throw std::runtime_error("InStream: read past end of buffer (need 2 bytes)");
       m_value <<= 16;
       m_length <<= 16;
-      // Read 2 bytes big-endian.
-      m_value |= (static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) << 8) |
-                 static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1]));
+      // Read 2 bytes big-endian; treat out-of-bounds bytes as zero.
+      auto b0 = (m_ptr + 0 < m_end) ? static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[0])) : 0u;
+      auto b1 = (m_ptr + 1 < m_end) ? static_cast<uint32_t>(static_cast<uint8_t>(m_ptr[1])) : 0u;
+      m_value |= (b0 << 8) | b1;
       m_ptr += 2;
     } else if (m_length < (1u << 24)) {
-      if (m_ptr >= m_end) [[unlikely]]
-        throw std::runtime_error("InStream: read past end of buffer (need 1 byte)");
       m_value <<= 8;
       m_length <<= 8;
-      m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
+      // Read 1 byte; treat out-of-bounds as zero.
+      if (m_ptr < m_end) [[likely]]
+        m_value |= static_cast<uint32_t>(static_cast<uint8_t>(*m_ptr++));
+      else
+        m_ptr++;
     }
     return m_value;
   }
