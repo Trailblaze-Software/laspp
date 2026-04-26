@@ -129,6 +129,19 @@ class LAZReader {
             compressed_data = compressed_data.subspan(record.item_size);
             break;
           }
+          case LAZItemType::Byte14: {
+            // One Byte14Encoder per extra-byte slot, each wired to its own stream.
+            std::vector<Byte14Encoder> byte14_encoders;
+            byte14_encoders.reserve(record.item_size);
+            for (size_t j = 0; j < record.item_size; j++) {
+              byte14_encoders.emplace_back(
+                  *reinterpret_cast<const std::byte*>(compressed_data.data() + j),
+                  context.value_or(0));
+            }
+            encoders.emplace_back(std::move(byte14_encoders));
+            compressed_data = compressed_data.subspan(record.item_size);
+            break;
+          }
           case LAZItemType::Short:
           case LAZItemType::Integer:
           case LAZItemType::Long:
@@ -137,7 +150,6 @@ class LAZReader {
           case LAZItemType::Wavepacket13:
           case LAZItemType::RGBNIR14:
           case LAZItemType::Wavepacket14:
-          case LAZItemType::Byte14:
           default:
             LASPP_FAIL("Currently unsupported LAZ item type: ", LAZItemType(record.item_type), " (",
                        static_cast<uint16_t>(record.item_type), ")");
@@ -155,15 +167,23 @@ class LAZReader {
 
       static_assert(has_num_layers<laspp::LASPointFormat6Encoder>::value,
                     "LAZPointFormat6Encoder must have NUM_LAYERS");
+
+      // Count total layers: unique_ptr encoders use their compile-time NUM_LAYERS;
+      // vector<Byte14Encoder> contributes one layer per slot.
       size_t total_n_layers = 0;
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
-            [&total_n_layers](auto&& enc_ptr) {
-              const auto& enc = *enc_ptr;
-              if constexpr (has_num_layers_v<decltype(enc)>) {
-                total_n_layers += std::decay_t<decltype(enc)>::NUM_LAYERS;
+            [&total_n_layers](auto&& enc) {
+              using ET = std::decay_t<decltype(enc)>;
+              if constexpr (std::is_same_v<ET, std::vector<Byte14Encoder>>) {
+                total_n_layers += enc.size();
               } else {
-                LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
+                using EncT = std::decay_t<decltype(*enc)>;
+                if constexpr (has_num_layers_v<EncT>) {
+                  total_n_layers += EncT::NUM_LAYERS;
+                } else {
+                  LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
+                }
               }
             },
             encoder);
@@ -171,19 +191,30 @@ class LAZReader {
       std::span<const std::byte> compressed_layer_data =
           compressed_data.subspan(total_n_layers * sizeof(uint32_t));
 
-      std::vector<
-          std::variant<std::unique_ptr<LayeredInStreams<1>>, std::unique_ptr<LayeredInStreams<9>>>>
+      // Byte14 items: one LayeredInStreams<1> per slot, stored as a vector.
+      // Standard items: one LayeredInStreams<N> per encoder.
+      using Byte14InStreams = std::vector<std::unique_ptr<LayeredInStreams<1>>>;
+      std::vector<std::variant<std::unique_ptr<LayeredInStreams<1>>,
+                               std::unique_ptr<LayeredInStreams<9>>, Byte14InStreams>>
           layered_in_streams_for_encoders;
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
             [&compressed_data, &compressed_layer_data,
-             &layered_in_streams_for_encoders](auto&& enc_ptr) {
-              auto& enc = *enc_ptr;
-              if constexpr (has_num_layers_v<decltype(enc)>) {
+             &layered_in_streams_for_encoders](auto&& enc) {
+              using ET = std::decay_t<decltype(enc)>;
+              if constexpr (std::is_same_v<ET, std::vector<Byte14Encoder>>) {
+                Byte14InStreams streams;
+                streams.reserve(enc.size());
+                for (size_t j = 0; j < enc.size(); j++) {
+                  streams.emplace_back(std::make_unique<LayeredInStreams<1>>(
+                      compressed_data, compressed_layer_data));
+                }
+                layered_in_streams_for_encoders.emplace_back(std::move(streams));
+              } else if constexpr (has_num_layers_v<std::decay_t<decltype(*enc)>>) {
+                using EncT = std::decay_t<decltype(*enc)>;
                 layered_in_streams_for_encoders.emplace_back(
-                    std::make_unique<
-                        LayeredInStreams<std::remove_reference_t<decltype(enc)>::NUM_LAYERS>>(
-                        compressed_data, compressed_layer_data));
+                    std::make_unique<LayeredInStreams<EncT::NUM_LAYERS>>(compressed_data,
+                                                                         compressed_layer_data));
               } else {
                 LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
               }
@@ -193,7 +224,6 @@ class LAZReader {
       LASPP_ASSERT_EQ(compressed_layer_data.size(), 0);
 
       for (size_t i = 0; i < decompressed_data.size(); i++) {
-        // Prefetch next points' decompressed data (helps with write operations)
         if (i + 3 < decompressed_data.size()) {
           LASPP_PREFETCH(&decompressed_data[i + 3]);
         }
@@ -204,44 +234,63 @@ class LAZReader {
 
           std::visit(
               [&decompressed_data, &i, &layered_in_streams_for_encoders, encoder_idx,
-               &context](auto&& enc_ptr) {
-                auto& encoder = *enc_ptr;
-                if constexpr (has_num_layers_v<decltype(encoder)>) {
-                  using EncoderType = std::remove_reference_t<decltype(encoder)>;
-                  LayeredInStreams<EncoderType::NUM_LAYERS>& layered_in_stream =
-                      *std::get<std::unique_ptr<LayeredInStreams<EncoderType::NUM_LAYERS>>>(
-                          layered_in_streams_for_encoders[encoder_idx]);
-                  if constexpr (std::is_same_v<EncoderType, LASPointFormat6Encoder>) {
-                    if (i > 0) {
-                      encoder.decode(layered_in_stream);
-                      context = encoder.get_active_context();
-                    }
-                  } else {
-                    if (i > 0) {
-                      encoder.decode(layered_in_stream, context.value());
+               &context](auto&& enc) {
+                using ET = std::decay_t<decltype(enc)>;
+                if constexpr (std::is_same_v<ET, std::vector<Byte14Encoder>>) {
+                  auto& streams =
+                      std::get<Byte14InStreams>(layered_in_streams_for_encoders[encoder_idx]);
+                  if (i > 0) {
+                    for (size_t j = 0; j < enc.size(); j++) {
+                      enc[j].decode(*streams[j], context.value());
                     }
                   }
-                  copy_from_if_possible(decompressed_data[i], encoder.last_value());
+                  std::vector<std::byte> all_bytes(enc.size());
+                  for (size_t j = 0; j < enc.size(); j++) all_bytes[j] = enc[j].last_value();
+                  copy_from_if_possible(decompressed_data[i], all_bytes);
                 } else {
-                  LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
+                  auto& encoder = *enc;
+                  using EncType = std::remove_reference_t<decltype(encoder)>;
+                  if constexpr (has_num_layers_v<EncType>) {
+                    LayeredInStreams<EncType::NUM_LAYERS>& layered_in_stream =
+                        *std::get<std::unique_ptr<LayeredInStreams<EncType::NUM_LAYERS>>>(
+                            layered_in_streams_for_encoders[encoder_idx]);
+                    if constexpr (std::is_same_v<EncType, LASPointFormat6Encoder>) {
+                      if (i > 0) {
+                        encoder.decode(layered_in_stream);
+                        context = encoder.get_active_context();
+                      }
+                    } else {
+                      if (i > 0) {
+                        encoder.decode(layered_in_stream, context.value());
+                      }
+                    }
+                    copy_from_if_possible(decompressed_data[i], encoder.last_value());
+                  } else {
+                    LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
+                  }
                 }
               },
               laz_encoder);
         }
       }
     } else {
-      InStream compressed_in_stream(compressed_data.data(),
-                                    compressed_data.size());  // const std::byte* accepted
+      InStream compressed_in_stream(compressed_data.data(), compressed_data.size());
       for (size_t i = 0; i < decompressed_data.size(); i++) {
         for (LAZEncoder& laz_encoder : encoders) {
           std::visit(
-              [&compressed_in_stream, &decompressed_data, &i](auto&& enc_ptr) {
-                auto& encoder = *enc_ptr;
-                if constexpr (has_num_layers_v<decltype(encoder)>) {
+              [&compressed_in_stream, &decompressed_data, &i](auto&& enc) {
+                using ET = std::decay_t<decltype(enc)>;
+                if constexpr (std::is_same_v<ET, std::vector<Byte14Encoder>>) {
                   LASPP_FAIL("Cannot use layered encoder with non-layered compression.");
                 } else {
-                  if (i > 0) encoder.decode(compressed_in_stream);
-                  copy_from_if_possible(decompressed_data[i], encoder.last_value());
+                  auto& encoder = *enc;
+                  using EncType = std::remove_reference_t<decltype(encoder)>;
+                  if constexpr (has_num_layers_v<EncType>) {
+                    LASPP_FAIL("Cannot use layered encoder with non-layered compression.");
+                  } else {
+                    if (i > 0) encoder.decode(compressed_in_stream);
+                    copy_from_if_possible(decompressed_data[i], encoder.last_value());
+                  }
                 }
               },
               laz_encoder);

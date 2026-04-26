@@ -74,7 +74,6 @@ class LASWriter {
  public:
   explicit LASWriter(std::iostream& ofs, uint8_t point_format, uint16_t num_extra_bytes = 0)
       : m_output_stream(ofs) {
-    LASPP_ASSERT_EQ(num_extra_bytes, 0);
     header().set_point_format(point_format, num_extra_bytes);
     header().m_offset_to_point_data = static_cast<uint32_t>(header().size());
     // placeholder
@@ -161,6 +160,15 @@ class LASWriter {
         }
         if constexpr (std::is_base_of_v<WavePacketData, PointType>) {
           laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Wavepacket13));
+        }
+        if (m_header.num_extra_bytes() > 0) {
+          if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+            laz_vlr_content.add_item_record(
+                LAZItemRecord(LAZItemType::Byte14, m_header.num_extra_bytes()));
+          } else {
+            laz_vlr_content.add_item_record(
+                LAZItemRecord(LAZItemType::Byte, m_header.num_extra_bytes()));
+          }
         }
         std::stringstream laz_vlr_content_stream;
         laz_vlr_content.write_to(laz_vlr_content_stream);
