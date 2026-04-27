@@ -108,6 +108,9 @@ class LAZReader {
             break;
           }
           case LAZItemType::RGB14: {
+            LASPP_ASSERT(context.has_value(),
+                         "RGB14 requires Point14-derived context; ensure item records are ordered "
+                         "so Point14 runs before RGB14.");
             encoders.emplace_back(std::make_unique<RGB14Encoder>(
                 *reinterpret_cast<const ColorData*>(compressed_data.data()), context.value(),
                 true));
@@ -141,12 +144,14 @@ class LAZReader {
           }
           case LAZItemType::Byte14: {
             // One Byte14Encoder per extra-byte slot, each wired to its own stream.
+            LASPP_ASSERT(context.has_value(),
+                         "Byte14 requires Point14-derived context; ensure item records are "
+                         "ordered so Point14 runs before Byte14.");
             std::vector<Byte14Encoder> byte14_encoders;
             byte14_encoders.reserve(record.item_size);
             for (size_t j = 0; j < record.item_size; j++) {
               byte14_encoders.emplace_back(
-                  *reinterpret_cast<const std::byte*>(compressed_data.data() + j),
-                  context.value_or(0));
+                  *reinterpret_cast<const std::byte*>(compressed_data.data() + j), context.value());
             }
             encoders.emplace_back(std::move(byte14_encoders));
             compressed_data = compressed_data.subspan(record.item_size);
@@ -160,6 +165,9 @@ class LAZReader {
             std::memcpy(&initial.rgb, compressed_data.data(), sizeof(ColorData));
             std::memcpy(&initial.nir, compressed_data.data() + sizeof(ColorData), sizeof(uint16_t));
             const bool use_v3_quirk = (record.item_version == LAZItemVersion::Version3);
+            LASPP_ASSERT(context.has_value(),
+                         "RGBNIR14 requires Point14-derived context; ensure item records are "
+                         "ordered so Point14 runs before RGBNIR14.");
             encoders.emplace_back(
                 std::make_unique<RGBNIR14Encoder>(initial, context.value(), use_v3_quirk));
             compressed_data = compressed_data.subspan(sizeof(ColorData) + sizeof(uint16_t));
@@ -269,6 +277,9 @@ class LAZReader {
                   auto& streams =
                       std::get<Byte14InStreams>(layered_in_streams_for_encoders[encoder_idx]);
                   if (i > 0) {
+                    LASPP_ASSERT(context.has_value(),
+                                 "Byte14 decode requires Point14-derived context; ensure item "
+                                 "records are ordered so Point14 runs before Byte14.");
                     for (size_t j = 0; j < enc.size(); j++) {
                       enc[j].decode(*streams[j], context.value());
                     }

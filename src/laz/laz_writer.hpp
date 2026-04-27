@@ -139,6 +139,9 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(color_data), T>()) {
               color_data = points[0];
             }
+            LASPP_ASSERT(context.has_value(),
+                         "RGB14 requires Point14-derived context; ensure item records are ordered "
+                         "so Point14 runs before RGB14.");
             encoders.emplace_back(
                 std::make_unique<RGB14Encoder>(color_data, context.value(), true));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
@@ -172,11 +175,14 @@ class LAZWriter {
             }
             LASPP_ASSERT_EQ(record.item_size, bytes.size());
             size_t n_extra = record.item_size;
+            LASPP_ASSERT(context.has_value(),
+                         "Byte14 requires Point14-derived context; ensure item records are "
+                         "ordered so Point14 runs before Byte14.");
 
             std::vector<Byte14Encoder> byte14_encoders;
             byte14_encoders.reserve(n_extra);
             for (size_t j = 0; j < n_extra; j++) {
-              byte14_encoders.emplace_back(bytes[j], context.value_or(0));
+              byte14_encoders.emplace_back(bytes[j], context.value());
             }
             encoders.emplace_back(std::move(byte14_encoders));
             compressed_data.write(reinterpret_cast<const char*>(bytes.data()),
@@ -197,6 +203,9 @@ class LAZWriter {
             if constexpr (is_copy_fromable<RGBNIRData, T>()) {
               copy_from(rgbnir, points[0]);
             }
+            LASPP_ASSERT(context.has_value(),
+                         "RGBNIR14 requires Point14-derived context; ensure item records are "
+                         "ordered so Point14 runs before RGBNIR14.");
             encoders.emplace_back(std::make_unique<RGBNIR14Encoder>(rgbnir, context.value(), true));
             compressed_data.write(reinterpret_cast<const char*>(&rgbnir.rgb), sizeof(ColorData));
             compressed_data.write(reinterpret_cast<const char*>(&rgbnir.nir), sizeof(uint16_t));
@@ -267,6 +276,10 @@ class LAZWriter {
                   } else if constexpr (is_copy_fromable<std::vector<std::byte>, T>()) {
                     copy_from(bytes_to_encode, points[i]);
                   }
+                  LASPP_ASSERT_EQ(bytes_to_encode.size(), enc.size());
+                  LASPP_ASSERT(context.has_value(),
+                               "Byte14 encode requires Point14-derived context; ensure item "
+                               "records are ordered so Point14 runs before Byte14.");
                   for (size_t j = 0; j < enc.size(); j++) {
                     enc[j].encode(*b14_streams[j], bytes_to_encode[j], context.value());
                   }
