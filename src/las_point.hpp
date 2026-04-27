@@ -584,31 +584,6 @@ struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
   }
 };
 
-// copy_from overloads for RGBNIRData <-> point types that carry both RGB and NIR.
-inline void copy_from(RGBNIRData& dest, const LASPointFormat8& src) {
-  dest.rgb = static_cast<const ColorData&>(src);
-  dest.nir = static_cast<const NIRData&>(src).NIR;
-}
-
-inline void copy_from(LASPointFormat8& dest, const RGBNIRData& src) {
-  ColorData& color = static_cast<ColorData&>(dest);
-  NIRData& nir = static_cast<NIRData&>(dest);
-  color = src.rgb;
-  nir.NIR = src.nir;
-}
-
-inline void copy_from(RGBNIRData& dest, const LASPointFormat10& src) {
-  dest.rgb = static_cast<const ColorData&>(src);
-  dest.nir = static_cast<const NIRData&>(src).NIR;
-}
-
-inline void copy_from(LASPointFormat10& dest, const RGBNIRData& src) {
-  ColorData& color = static_cast<ColorData&>(dest);
-  NIRData& nir = static_cast<NIRData&>(dest);
-  color = src.rgb;
-  nir.NIR = src.nir;
-}
-
 #define LASPP_SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \
   switch (format & (~(1 << 7))) {                           \
     case 0:                                                 \

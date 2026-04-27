@@ -163,6 +163,24 @@ LASPointFormat1 convert_laszip_to_format1(const laszip_point& laszip_pt) {
   return pt;
 }
 
+LASPointFormat2 convert_laszip_to_format2(const laszip_point& laszip_pt) {
+  LASPointFormat2 pt;
+  static_cast<LASPointFormat0&>(pt) = convert_laszip_to_format0(laszip_pt);
+  pt.red = laszip_pt.rgb[0];
+  pt.green = laszip_pt.rgb[1];
+  pt.blue = laszip_pt.rgb[2];
+  return pt;
+}
+
+LASPointFormat3 convert_laszip_to_format3(const laszip_point& laszip_pt) {
+  LASPointFormat3 pt;
+  static_cast<LASPointFormat1&>(pt) = convert_laszip_to_format1(laszip_pt);
+  pt.red = laszip_pt.rgb[0];
+  pt.green = laszip_pt.rgb[1];
+  pt.blue = laszip_pt.rgb[2];
+  return pt;
+}
+
 LASPointFormat6 convert_laszip_to_format6(const laszip_point& laszip_pt) {
   LASPointFormat6 pt;
   pt.x = laszip_pt.X;
@@ -205,6 +223,10 @@ PointT convert_laszip_point(const laszip_point& laszip_pt) {
     return convert_laszip_to_format0(laszip_pt);
   } else if constexpr (std::is_same_v<PointT, LASPointFormat1>) {
     return convert_laszip_to_format1(laszip_pt);
+  } else if constexpr (std::is_same_v<PointT, LASPointFormat2>) {
+    return convert_laszip_to_format2(laszip_pt);
+  } else if constexpr (std::is_same_v<PointT, LASPointFormat3>) {
+    return convert_laszip_to_format3(laszip_pt);
   } else if constexpr (std::is_same_v<PointT, LASPointFormat6>) {
     return convert_laszip_to_format6(laszip_pt);
   } else if constexpr (std::is_same_v<PointT, LASPointFormat7>) {
@@ -757,6 +779,20 @@ int main() {
   run_laspp_file_roundtrip<LASPointFormat1>(SmallPointCount);
   run_laspp_file_roundtrip<LASPointFormat1>(MediumPointCount);
   run_laspp_file_roundtrip<LASPointFormat1>(LargePointCount);
+
+  // Format 2 tests - RGB (no GPS time). Keep sizes small to reduce runtime.
+  run_laszip_internal_roundtrip<LASPointFormat2>(500);
+  run_laszip_file_roundtrip<LASPointFormat2>(1, false);
+  run_laszip_file_roundtrip<LASPointFormat2>(SmallPointCount, false);
+  run_laspp_file_roundtrip<LASPointFormat2>(1);
+  run_laspp_file_roundtrip<LASPointFormat2>(SmallPointCount);
+
+  // Format 3 tests - GPS time + RGB. Keep sizes small to reduce runtime.
+  run_laszip_internal_roundtrip<LASPointFormat3>(500);
+  run_laszip_file_roundtrip<LASPointFormat3>(1, false);
+  run_laszip_file_roundtrip<LASPointFormat3>(SmallPointCount, false);
+  run_laspp_file_roundtrip<LASPointFormat3>(1);
+  run_laspp_file_roundtrip<LASPointFormat3>(SmallPointCount);
 
   // Format 6 tests - extended point format with native extension
   // Note: compatibility mode (request_native_extension=false)

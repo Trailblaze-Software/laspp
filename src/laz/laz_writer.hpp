@@ -130,7 +130,12 @@ class LAZWriter {
             if (layered_compression) {
               LASPP_FAIL("Cannot use RGB12 encoder with layered compression");
             }
-            encoders.emplace_back(std::make_unique<RGB12Encoder>(color_data));
+            const bool use_v2 = (record.item_version == LAZItemVersion::Version2);
+            if (use_v2) {
+              encoders.emplace_back(std::make_unique<RGB12EncoderV2>(color_data));
+            } else {
+              encoders.emplace_back(std::make_unique<RGB12EncoderV1>(color_data));
+            }
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             break;
           }
@@ -200,8 +205,26 @@ class LAZWriter {
           }
           case LAZItemType::RGBNIR14: {
             RGBNIRData rgbnir{};
-            if constexpr (is_copy_fromable<RGBNIRData, T>()) {
-              copy_from(rgbnir, points[0]);
+            // Populate RGB and NIR independently so user-defined point types only
+            // need to support ColorData and/or NIRData conversions (not RGBNIRData).
+            using PointT = std::remove_cv_t<T>;
+            if constexpr (is_copy_fromable<ColorData, PointT>()) {
+              copy_from(rgbnir.rgb, points[0]);
+            } else if constexpr (is_copy_assignable<ColorData, PointT>()) {
+              rgbnir.rgb = points[0];
+            } else if constexpr (std::is_base_of_v<ColorData, PointT>) {
+              rgbnir.rgb = static_cast<const ColorData&>(points[0]);
+            }
+
+            if constexpr (is_copy_fromable<NIRData, PointT>()) {
+              NIRData nir{};
+              copy_from(nir, points[0]);
+              rgbnir.nir = nir.NIR;
+            } else if constexpr (is_copy_assignable<NIRData, PointT>()) {
+              NIRData nir = points[0];
+              rgbnir.nir = nir.NIR;
+            } else if constexpr (std::is_base_of_v<NIRData, PointT>) {
+              rgbnir.nir = static_cast<const NIRData&>(points[0]).NIR;
             }
             LASPP_ASSERT(context.has_value(),
                          "RGBNIR14 requires Point14-derived context; ensure item records are "
@@ -288,8 +311,24 @@ class LAZWriter {
                   LASPP_ASSERT(layered_compression);
                   auto& encoder = *enc;
                   RGBNIRData last_value = encoder.last_value();
-                  if constexpr (is_copy_fromable<RGBNIRData, T>()) {
-                    copy_from(last_value, points[i]);
+                  using PointT = std::remove_cv_t<T>;
+                  if constexpr (is_copy_fromable<ColorData, PointT>()) {
+                    copy_from(last_value.rgb, points[i]);
+                  } else if constexpr (is_copy_assignable<ColorData, PointT>()) {
+                    last_value.rgb = points[i];
+                  } else if constexpr (std::is_base_of_v<ColorData, PointT>) {
+                    last_value.rgb = static_cast<const ColorData&>(points[i]);
+                  }
+
+                  if constexpr (is_copy_fromable<NIRData, PointT>()) {
+                    NIRData nir{};
+                    copy_from(nir, points[i]);
+                    last_value.nir = nir.NIR;
+                  } else if constexpr (is_copy_assignable<NIRData, PointT>()) {
+                    NIRData nir = points[i];
+                    last_value.nir = nir.NIR;
+                  } else if constexpr (std::is_base_of_v<NIRData, PointT>) {
+                    last_value.nir = static_cast<const NIRData&>(points[i]).NIR;
                   }
                   auto& streams =
                       *std::get<std::unique_ptr<LayeredOutStreams<RGBNIR14Encoder::NUM_LAYERS>>>(

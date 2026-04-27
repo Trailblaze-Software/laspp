@@ -10,6 +10,7 @@
 
 #include "laz/raw_encoder.hpp"
 #include "laz/stream.hpp"
+#include "utilities/assert.hpp"
 
 namespace laspp {
 
@@ -36,10 +37,12 @@ class RawBytesEncoder {
   }
 
   void encode(OutStream& out_stream, const std::vector<std::byte>& bytes) {
+    LASPP_ASSERT_EQ(bytes.size(), m_last_value.size());
     for (const auto& b : bytes) {
       raw_encode(out_stream, static_cast<uint64_t>(static_cast<uint8_t>(b)), 8);
     }
-    m_last_value = bytes;
+    // Fixed-width payloads must not change length; keep the stream layout stable.
+    std::copy(bytes.begin(), bytes.end(), m_last_value.begin());
   }
 };
 

@@ -130,8 +130,14 @@ class LAZReader {
             break;
           }
           case LAZItemType::RGB12: {
-            encoders.emplace_back(std::make_unique<RGB12Encoder>(
-                *reinterpret_cast<const ColorData*>(compressed_data.data())));
+            const bool use_v2 = (record.item_version == LAZItemVersion::Version2);
+            if (use_v2) {
+              encoders.emplace_back(std::make_unique<RGB12EncoderV2>(
+                  *reinterpret_cast<const ColorData*>(compressed_data.data())));
+            } else {
+              encoders.emplace_back(std::make_unique<RGB12EncoderV1>(
+                  *reinterpret_cast<const ColorData*>(compressed_data.data())));
+            }
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
@@ -305,11 +311,31 @@ class LAZReader {
                     } else {
                       if (i > 0) {
                         auto decoded_val = encoder.decode(layered_in_stream, context.value());
-                        copy_from_if_possible(decompressed_data[i], decoded_val);
+                        // RGBNIR14 decodes to RGBNIRData; copy RGB and NIR independently so
+                        // destination point types only need to support ColorData/NIRData.
+                        if constexpr (std::is_same_v<decltype(decoded_val), RGBNIRData>) {
+                          copy_from_if_possible(decompressed_data[i], decoded_val.rgb);
+                          NIRData nir{};
+                          nir.NIR = decoded_val.nir;
+                          copy_from_if_possible(decompressed_data[i], nir);
+                        } else {
+                          copy_from_if_possible(decompressed_data[i], decoded_val);
+                        }
                         return;
                       }
                     }
-                    copy_from_if_possible(decompressed_data[i], encoder.last_value());
+                    // i == 0 uses encoder.last_value() (the seed). If this is RGBNIRData, we need
+                    // to copy the RGB and NIR components independently because we do not require
+                    // a direct copy_from(RGBNIRData, PointT) overload.
+                    if constexpr (std::is_same_v<EncType, RGBNIR14Encoder>) {
+                      const RGBNIRData& seed = encoder.last_value();
+                      copy_from_if_possible(decompressed_data[i], seed.rgb);
+                      NIRData nir{};
+                      nir.NIR = seed.nir;
+                      copy_from_if_possible(decompressed_data[i], nir);
+                    } else {
+                      copy_from_if_possible(decompressed_data[i], encoder.last_value());
+                    }
                   } else {
                     LASPP_FAIL("Cannot use layered decompression with non-layered encoder.");
                   }
