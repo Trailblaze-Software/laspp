@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -153,6 +154,8 @@ class LAZReader {
           }
           case LAZItemType::RGBNIR14: {
             // Seed is stored as ColorData (6 bytes) followed by uint16_t NIR (2 bytes).
+            constexpr size_t k_seed_bytes = sizeof(ColorData) + sizeof(uint16_t);
+            LASPP_ASSERT(compressed_data.size() >= k_seed_bytes);
             RGBNIRData initial{};
             std::memcpy(&initial.rgb, compressed_data.data(), sizeof(ColorData));
             std::memcpy(&initial.nir, compressed_data.data() + sizeof(ColorData), sizeof(uint16_t));

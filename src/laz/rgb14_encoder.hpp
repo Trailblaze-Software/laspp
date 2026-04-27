@@ -121,7 +121,7 @@ class RGB14Encoder {
     // If the layer is empty, we must not advance the arithmetic decoder state; just reuse
     // the previous value.
     if (!in_streams.non_empty(0)) {
-      Context& context = ensure_context(context_idx);
+      const Context& context = ensure_context(context_idx);
       return context.last_value;
     }
 
@@ -232,20 +232,20 @@ class RGB14Encoder {
       base_last = &m_contexts[prev_active].last_value;
       out_last = &m_contexts[prev_active].last_value;
     }
-    const ColorData& last_value = *base_last;
+    const ColorData& prior = *base_last;
 
     uint8_t red_low = static_cast<uint8_t>(color_data.red);
     uint8_t red_high = static_cast<uint8_t>(color_data.red >> 8);
-    int d_red_low = red_low - static_cast<uint8_t>(last_value.red);
-    int d_red_high = red_high - static_cast<uint8_t>(last_value.red >> 8);
+    int d_red_low = red_low - static_cast<uint8_t>(prior.red);
+    int d_red_high = red_high - static_cast<uint8_t>(prior.red >> 8);
     uint8_t green_low = static_cast<uint8_t>(color_data.green);
     uint8_t green_high = static_cast<uint8_t>(color_data.green >> 8);
     uint8_t blue_low = static_cast<uint8_t>(color_data.blue);
     uint8_t blue_high = static_cast<uint8_t>(color_data.blue >> 8);
 
     uint_fast16_t changed_values =
-        compute_changed_values(last_value, red_low, red_high, green_low, green_high, blue_low,
-                               blue_high, d_red_low, d_red_high);
+        compute_changed_values(prior, red_low, red_high, green_low, green_high, blue_low, blue_high,
+                               d_red_low, d_red_high);
 
     context.changed_values_encoder.encode_symbol(out_stream, changed_values);
     if (changed_values & 1) {
@@ -255,8 +255,8 @@ class RGB14Encoder {
       context.red_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_high));
     }
     if (changed_values & (1 << 6)) {
-      encode_green_blue_channels(context, out_stream, changed_values, last_value, green_low,
-                                 green_high, blue_low, blue_high, d_red_low, d_red_high);
+      encode_green_blue_channels(context, out_stream, changed_values, prior, green_low, green_high,
+                                 blue_low, blue_high, d_red_low, d_red_high);
     }
 
     *out_last = color_data;

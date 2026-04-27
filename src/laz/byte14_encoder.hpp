@@ -46,8 +46,6 @@ class Byte14Encoder {
   }
 
  public:
-  static constexpr int NUM_LAYERS = 1;
-
   explicit Byte14Encoder(std::byte initial, uint8_t context)
       : m_active_context(context), m_last_value_context(context) {
     m_contexts[context].last_value = initial;

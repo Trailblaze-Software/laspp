@@ -591,8 +591,10 @@ inline void copy_from(RGBNIRData& dest, const LASPointFormat8& src) {
 }
 
 inline void copy_from(LASPointFormat8& dest, const RGBNIRData& src) {
-  static_cast<ColorData&>(dest) = src.rgb;
-  static_cast<NIRData&>(dest).NIR = src.nir;
+  ColorData& color = static_cast<ColorData&>(dest);
+  NIRData& nir = static_cast<NIRData&>(dest);
+  color = src.rgb;
+  nir.NIR = src.nir;
 }
 
 inline void copy_from(RGBNIRData& dest, const LASPointFormat10& src) {
@@ -601,8 +603,10 @@ inline void copy_from(RGBNIRData& dest, const LASPointFormat10& src) {
 }
 
 inline void copy_from(LASPointFormat10& dest, const RGBNIRData& src) {
-  static_cast<ColorData&>(dest) = src.rgb;
-  static_cast<NIRData&>(dest).NIR = src.nir;
+  ColorData& color = static_cast<ColorData&>(dest);
+  NIRData& nir = static_cast<NIRData&>(dest);
+  color = src.rgb;
+  nir.NIR = src.nir;
 }
 
 #define LASPP_SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \

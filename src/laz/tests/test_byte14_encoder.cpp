@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <cstring>
 #include <memory>
 #include <random>
-#include <sstream>
+#include <span>
 #include <vector>
 
 #include "laz/byte14_encoder.hpp"
@@ -18,7 +19,6 @@ using namespace laspp;
 static std::string encode_slot(const std::vector<std::byte>& values, uint8_t initial_context = 0,
                                const std::vector<uint8_t>& contexts = {}) {
   LASPP_ASSERT_GT(values.size(), 0);
-  std::stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
   LayeredOutStreams<1> out;
 
   Byte14Encoder encoder(values[0], initial_context);
@@ -34,17 +34,14 @@ static std::string encode_slot(const std::vector<std::byte>& values, uint8_t ini
 static void decode_and_check(const std::string& encoded, const std::vector<std::byte>& values,
                              uint8_t initial_context = 0,
                              const std::vector<uint8_t>& contexts = {}) {
-  std::span<const std::byte> size_span(reinterpret_cast<const std::byte*>(encoded.data()),
-                                       encoded.size() + sizeof(uint32_t));
   // LayeredInStreams<1> needs a layer-size header followed by the data.
   // Build a buffer: [uint32_t size][data].
   uint32_t data_size = static_cast<uint32_t>(encoded.size());
   std::vector<std::byte> buf(sizeof(uint32_t) + encoded.size());
   LASPP_ASSERT_GE(buf.size(), sizeof(uint32_t));
-  LASPP_ASSERT(buf.data() != nullptr);
   std::memcpy(buf.data(), &data_size, sizeof(uint32_t));
   if (!encoded.empty()) {
-    LASPP_ASSERT(buf.data() != nullptr);
+    LASPP_ASSERT_GE(buf.size(), sizeof(uint32_t) + encoded.size());
     std::memcpy(buf.data() + sizeof(uint32_t), encoded.data(), encoded.size());
   }
 
