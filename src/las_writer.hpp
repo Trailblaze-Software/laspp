@@ -152,7 +152,11 @@ class LASWriter {
           if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
             laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB12));
           } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
-            laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB14));
+            if constexpr (std::is_base_of_v<NIRData, PointType>) {
+              laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGBNIR14));
+            } else {
+              laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB14));
+            }
           } else {
             static_assert(!std::is_base_of_v<ColorData, PointType>,
                           "ColorData is only supported alongside point format 0 and 6");
@@ -219,6 +223,7 @@ class LASWriter {
       copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
       copy_if_possible<GPSTime>(points_to_write[i], points[i]);
       copy_if_possible<ColorData>(points_to_write[i], points[i]);
+      copy_if_possible<NIRData>(points_to_write[i], points[i]);
       copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
     });
 

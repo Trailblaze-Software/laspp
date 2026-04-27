@@ -14,8 +14,10 @@
 #include "laz/gpstime11_encoder.hpp"
 #include "laz/point10_encoder.hpp"
 #include "laz/point14_encoder.hpp"
+#include "laz/raw_bytes_encoder.hpp"
 #include "laz/rgb12_encoder.hpp"
 #include "laz/rgb14_encoder.hpp"
+#include "laz/rgbnir14_encoder.hpp"
 
 namespace laspp {
 
@@ -25,8 +27,9 @@ namespace laspp {
 // so each encoder is paired with exactly one LayeredInStreams/OutStreams<1>.
 typedef std::variant<std::unique_ptr<LASPointFormat0Encoder>, std::unique_ptr<GPSTime11Encoder>,
                      std::unique_ptr<RGB12Encoder>, std::unique_ptr<RGB14Encoder>,
-                     std::unique_ptr<BytesEncoder>, std::unique_ptr<LASPointFormat6Encoder>,
-                     std::vector<Byte14Encoder>>
+                     std::unique_ptr<BytesEncoder>, std::unique_ptr<LASPointFormat6EncoderV3>,
+                     std::unique_ptr<LASPointFormat6EncoderV4>, std::unique_ptr<RawBytesEncoder>,
+                     std::unique_ptr<RGBNIR14Encoder>, std::vector<Byte14Encoder>>
     LAZEncoder;
 
 }  // namespace laspp

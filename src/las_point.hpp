@@ -507,6 +507,25 @@ struct LASPP_PACKED NIRData {
   }
 };
 
+// Combined RGB + NIR data used by RGBNIR14Encoder and LAS point formats 8 and 10.
+struct RGBNIRData {
+  ColorData rgb;
+  uint16_t nir = 0;
+
+  bool operator==(const RGBNIRData&) const = default;
+
+  static RGBNIRData RandomData(std::mt19937_64& gen) {
+    RGBNIRData data;
+    data.rgb = ColorData::RandomData(gen);
+    data.nir = static_cast<uint16_t>(gen());
+    return data;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const RGBNIRData& d) {
+    return os << d.rgb << "NIR: " << d.nir << std::endl;
+  }
+};
+
 struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
   static constexpr int PointFormat = 8;
   static constexpr int MinVersion = 4;
@@ -564,6 +583,27 @@ struct LASPP_PACKED LASPointFormat10 : LASPointFormat9, ColorData, NIRData {
               << static_cast<const NIRData&>(lpf10) << std::endl;
   }
 };
+
+// copy_from overloads for RGBNIRData <-> point types that carry both RGB and NIR.
+inline void copy_from(RGBNIRData& dest, const LASPointFormat8& src) {
+  dest.rgb = static_cast<const ColorData&>(src);
+  dest.nir = static_cast<const NIRData&>(src).NIR;
+}
+
+inline void copy_from(LASPointFormat8& dest, const RGBNIRData& src) {
+  static_cast<ColorData&>(dest) = src.rgb;
+  static_cast<NIRData&>(dest).NIR = src.nir;
+}
+
+inline void copy_from(RGBNIRData& dest, const LASPointFormat10& src) {
+  dest.rgb = static_cast<const ColorData&>(src);
+  dest.nir = static_cast<const NIRData&>(src).NIR;
+}
+
+inline void copy_from(LASPointFormat10& dest, const RGBNIRData& src) {
+  static_cast<ColorData&>(dest) = src.rgb;
+  static_cast<NIRData&>(dest).NIR = src.nir;
+}
 
 #define LASPP_SWITCH_OVER_POINT_TYPE_RETURN(format, f, ...) \
   switch (format & (~(1 << 7))) {                           \

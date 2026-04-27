@@ -22,8 +22,10 @@
 #include "laz/layered_stream.hpp"
 #include "laz/laz_reader.hpp"
 #include "laz/point10_encoder.hpp"
+#include "laz/raw_bytes_encoder.hpp"
 #include "laz/rgb12_encoder.hpp"
 #include "laz/rgb14_encoder.hpp"
+#include "laz/rgbnir14_encoder.hpp"
 #include "laz_vlr.hpp"
 
 namespace laspp {
@@ -65,8 +67,9 @@ class LAZWriter {
     using Byte14OutStreams = std::vector<std::unique_ptr<LayeredOutStreams<1>>>;
 
     std::vector<LAZEncoder> encoders;
-    std::vector<std::variant<std::unique_ptr<LayeredOutStreams<1>>,
-                             std::unique_ptr<LayeredOutStreams<9>>, Byte14OutStreams>>
+    std::vector<
+        std::variant<std::unique_ptr<LayeredOutStreams<1>>, std::unique_ptr<LayeredOutStreams<2>>,
+                     std::unique_ptr<LayeredOutStreams<9>>, Byte14OutStreams>>
         layered_streams;
     std::vector<size_t> encoder_num_layers;
     size_t total_layer_count = 0;
@@ -91,14 +94,20 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(point), T>()) {
               point = points[0];
             }
-            encoders.emplace_back(std::make_unique<LASPointFormat6Encoder>(point));
-            context = std::get<std::unique_ptr<LASPointFormat6Encoder>>(encoders.back())
-                          ->get_active_context();
+            if (record.item_version == LAZItemVersion::Version4) {
+              encoders.emplace_back(std::make_unique<LASPointFormat6EncoderV4>(point));
+              context = std::get<std::unique_ptr<LASPointFormat6EncoderV4>>(encoders.back())
+                            ->get_active_context();
+            } else {
+              encoders.emplace_back(std::make_unique<LASPointFormat6EncoderV3>(point));
+              context = std::get<std::unique_ptr<LASPointFormat6EncoderV3>>(encoders.back())
+                            ->get_active_context();
+            }
             compressed_data.write(reinterpret_cast<const char*>(&point), sizeof(LASPointFormat6));
             layered_streams.emplace_back(
-                std::make_unique<LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS>>());
-            encoder_num_layers.push_back(LASPointFormat6Encoder::NUM_LAYERS);
-            total_layer_count += LASPointFormat6Encoder::NUM_LAYERS;
+                std::make_unique<LayeredOutStreams<LASPointFormat6EncoderV4::NUM_LAYERS>>());
+            encoder_num_layers.push_back(LASPointFormat6EncoderV4::NUM_LAYERS);
+            total_layer_count += LASPointFormat6EncoderV4::NUM_LAYERS;
             break;
           }
           case LAZItemType::GPSTime11: {
@@ -130,7 +139,8 @@ class LAZWriter {
             if constexpr (is_copy_assignable<decltype(color_data), T>()) {
               color_data = points[0];
             }
-            encoders.emplace_back(std::make_unique<RGB14Encoder>(color_data, context.value()));
+            encoders.emplace_back(
+                std::make_unique<RGB14Encoder>(color_data, context.value(), true));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             layered_streams.emplace_back(
                 std::make_unique<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>());
@@ -182,13 +192,40 @@ class LAZWriter {
             total_layer_count += n_extra;
             break;
           }
+          case LAZItemType::RGBNIR14: {
+            RGBNIRData rgbnir{};
+            if constexpr (is_copy_fromable<RGBNIRData, T>()) {
+              copy_from(rgbnir, points[0]);
+            }
+            encoders.emplace_back(std::make_unique<RGBNIR14Encoder>(rgbnir, context.value(), true));
+            compressed_data.write(reinterpret_cast<const char*>(&rgbnir.rgb), sizeof(ColorData));
+            compressed_data.write(reinterpret_cast<const char*>(&rgbnir.nir), sizeof(uint16_t));
+            layered_streams.emplace_back(
+                std::make_unique<LayeredOutStreams<RGBNIR14Encoder::NUM_LAYERS>>());
+            encoder_num_layers.push_back(RGBNIR14Encoder::NUM_LAYERS);
+            total_layer_count += RGBNIR14Encoder::NUM_LAYERS;
+            break;
+          }
           case LAZItemType::Short:
           case LAZItemType::Integer:
           case LAZItemType::Long:
           case LAZItemType::Float:
-          case LAZItemType::Double:
+          case LAZItemType::Double: {
+            std::vector<std::byte> bytes(record.item_size, std::byte{0});
+            if constexpr (is_copy_assignable<std::vector<std::byte>, T>()) {
+              bytes = points[0];
+            } else if constexpr (is_copy_fromable<std::vector<std::byte>, T>()) {
+              copy_from(bytes, points[0]);
+            }
+            if (layered_compression) {
+              LASPP_FAIL("Cannot use RawBytes encoder with layered compression");
+            }
+            encoders.emplace_back(std::make_unique<RawBytesEncoder>(bytes));
+            compressed_data.write(reinterpret_cast<const char*>(bytes.data()),
+                                  static_cast<int64_t>(bytes.size()));
+            break;
+          }
           case LAZItemType::Wavepacket13:
-          case LAZItemType::RGBNIR14:
           case LAZItemType::Wavepacket14:
           default:
             LASPP_FAIL("Currently unsupported LAZ item type: ",
@@ -233,29 +270,42 @@ class LAZWriter {
                   for (size_t j = 0; j < enc.size(); j++) {
                     enc[j].encode(*b14_streams[j], bytes_to_encode[j], context.value());
                   }
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(*enc)>,
+                                                    RGBNIR14Encoder>) {
+                  LASPP_ASSERT(layered_compression);
+                  auto& encoder = *enc;
+                  RGBNIRData last_value = encoder.last_value();
+                  if constexpr (is_copy_fromable<RGBNIRData, T>()) {
+                    copy_from(last_value, points[i]);
+                  }
+                  auto& streams =
+                      *std::get<std::unique_ptr<LayeredOutStreams<RGBNIR14Encoder::NUM_LAYERS>>>(
+                          layered_streams[encoder_index]);
+                  encoder.encode(streams, last_value, context.value());
                 } else if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
                                                             decltype(enc->last_value())>>,
                                                         T>()) {
                   auto& encoder = *enc;
                   using EncoderType = std::remove_reference_t<decltype(encoder)>;
-                  decltype(encoder.last_value()) value_to_encode = points[i];
-                  if constexpr (std::is_same_v<EncoderType, LASPointFormat6Encoder>) {
+                  decltype(encoder.last_value()) last_value = points[i];
+                  if constexpr (std::is_same_v<EncoderType, LASPointFormat6EncoderV3> ||
+                                std::is_same_v<EncoderType, LASPointFormat6EncoderV4>) {
                     LASPP_ASSERT(layered_compression);
-                    auto& streams = *std::get<
-                        std::unique_ptr<LayeredOutStreams<LASPointFormat6Encoder::NUM_LAYERS>>>(
-                        layered_streams[encoder_index]);
-                    encoder.encode(streams, value_to_encode);
+                    auto& streams =
+                        *std::get<std::unique_ptr<LayeredOutStreams<EncoderType::NUM_LAYERS>>>(
+                            layered_streams[encoder_index]);
+                    encoder.encode(streams, last_value);
                     context = encoder.get_active_context();
                   } else if constexpr (std::is_same_v<EncoderType, RGB14Encoder>) {
                     LASPP_ASSERT(layered_compression);
                     auto& streams =
                         *std::get<std::unique_ptr<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>>(
                             layered_streams[encoder_index]);
-                    encoder.encode(streams, value_to_encode, context.value());
+                    encoder.encode(streams, last_value, context.value());
                   } else {
                     LASPP_ASSERT(!layered_compression);
                     LASPP_ASSERT(compressed_out_stream != nullptr);
-                    encoder.encode(*compressed_out_stream, value_to_encode);
+                    encoder.encode(*compressed_out_stream, last_value);
                   }
                 }
               },

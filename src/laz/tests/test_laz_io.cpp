@@ -269,5 +269,44 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
   }
 
+  // RGBNIR14 (LAS 1.4 point format 8) roundtrip test
+  {
+    std::stringstream stream;
+    std::unique_ptr<LAZSpecialVLRContent> laz_special_vlr;
+
+    std::mt19937_64 gen(42424242);
+    std::vector<LASPointFormat8> points;
+    points.reserve(150);
+    for (size_t i = 0; i < 150; i++) {
+      points.push_back(LASPointFormat8::RandomData(gen));
+    }
+
+    {
+      LAZWriter writer(stream, LAZCompressor::LayeredChunked);
+      writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::Point14));
+      writer.special_vlr().add_item_record(LAZItemRecord(LAZItemType::RGBNIR14));
+
+      writer.write_chunk(std::span<LASPointFormat8>(points));
+      laz_special_vlr = std::make_unique<LAZSpecialVLRContent>(writer.special_vlr());
+    }
+
+    {
+      LAZReader reader(*laz_special_vlr);
+      reader.read_chunk_table(stream, points.size());
+      std::vector<LASPointFormat8> decompressed_points(points.size());
+
+      size_t compressed_size = reader.chunk_table().compressed_chunk_size(0);
+      std::vector<std::byte> compressed_chunk(compressed_size);
+      stream.seekg(static_cast<int64_t>(reader.chunk_table().chunk_offset(0)));
+      stream.read(reinterpret_cast<char*>(compressed_chunk.data()),
+                  static_cast<int64_t>(compressed_size));
+      reader.decompress_chunk(compressed_chunk, std::span<LASPointFormat8>(decompressed_points));
+
+      for (size_t i = 0; i < points.size(); i++) {
+        LASPP_ASSERT_EQ(decompressed_points[i], points[i]);
+      }
+    }
+  }
+
   return 0;
 }

@@ -21,8 +21,10 @@
 #include "laz/layered_stream.hpp"
 #include "laz/point10_encoder.hpp"
 #include "laz/point14_encoder.hpp"
+#include "laz/raw_bytes_encoder.hpp"
 #include "laz/rgb12_encoder.hpp"
 #include "laz/rgb14_encoder.hpp"
+#include "laz/rgbnir14_encoder.hpp"
 #include "laz/stream.hpp"
 #include "laz_vlr.hpp"
 #include "utilities/assert.hpp"
@@ -76,7 +78,6 @@ class LAZReader {
     }
 
     LASPP_CHECK_SEEK(in_stream, chunk_table_offset, std::ios::beg);
-
     m_chunk_table.emplace(LAZChunkTable(in_stream, chunk_size(), n_points));
   }
 
@@ -91,16 +92,24 @@ class LAZReader {
       for (LAZItemRecord record : m_special_vlr.items_records) {
         switch (record.item_type) {
           case LAZItemType::Point14: {
-            encoders.emplace_back(std::make_unique<LASPointFormat6Encoder>(
-                *reinterpret_cast<const LASPointFormat6*>(compressed_data.data())));
-            context = std::get<std::unique_ptr<LASPointFormat6Encoder>>(encoders.back())
-                          ->get_active_context();
+            const LASPointFormat6 seed =
+                *reinterpret_cast<const LASPointFormat6*>(compressed_data.data());
+            if (record.item_version == LAZItemVersion::Version4) {
+              encoders.emplace_back(std::make_unique<LASPointFormat6EncoderV4>(seed));
+              context = std::get<std::unique_ptr<LASPointFormat6EncoderV4>>(encoders.back())
+                            ->get_active_context();
+            } else {
+              encoders.emplace_back(std::make_unique<LASPointFormat6EncoderV3>(seed));
+              context = std::get<std::unique_ptr<LASPointFormat6EncoderV3>>(encoders.back())
+                            ->get_active_context();
+            }
             compressed_data = compressed_data.subspan(sizeof(LASPointFormat6));
             break;
           }
           case LAZItemType::RGB14: {
             encoders.emplace_back(std::make_unique<RGB14Encoder>(
-                *reinterpret_cast<const ColorData*>(compressed_data.data()), context.value()));
+                *reinterpret_cast<const ColorData*>(compressed_data.data()), context.value(),
+                true));
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
@@ -142,13 +151,29 @@ class LAZReader {
             compressed_data = compressed_data.subspan(record.item_size);
             break;
           }
+          case LAZItemType::RGBNIR14: {
+            // Seed is stored as ColorData (6 bytes) followed by uint16_t NIR (2 bytes).
+            RGBNIRData initial{};
+            std::memcpy(&initial.rgb, compressed_data.data(), sizeof(ColorData));
+            std::memcpy(&initial.nir, compressed_data.data() + sizeof(ColorData), sizeof(uint16_t));
+            const bool use_v3_quirk = (record.item_version == LAZItemVersion::Version3);
+            encoders.emplace_back(
+                std::make_unique<RGBNIR14Encoder>(initial, context.value(), use_v3_quirk));
+            compressed_data = compressed_data.subspan(sizeof(ColorData) + sizeof(uint16_t));
+            break;
+          }
           case LAZItemType::Short:
           case LAZItemType::Integer:
           case LAZItemType::Long:
           case LAZItemType::Float:
-          case LAZItemType::Double:
+          case LAZItemType::Double: {
+            std::vector<std::byte> last_bytes(record.item_size);
+            std::copy_n(compressed_data.data(), record.item_size, last_bytes.begin());
+            encoders.emplace_back(std::make_unique<RawBytesEncoder>(last_bytes));
+            compressed_data = compressed_data.subspan(record.item_size);
+            break;
+          }
           case LAZItemType::Wavepacket13:
-          case LAZItemType::RGBNIR14:
           case LAZItemType::Wavepacket14:
           default:
             LASPP_FAIL("Currently unsupported LAZ item type: ", LAZItemType(record.item_type), " (",
@@ -194,8 +219,9 @@ class LAZReader {
       // Byte14 items: one LayeredInStreams<1> per slot, stored as a vector.
       // Standard items: one LayeredInStreams<N> per encoder.
       using Byte14InStreams = std::vector<std::unique_ptr<LayeredInStreams<1>>>;
-      std::vector<std::variant<std::unique_ptr<LayeredInStreams<1>>,
-                               std::unique_ptr<LayeredInStreams<9>>, Byte14InStreams>>
+      std::vector<
+          std::variant<std::unique_ptr<LayeredInStreams<1>>, std::unique_ptr<LayeredInStreams<2>>,
+                       std::unique_ptr<LayeredInStreams<9>>, Byte14InStreams>>
           layered_in_streams_for_encoders;
       for (const LAZEncoder& encoder : encoders) {
         std::visit(
@@ -254,14 +280,19 @@ class LAZReader {
                     LayeredInStreams<EncType::NUM_LAYERS>& layered_in_stream =
                         *std::get<std::unique_ptr<LayeredInStreams<EncType::NUM_LAYERS>>>(
                             layered_in_streams_for_encoders[encoder_idx]);
-                    if constexpr (std::is_same_v<EncType, LASPointFormat6Encoder>) {
+                    if constexpr (std::is_same_v<EncType, LASPointFormat6EncoderV3> ||
+                                  std::is_same_v<EncType, LASPointFormat6EncoderV4>) {
                       if (i > 0) {
-                        encoder.decode(layered_in_stream);
+                        auto decoded_val = encoder.decode(layered_in_stream);
                         context = encoder.get_active_context();
+                        copy_from_if_possible(decompressed_data[i], decoded_val);
+                        return;
                       }
                     } else {
                       if (i > 0) {
-                        encoder.decode(layered_in_stream, context.value());
+                        auto decoded_val = encoder.decode(layered_in_stream, context.value());
+                        copy_from_if_possible(decompressed_data[i], decoded_val);
+                        return;
                       }
                     }
                     copy_from_if_possible(decompressed_data[i], encoder.last_value());

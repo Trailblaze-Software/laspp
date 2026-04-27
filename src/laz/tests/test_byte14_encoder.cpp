@@ -41,7 +41,9 @@ static void decode_and_check(const std::string& encoded, const std::vector<std::
   uint32_t data_size = static_cast<uint32_t>(encoded.size());
   std::vector<std::byte> buf(sizeof(uint32_t) + encoded.size());
   std::memcpy(buf.data(), &data_size, sizeof(uint32_t));
-  std::memcpy(buf.data() + sizeof(uint32_t), encoded.data(), encoded.size());
+  if (!encoded.empty()) {
+    std::memcpy(buf.data() + sizeof(uint32_t), encoded.data(), encoded.size());
+  }
 
   std::span<const std::byte> size_sp(buf.data(), sizeof(uint32_t));
   std::span<const std::byte> data_sp(buf.data() + sizeof(uint32_t), encoded.size());

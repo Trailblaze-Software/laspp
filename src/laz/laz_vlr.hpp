@@ -220,9 +220,10 @@ inline std::ostream& operator<<(std::ostream& os, const LAZItemType& type) {
 
 enum class LAZItemVersion : uint16_t {
   NoCompression = 0,
-  Version1 = 1,          // Wavepacket 13
-  Version2 = 2,          // Point 10, GPSTime 11, RGB 12, Byte
-  ArithmeticCoding = 3,  // Point 14, RGB 14, RGBNIR 14, Wavepacket 14, Byte 14
+  Version1 = 1,  // Wavepacket 13
+  Version2 = 2,  // Point 10, GPSTime 11, RGB 12, Byte
+  Version3 = 3,  // Point 14, RGB 14, RGBNIR 14, Wavepacket 14, Byte 14 (LASzip default)
+  Version4 = 4,  // Point 14, RGB 14, RGBNIR 14, Wavepacket 14, Byte 14 (layered v4)
 };
 
 static constexpr LAZItemVersion laz_item_version_from_type(LAZItemType type) {
@@ -245,7 +246,9 @@ static constexpr LAZItemVersion laz_item_version_from_type(LAZItemType type) {
     case LAZItemType::RGBNIR14:
     case LAZItemType::Wavepacket14:
     case LAZItemType::Byte14:
-      return LAZItemVersion::ArithmeticCoding;
+      // Interop: LASzip writes these as version 3 in its LAZ special VLR even
+      // for layered-chunked compression.
+      return LAZItemVersion::Version3;
   }
   LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
 }
@@ -261,8 +264,11 @@ inline std::ostream& operator<<(std::ostream& os, const LAZItemVersion& version)
     case LAZItemVersion::Version2:
       os << "Version 2";
       break;
-    case LAZItemVersion::ArithmeticCoding:
-      os << "Arithmetic coding";
+    case LAZItemVersion::Version3:
+      os << "Version 3";
+      break;
+    case LAZItemVersion::Version4:
+      os << "Version 4";
       break;
     default:
       os << "Unknown " << static_cast<uint16_t>(version);
