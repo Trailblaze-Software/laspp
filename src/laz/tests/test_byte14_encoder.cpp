@@ -40,8 +40,11 @@ static void decode_and_check(const std::string& encoded, const std::vector<std::
   // Build a buffer: [uint32_t size][data].
   uint32_t data_size = static_cast<uint32_t>(encoded.size());
   std::vector<std::byte> buf(sizeof(uint32_t) + encoded.size());
+  LASPP_ASSERT_GE(buf.size(), sizeof(uint32_t));
+  LASPP_ASSERT(buf.data() != nullptr);
   std::memcpy(buf.data(), &data_size, sizeof(uint32_t));
   if (!encoded.empty()) {
+    LASPP_ASSERT(buf.data() != nullptr);
     std::memcpy(buf.data() + sizeof(uint32_t), encoded.data(), encoded.size());
   }
 
