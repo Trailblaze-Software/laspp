@@ -69,8 +69,11 @@ class Byte14Encoder {
   }
 
   void encode(LayeredOutStreams<1>& stream, std::byte value, uint8_t ctx) {
-    std::byte& lv = m_contexts[ctx].initialized ? m_contexts[m_active_context].last_value
-                                                : m_contexts[ctx].last_value;
+    // Mirror decode-side "context-switch quirk": when switching to an uninitialized context,
+    // apply the diff to the newly created context's last value; otherwise apply it to the
+    // previous active context's last value.
+    m_last_value_context = m_contexts[ctx].initialized ? m_active_context : ctx;
+    std::byte& lv = m_contexts[m_last_value_context].last_value;
     Context& c = ensure_context(ctx);
     uint8_t diff = static_cast<uint8_t>(value) - static_cast<uint8_t>(lv);
     c.encoder.encode_symbol(stream[0], diff);

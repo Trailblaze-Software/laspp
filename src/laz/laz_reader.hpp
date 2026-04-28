@@ -73,7 +73,7 @@ class LAZReader {
 
   void read_chunk_table(std::istream& in_stream, size_t n_points) {
     int64_t chunk_table_offset;
-    LASPP_CHECK_READ(in_stream, &chunk_table_offset, sizeof(size_t));
+    LASPP_CHECK_READ(in_stream, &chunk_table_offset, sizeof(chunk_table_offset));
     if (chunk_table_offset == -1) {
       LASPP_UNIMPLEMENTED("Reading chunk table from LAS file");
     }
@@ -93,8 +93,9 @@ class LAZReader {
       for (LAZItemRecord record : m_special_vlr.items_records) {
         switch (record.item_type) {
           case LAZItemType::Point14: {
-            const LASPointFormat6 seed =
-                *reinterpret_cast<const LASPointFormat6*>(compressed_data.data());
+            LASPP_ASSERT(compressed_data.size() >= sizeof(LASPointFormat6));
+            LASPointFormat6 seed{};
+            std::memcpy(&seed, compressed_data.data(), sizeof(LASPointFormat6));
             if (record.item_version == LAZItemVersion::Version4) {
               encoders.emplace_back(std::make_unique<LASPointFormat6EncoderV4>(seed));
               context = std::get<std::unique_ptr<LASPointFormat6EncoderV4>>(encoders.back())

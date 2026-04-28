@@ -160,6 +160,8 @@ class LAZWriter {
             std::vector<std::byte> bytes(record.item_size);
             if constexpr (is_copy_assignable<decltype(bytes), T>()) {
               bytes = points[0];
+            } else if constexpr (is_copy_fromable<std::vector<std::byte>, T>()) {
+              copy_from(bytes, points[0]);
             }
             LASPP_ASSERT_EQ(record.item_size, bytes.size());
             if (layered_compression) {
@@ -249,6 +251,7 @@ class LAZWriter {
             } else if constexpr (is_copy_fromable<std::vector<std::byte>, T>()) {
               copy_from(bytes, points[0]);
             }
+            LASPP_ASSERT_EQ(record.item_size, bytes.size());
             if (layered_compression) {
               LASPP_FAIL("Cannot use RawBytes encoder with layered compression");
             }
@@ -334,6 +337,31 @@ class LAZWriter {
                       *std::get<std::unique_ptr<LayeredOutStreams<RGBNIR14Encoder::NUM_LAYERS>>>(
                           layered_streams[encoder_index]);
                   encoder.encode(streams, last_value, context.value());
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(*enc)>, BytesEncoder>) {
+                  LASPP_ASSERT(!layered_compression);
+                  LASPP_ASSERT(compressed_out_stream != nullptr);
+                  auto& encoder = *enc;
+                  std::vector<std::byte> bytes_to_encode = encoder.last_value();
+                  if constexpr (is_copy_assignable<std::vector<std::byte>, T>()) {
+                    bytes_to_encode = points[i];
+                  } else if constexpr (is_copy_fromable<std::vector<std::byte>, T>()) {
+                    copy_from(bytes_to_encode, points[i]);
+                  }
+                  LASPP_ASSERT_EQ(bytes_to_encode.size(), encoder.last_value().size());
+                  encoder.encode(*compressed_out_stream, bytes_to_encode);
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(*enc)>,
+                                                    RawBytesEncoder>) {
+                  LASPP_ASSERT(!layered_compression);
+                  LASPP_ASSERT(compressed_out_stream != nullptr);
+                  auto& encoder = *enc;
+                  std::vector<std::byte> bytes_to_encode = encoder.last_value();
+                  if constexpr (is_copy_assignable<std::vector<std::byte>, T>()) {
+                    bytes_to_encode = points[i];
+                  } else if constexpr (is_copy_fromable<std::vector<std::byte>, T>()) {
+                    copy_from(bytes_to_encode, points[i]);
+                  }
+                  LASPP_ASSERT_EQ(bytes_to_encode.size(), encoder.last_value().size());
+                  encoder.encode(*compressed_out_stream, bytes_to_encode);
                 } else if constexpr (is_copy_assignable<std::remove_const_t<std::remove_reference_t<
                                                             decltype(enc->last_value())>>,
                                                         T>()) {
