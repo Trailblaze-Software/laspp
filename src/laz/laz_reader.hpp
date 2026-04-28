@@ -95,7 +95,7 @@ class LAZReader {
           case LAZItemType::Point14: {
             LASPP_ASSERT(compressed_data.size() >= sizeof(LASPointFormat6));
             LASPointFormat6 seed{};
-            std::memcpy(&seed, compressed_data.data(), sizeof(LASPointFormat6));
+            std::memcpy(&seed, compressed_data.data(), sizeof(seed));
             if (record.item_version == LAZItemVersion::Version4) {
               encoders.emplace_back(std::make_unique<LASPointFormat6EncoderV4>(seed));
               context = std::get<std::unique_ptr<LASPointFormat6EncoderV4>>(encoders.back())
