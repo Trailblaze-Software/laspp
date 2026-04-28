@@ -61,7 +61,7 @@ class RGB12EncoderT {
     to_bytes(m_last_value, last);
 
     uint8_t cur[6];
-    std::memcpy(cur, last, 6);
+    std::memcpy(cur, last, sizeof(cur));
 
     const uint32_t sym = static_cast<uint32_t>(m_byte_used_encoder.decode_symbol(in_stream));
 

@@ -253,6 +253,26 @@ static constexpr LAZItemVersion laz_item_version_from_type(LAZItemType type) {
   LASPP_FAIL("Unknown LAZ item type: ", static_cast<uint16_t>(type));
 }
 
+static constexpr bool laz_item_version_matches_type(LAZItemType type, LAZItemVersion version) {
+  // Interop: LASzip typically writes v3 for these item types (even when layered-chunked),
+  // but other writers may legitimately emit v4. Treat v3/v4 as compatible "families"
+  // for the item types that support both.
+  const LAZItemVersion expected = laz_item_version_from_type(type);
+  if (version == expected) return true;
+
+  const bool type_allows_v3_or_v4 =
+      (type == LAZItemType::Point14 || type == LAZItemType::RGB14 ||
+       type == LAZItemType::RGBNIR14 || type == LAZItemType::Wavepacket14 ||
+       type == LAZItemType::Byte14);
+
+  if (type_allows_v3_or_v4 &&
+      (version == LAZItemVersion::Version3 || version == LAZItemVersion::Version4)) {
+    return true;
+  }
+
+  return false;
+}
+
 inline std::ostream& operator<<(std::ostream& os, const LAZItemVersion& version) {
   switch (version) {
     case LAZItemVersion::NoCompression:
@@ -314,7 +334,7 @@ struct LAZSpecialVLRContent : LAZSpecialVLRPt1 {
     for (auto& item : items_records) {
       LASPP_CHECK_READ(is, &item, sizeof(LAZItemRecord));
       LASPP_ASSERT(check_size_from_type(item.item_type, item.item_size));
-      LASPP_ASSERT(item.item_version == laz_item_version_from_type(item.item_type));
+      LASPP_ASSERT(laz_item_version_matches_type(item.item_type, item.item_version));
     }
   }
 
