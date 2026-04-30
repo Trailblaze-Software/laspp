@@ -6,6 +6,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <numeric>
 #include <span>
@@ -74,7 +75,6 @@ class LASWriter {
  public:
   explicit LASWriter(std::iostream& ofs, uint8_t point_format, uint16_t num_extra_bytes = 0)
       : m_output_stream(ofs) {
-    LASPP_ASSERT_EQ(num_extra_bytes, 0);
     header().set_point_format(point_format, num_extra_bytes);
     header().m_offset_to_point_data = static_cast<uint32_t>(header().size());
     // placeholder
@@ -153,7 +153,11 @@ class LASWriter {
           if constexpr (std::is_base_of_v<LASPointFormat0, PointType>) {
             laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB12));
           } else if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
-            laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB14));
+            if constexpr (std::is_base_of_v<NIRData, PointType>) {
+              laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGBNIR14));
+            } else {
+              laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::RGB14));
+            }
           } else {
             static_assert(!std::is_base_of_v<ColorData, PointType>,
                           "ColorData is only supported alongside point format 0 and 6");
@@ -161,6 +165,15 @@ class LASWriter {
         }
         if constexpr (std::is_base_of_v<WavePacketData, PointType>) {
           laz_vlr_content.add_item_record(LAZItemRecord(LAZItemType::Wavepacket13));
+        }
+        if (m_header.num_extra_bytes() > 0) {
+          if constexpr (std::is_base_of_v<LASPointFormat6, PointType>) {
+            laz_vlr_content.add_item_record(
+                LAZItemRecord(LAZItemType::Byte14, m_header.num_extra_bytes()));
+          } else {
+            laz_vlr_content.add_item_record(
+                LAZItemRecord(LAZItemType::Byte, m_header.num_extra_bytes()));
+          }
         }
         std::stringstream laz_vlr_content_stream;
         laz_vlr_content.write_to(laz_vlr_content_stream);
@@ -211,6 +224,7 @@ class LASWriter {
       copy_if_possible<LASPointFormat6>(points_to_write[i], points[i]);
       copy_if_possible<GPSTime>(points_to_write[i], points[i]);
       copy_if_possible<ColorData>(points_to_write[i], points[i]);
+      copy_if_possible<NIRData>(points_to_write[i], points[i]);
       copy_if_possible<WavePacketData>(points_to_write[i], points[i]);
     });
 

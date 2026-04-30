@@ -127,5 +127,31 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     }
   }
 
+  // Accept Version4 item records for v3/v4-capable item types.
+  {
+    std::stringstream stream;
+    {
+      LAZSpecialVLRContent laz_vlr(LAZCompressor::LayeredChunked);
+      laz_vlr.add_item_record(LAZItemRecord(LAZItemType::Point14));
+      laz_vlr.add_item_record(LAZItemRecord(LAZItemType::RGB14));
+      laz_vlr.add_item_record(LAZItemRecord(LAZItemType::RGBNIR14));
+      laz_vlr.add_item_record(LAZItemRecord(LAZItemType::Byte14, 5));
+
+      // Force Version4 in the serialized VLR payload.
+      for (auto &r : laz_vlr.items_records) r.item_version = LAZItemVersion::Version4;
+
+      laz_vlr.write_to(stream);
+    }
+
+    {
+      LAZSpecialVLRContent laz_vlr(stream);
+      LASPP_ASSERT_EQ(laz_vlr.compressor, LAZCompressor::LayeredChunked);
+      LASPP_ASSERT_EQ(laz_vlr.items_records.size(), 4);
+      for (const auto &r : laz_vlr.items_records) {
+        LASPP_ASSERT_EQ(r.item_version, LAZItemVersion::Version4);
+      }
+    }
+  }
+
   return 0;
 }

@@ -507,6 +507,25 @@ struct LASPP_PACKED NIRData {
   }
 };
 
+// Combined RGB + NIR data used by RGBNIR14Encoder and LAS point formats 8 and 10.
+struct RGBNIRData {
+  ColorData rgb;
+  uint16_t nir = 0;
+
+  bool operator==(const RGBNIRData&) const = default;
+
+  static RGBNIRData RandomData(std::mt19937_64& gen) {
+    RGBNIRData data;
+    data.rgb = ColorData::RandomData(gen);
+    data.nir = static_cast<uint16_t>(gen());
+    return data;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const RGBNIRData& d) {
+    return os << d.rgb << "NIR: " << d.nir << std::endl;
+  }
+};
+
 struct LASPP_PACKED LASPointFormat8 : LASPointFormat7, NIRData {
   static constexpr int PointFormat = 8;
   static constexpr int MinVersion = 4;

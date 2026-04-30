@@ -33,7 +33,7 @@ class RGB14Encoder {
 
   std::array<Context, 4> m_contexts;
   uint8_t m_active_context;
-  uint8_t m_last_value_context;
+  bool m_use_laszip_v3_context_quirk = false;
 
   Context& ensure_context(uint8_t idx) {
     if (!m_contexts[idx].initialized) {
@@ -51,12 +51,13 @@ class RGB14Encoder {
 
   using EncodedType = ColorData;
 
-  const EncodedType& last_value() const { return m_contexts[m_last_value_context].last_value; }
+  const EncodedType& last_value() const { return m_contexts[m_active_context].last_value; }
 
-  explicit RGB14Encoder(ColorData initial_color_data, uint8_t context) : m_active_context(context) {
+  explicit RGB14Encoder(ColorData initial_color_data, uint8_t context,
+                        bool use_laszip_v3_context_quirk = false)
+      : m_active_context(context), m_use_laszip_v3_context_quirk(use_laszip_v3_context_quirk) {
     m_contexts[context].last_value = initial_color_data;
     m_contexts[context].initialized = true;
-    m_last_value_context = context;
   }
 
  private:
@@ -116,32 +117,47 @@ class RGB14Encoder {
 
  public:
   ColorData decode(LayeredInStreams<NUM_LAYERS>& in_streams, uint8_t context_idx) {
-    InStream& in_stream = in_streams[0];
-    // Yet another cursed bug in LASzip where the last item
-    // is not switched to the new context
-    m_last_value_context = m_contexts[context_idx].initialized ? m_active_context : context_idx;
-    ColorData& last_value = m_contexts[m_last_value_context].last_value;
-    Context& context = ensure_context(context_idx);
+    // LASzip only emits RGB layer bytes when at least one RGB value changed in the chunk.
+    // If the layer is empty, we must not advance the arithmetic decoder state; just reuse
+    // the previous value.
+    if (!in_streams.non_empty(0)) {
+      const Context& context = ensure_context(context_idx);
+      return context.last_value;
+    }
 
+    InStream& in_stream = in_streams[0];
+    const uint8_t prev_active = m_active_context;
+    const bool switched = (context_idx != prev_active);
+    const bool target_was_initialized = m_contexts[context_idx].initialized;
+
+    Context& context = ensure_context(context_idx);
+    ColorData* base_last = &context.last_value;
+    ColorData* out_last = &context.last_value;
+    if (m_use_laszip_v3_context_quirk && switched && target_was_initialized) {
+      base_last = &m_contexts[prev_active].last_value;
+      out_last = &m_contexts[prev_active].last_value;
+    }
+    ColorData working = *base_last;
     uint_fast16_t changed_values = context.changed_values_encoder.decode_symbol(in_stream);
 
-    uint8_t red_low = static_cast<uint8_t>(last_value.red);
-    uint8_t red_high = static_cast<uint8_t>(last_value.red >> 8);
+    uint8_t red_low = static_cast<uint8_t>(working.red);
+    uint8_t red_high = static_cast<uint8_t>(working.red >> 8);
 
     decode_red_channels(context, in_stream, changed_values, red_low, red_high);
 
     if (changed_values & (1 << 6)) {
-      decode_green_blue_channels(context, in_stream, changed_values, last_value, red_low, red_high);
-      last_value.red = static_cast<uint16_t>(
+      decode_green_blue_channels(context, in_stream, changed_values, working, red_low, red_high);
+      working.red = static_cast<uint16_t>(
           (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
     } else {
-      last_value.red = static_cast<uint16_t>(
+      working.red = static_cast<uint16_t>(
           (static_cast<uint16_t>(red_low) | (static_cast<uint16_t>(red_high) << 8)));
-      last_value.green = last_value.red;
-      last_value.blue = last_value.red;
+      working.green = working.red;
+      working.blue = working.red;
     }
 
-    return last_value;
+    *out_last = working;
+    return working;
   }
 
  private:
@@ -204,25 +220,32 @@ class RGB14Encoder {
   void encode(LayeredOutStreams<NUM_LAYERS>& out_streams, ColorData color_data,
               uint8_t context_idx) {
     OutStream& out_stream = out_streams[0];
-    // Yet another cursed bug in LASzip where the last item
-    // is not switched to the new context
-    ColorData& last_value = m_contexts[context_idx].initialized
-                                ? m_contexts[m_active_context].last_value
-                                : m_contexts[context_idx].last_value;
+    const uint8_t prev_active = m_active_context;
+    const bool switched = (context_idx != prev_active);
+    const bool target_was_initialized = m_contexts[context_idx].initialized;
+
     Context& context = ensure_context(context_idx);
+
+    ColorData* base_last = &context.last_value;
+    ColorData* out_last = &context.last_value;
+    if (m_use_laszip_v3_context_quirk && switched && target_was_initialized) {
+      base_last = &m_contexts[prev_active].last_value;
+      out_last = &m_contexts[prev_active].last_value;
+    }
+    const ColorData& prior = *base_last;
 
     uint8_t red_low = static_cast<uint8_t>(color_data.red);
     uint8_t red_high = static_cast<uint8_t>(color_data.red >> 8);
-    int d_red_low = red_low - static_cast<uint8_t>(last_value.red);
-    int d_red_high = red_high - static_cast<uint8_t>(last_value.red >> 8);
+    int d_red_low = red_low - static_cast<uint8_t>(prior.red);
+    int d_red_high = red_high - static_cast<uint8_t>(prior.red >> 8);
     uint8_t green_low = static_cast<uint8_t>(color_data.green);
     uint8_t green_high = static_cast<uint8_t>(color_data.green >> 8);
     uint8_t blue_low = static_cast<uint8_t>(color_data.blue);
     uint8_t blue_high = static_cast<uint8_t>(color_data.blue >> 8);
 
     uint_fast16_t changed_values =
-        compute_changed_values(last_value, red_low, red_high, green_low, green_high, blue_low,
-                               blue_high, d_red_low, d_red_high);
+        compute_changed_values(prior, red_low, red_high, green_low, green_high, blue_low, blue_high,
+                               d_red_low, d_red_high);
 
     context.changed_values_encoder.encode_symbol(out_stream, changed_values);
     if (changed_values & 1) {
@@ -232,11 +255,11 @@ class RGB14Encoder {
       context.red_high_encoder.encode_symbol(out_stream, static_cast<uint8_t>(d_red_high));
     }
     if (changed_values & (1 << 6)) {
-      encode_green_blue_channels(context, out_stream, changed_values, last_value, green_low,
-                                 green_high, blue_low, blue_high, d_red_low, d_red_high);
+      encode_green_blue_channels(context, out_stream, changed_values, prior, green_low, green_high,
+                                 blue_low, blue_high, d_red_low, d_red_high);
     }
 
-    last_value = color_data;
+    *out_last = color_data;
   }
 };
 

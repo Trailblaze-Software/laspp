@@ -587,6 +587,9 @@ class LASPointFormat6EncoderBase {
   }
 };
 
-using LASPointFormat6Encoder = LASPointFormat6EncoderBase<>;
+// Default to v3 for backwards compatibility.
+using LASPointFormat6Encoder = LASPointFormat6EncoderBase<3>;
+using LASPointFormat6EncoderV3 = LASPointFormat6EncoderBase<3>;
+using LASPointFormat6EncoderV4 = LASPointFormat6EncoderBase<4>;
 
 }  // namespace laspp

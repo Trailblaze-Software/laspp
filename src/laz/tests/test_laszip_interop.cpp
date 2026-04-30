@@ -129,6 +129,9 @@ void populate_laszip_point(const PointT& point, laszip_point& las_point) {
     las_point.rgb[1] = point.green;
     las_point.rgb[2] = point.blue;
   }
+  if constexpr (std::is_base_of_v<NIRData, PointT>) {
+    las_point.rgb[3] = static_cast<const NIRData&>(point).NIR;
+  }
 }
 
 // Conversion functions from laszip_point to PointT
@@ -157,6 +160,24 @@ LASPointFormat1 convert_laszip_to_format1(const laszip_point& laszip_pt) {
   LASPointFormat1 pt;
   static_cast<LASPointFormat0&>(pt) = convert_laszip_to_format0(laszip_pt);
   pt.gps_time.f64 = laszip_pt.gps_time;
+  return pt;
+}
+
+LASPointFormat2 convert_laszip_to_format2(const laszip_point& laszip_pt) {
+  LASPointFormat2 pt;
+  static_cast<LASPointFormat0&>(pt) = convert_laszip_to_format0(laszip_pt);
+  pt.red = laszip_pt.rgb[0];
+  pt.green = laszip_pt.rgb[1];
+  pt.blue = laszip_pt.rgb[2];
+  return pt;
+}
+
+LASPointFormat3 convert_laszip_to_format3(const laszip_point& laszip_pt) {
+  LASPointFormat3 pt;
+  static_cast<LASPointFormat1&>(pt) = convert_laszip_to_format1(laszip_pt);
+  pt.red = laszip_pt.rgb[0];
+  pt.green = laszip_pt.rgb[1];
+  pt.blue = laszip_pt.rgb[2];
   return pt;
 }
 
@@ -189,16 +210,29 @@ LASPointFormat7 convert_laszip_to_format7(const laszip_point& laszip_pt) {
   return pt;
 }
 
+LASPointFormat8 convert_laszip_to_format8(const laszip_point& laszip_pt) {
+  LASPointFormat8 pt;
+  static_cast<LASPointFormat7&>(pt) = convert_laszip_to_format7(laszip_pt);
+  static_cast<NIRData&>(pt).NIR = laszip_pt.rgb[3];
+  return pt;
+}
+
 template <typename PointT>
 PointT convert_laszip_point(const laszip_point& laszip_pt) {
   if constexpr (std::is_same_v<PointT, LASPointFormat0>) {
     return convert_laszip_to_format0(laszip_pt);
   } else if constexpr (std::is_same_v<PointT, LASPointFormat1>) {
     return convert_laszip_to_format1(laszip_pt);
+  } else if constexpr (std::is_same_v<PointT, LASPointFormat2>) {
+    return convert_laszip_to_format2(laszip_pt);
+  } else if constexpr (std::is_same_v<PointT, LASPointFormat3>) {
+    return convert_laszip_to_format3(laszip_pt);
   } else if constexpr (std::is_same_v<PointT, LASPointFormat6>) {
     return convert_laszip_to_format6(laszip_pt);
   } else if constexpr (std::is_same_v<PointT, LASPointFormat7>) {
     return convert_laszip_to_format7(laszip_pt);
+  } else if constexpr (std::is_same_v<PointT, LASPointFormat8>) {
+    return convert_laszip_to_format8(laszip_pt);
   } else {
     LASPP_FAIL("Unsupported point format for conversion");
   }
@@ -519,9 +553,14 @@ void run_laszip_internal_roundtrip(size_t n_points) {
           point_items[i] = reinterpret_cast<unsigned char*>(&laszip_point_instance.rgb);
           continue;
         }
+        if (laszip.items[i].type == LASitem::RGBNIR14) {
+          point_items[i] = reinterpret_cast<unsigned char*>(&laszip_point_instance.rgb);
+          continue;
+        }
       }
       LASPP_FAIL("Unexpected item type in LASzip items for point format >= 6");
     }
+
     for (const PointT& point : points) {
       populate_laszip_point(point, laszip_point_instance);
       LASPP_ASSERT(zipper.write(point_items.data()));
@@ -531,6 +570,8 @@ void run_laszip_internal_roundtrip(size_t n_points) {
 
   std::string compressed = compressed_stream.str();
   LASPP_ASSERT_GE(compressed.size(), sizeof(uint64_t));
+
+  // (Previously: LASreadPoint oracle for debugging; removed to keep this test lean.)
 
   uint64_t chunk_table_offset = 0;
   std::memcpy(&chunk_table_offset, compressed.data(), sizeof(chunk_table_offset));
@@ -548,7 +589,34 @@ void run_laszip_internal_roundtrip(size_t n_points) {
 
   std::vector<PointT> decoded(points.size());
   LAZReader laz_reader(laz_vlr);
-  laz_reader.decompress_chunk(std::span<std::byte>(chunk_data), std::span<PointT>(decoded));
+
+  // Decode using LAS++'s chunk scanning (LASzip's chunk table encoding differs).
+  {
+    std::stringstream data_stream(std::ios::in | std::ios::out | std::ios::binary);
+    data_stream.write(compressed.data(), static_cast<std::streamsize>(compressed.size()));
+    data_stream.seekg(0, std::ios::beg);
+
+    // `read_chunk_table` expects the stream positioned at the start of point data.
+    laz_reader.read_chunk_table(data_stream, points.size());
+    const LAZChunkTable& table = laz_reader.chunk_table();
+    (void)table;
+
+    for (size_t ci = 0; ci < table.num_chunks(); ci++) {
+      const size_t file_off = table.chunk_offset(ci);
+      const size_t sz = table.compressed_chunk_size(ci);
+      data_stream.seekg(static_cast<std::streamoff>(file_off), std::ios::beg);
+      std::vector<std::byte> buf(sz);
+      LASPP_CHECK_READ(data_stream, buf.data(), static_cast<std::streamsize>(sz));
+
+      const size_t out_off = table.decompressed_chunk_offsets().at(ci);
+      const size_t npts = table.points_per_chunk().at(ci);
+      LASPP_ASSERT_LE(out_off + npts, decoded.size());
+      laz_reader.decompress_chunk(std::span<const std::byte>(buf),
+                                  std::span<PointT>(decoded).subspan(out_off, npts));
+
+      // (Previously: per-chunk LASzip oracles for debugging; removed to keep this test lean.)
+    }
+  }
 
   for (size_t i = 0; i < points.size(); i++) {
     LASPP_ASSERT_EQ(decoded[i], points[i], "Point ", i, " mismatch in internal roundtrip");
@@ -712,6 +780,20 @@ int main() {
   run_laspp_file_roundtrip<LASPointFormat1>(MediumPointCount);
   run_laspp_file_roundtrip<LASPointFormat1>(LargePointCount);
 
+  // Format 2 tests - RGB (no GPS time). Keep sizes small to reduce runtime.
+  run_laszip_internal_roundtrip<LASPointFormat2>(500);
+  run_laszip_file_roundtrip<LASPointFormat2>(1, false);
+  run_laszip_file_roundtrip<LASPointFormat2>(SmallPointCount, false);
+  run_laspp_file_roundtrip<LASPointFormat2>(1);
+  run_laspp_file_roundtrip<LASPointFormat2>(SmallPointCount);
+
+  // Format 3 tests - GPS time + RGB. Keep sizes small to reduce runtime.
+  run_laszip_internal_roundtrip<LASPointFormat3>(500);
+  run_laszip_file_roundtrip<LASPointFormat3>(1, false);
+  run_laszip_file_roundtrip<LASPointFormat3>(SmallPointCount, false);
+  run_laspp_file_roundtrip<LASPointFormat3>(1);
+  run_laspp_file_roundtrip<LASPointFormat3>(SmallPointCount);
+
   // Format 6 tests - extended point format with native extension
   // Note: compatibility mode (request_native_extension=false)
   // is not supported by LAS++ reader - it only supports native
@@ -736,6 +818,17 @@ int main() {
   run_laspp_file_roundtrip<LASPointFormat7>(SmallPointCount);
   run_laspp_file_roundtrip<LASPointFormat7>(MediumPointCount);
   run_laspp_file_roundtrip<LASPointFormat7>(LargePointCount);
+
+  // Format 8 tests - extended point format with RGB + NIR
+  run_laszip_internal_roundtrip<LASPointFormat8>(1000);
+  run_laszip_file_roundtrip<LASPointFormat8>(1, true);
+  run_laszip_file_roundtrip<LASPointFormat8>(SmallPointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat8>(MediumPointCount, true);
+  run_laszip_file_roundtrip<LASPointFormat8>(LargePointCount, true);
+  run_laspp_file_roundtrip<LASPointFormat8>(1);
+  run_laspp_file_roundtrip<LASPointFormat8>(SmallPointCount);
+  run_laspp_file_roundtrip<LASPointFormat8>(MediumPointCount);
+  run_laspp_file_roundtrip<LASPointFormat8>(LargePointCount);
 
   // Spatial index interop: LASzip writes .lax sidecar, las++ reads and validates it
   test_spatial_index_laszip_creates_laspp_reads();
