@@ -147,8 +147,9 @@ class LAZWriter {
             LASPP_ASSERT(context.has_value(),
                          "RGB14 requires Point14-derived context; ensure item records are ordered "
                          "so Point14 runs before RGB14.");
+            const bool use_v3_context_quirk = (record.item_version == LAZItemVersion::Version3);
             encoders.emplace_back(
-                std::make_unique<RGB14Encoder>(color_data, context.value(), true));
+                std::make_unique<RGB14Encoder>(color_data, context.value(), use_v3_context_quirk));
             compressed_data.write(reinterpret_cast<const char*>(&color_data), sizeof(ColorData));
             layered_streams.emplace_back(
                 std::make_unique<LayeredOutStreams<RGB14Encoder::NUM_LAYERS>>());
@@ -231,7 +232,9 @@ class LAZWriter {
             LASPP_ASSERT(context.has_value(),
                          "RGBNIR14 requires Point14-derived context; ensure item records are "
                          "ordered so Point14 runs before RGBNIR14.");
-            encoders.emplace_back(std::make_unique<RGBNIR14Encoder>(rgbnir, context.value(), true));
+            const bool use_v3_context_quirk = (record.item_version == LAZItemVersion::Version3);
+            encoders.emplace_back(
+                std::make_unique<RGBNIR14Encoder>(rgbnir, context.value(), use_v3_context_quirk));
             compressed_data.write(reinterpret_cast<const char*>(&rgbnir.rgb), sizeof(ColorData));
             compressed_data.write(reinterpret_cast<const char*>(&rgbnir.nir), sizeof(uint16_t));
             layered_streams.emplace_back(

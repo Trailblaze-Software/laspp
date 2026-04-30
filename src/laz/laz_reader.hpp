@@ -112,32 +112,40 @@ class LAZReader {
             LASPP_ASSERT(context.has_value(),
                          "RGB14 requires Point14-derived context; ensure item records are ordered "
                          "so Point14 runs before RGB14.");
-            encoders.emplace_back(std::make_unique<RGB14Encoder>(
-                *reinterpret_cast<const ColorData*>(compressed_data.data()), context.value(),
-                true));
+            LASPP_ASSERT(compressed_data.size() >= sizeof(ColorData));
+            ColorData seed{};
+            std::memcpy(&seed, compressed_data.data(), sizeof(seed));
+            const bool use_v3_context_quirk = (record.item_version == LAZItemVersion::Version3);
+            encoders.emplace_back(
+                std::make_unique<RGB14Encoder>(seed, context.value(), use_v3_context_quirk));
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
           }
           case LAZItemType::Point10: {
-            encoders.emplace_back(std::make_unique<LASPointFormat0Encoder>(
-                *reinterpret_cast<const LASPointFormat0*>(compressed_data.data())));
+            LASPP_ASSERT(compressed_data.size() >= sizeof(LASPointFormat0));
+            LASPointFormat0 seed{};
+            std::memcpy(&seed, compressed_data.data(), sizeof(seed));
+            encoders.emplace_back(std::make_unique<LASPointFormat0Encoder>(seed));
             compressed_data = compressed_data.subspan(sizeof(LASPointFormat0));
             break;
           }
           case LAZItemType::GPSTime11: {
-            encoders.emplace_back(std::make_unique<GPSTime11Encoder>(
-                *reinterpret_cast<const GPSTime*>(compressed_data.data())));
+            LASPP_ASSERT(compressed_data.size() >= sizeof(GPSTime));
+            GPSTime seed{};
+            std::memcpy(&seed, compressed_data.data(), sizeof(seed));
+            encoders.emplace_back(std::make_unique<GPSTime11Encoder>(seed));
             compressed_data = compressed_data.subspan(sizeof(GPSTime));
             break;
           }
           case LAZItemType::RGB12: {
+            LASPP_ASSERT(compressed_data.size() >= sizeof(ColorData));
+            ColorData seed{};
+            std::memcpy(&seed, compressed_data.data(), sizeof(seed));
             const bool use_v2 = (record.item_version == LAZItemVersion::Version2);
             if (use_v2) {
-              encoders.emplace_back(std::make_unique<RGB12EncoderV2>(
-                  *reinterpret_cast<const ColorData*>(compressed_data.data())));
+              encoders.emplace_back(std::make_unique<RGB12EncoderV2>(seed));
             } else {
-              encoders.emplace_back(std::make_unique<RGB12EncoderV1>(
-                  *reinterpret_cast<const ColorData*>(compressed_data.data())));
+              encoders.emplace_back(std::make_unique<RGB12EncoderV1>(seed));
             }
             compressed_data = compressed_data.subspan(sizeof(ColorData));
             break;
