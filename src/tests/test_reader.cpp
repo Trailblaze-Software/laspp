@@ -101,6 +101,83 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   }
 
   {
+    // Some LAS writers store WKT without a trailing null byte, using the full
+    // VLR record length for the WKT text (record_id 2112).
+    const std::string wkt = "WKT_WITHOUT_NULL_BYTE";
+    std::stringstream stream;
+    {
+      LASWriter writer(stream, 0, 0);
+
+      LASVLR wkt_vlr;
+      wkt_vlr.reserved = 0;
+      string_to_arr("LASF_Projection", wkt_vlr.user_id);
+      wkt_vlr.record_id = 2112;
+      wkt_vlr.record_length_after_header = static_cast<uint16_t>(wkt.size());
+      string_to_arr("OGC WKT", wkt_vlr.description);
+      writer.write_vlr(wkt_vlr,
+                       std::span(reinterpret_cast<const std::byte*>(wkt.data()), wkt.size()));
+
+      std::vector<LASPointFormat0> points(1);
+      writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    LASReader reader(stream);
+    LASPP_ASSERT_EQ(reader.coordinate_wkt().value(), wkt);
+    LASPP_ASSERT(!reader.math_wkt().has_value());
+  }
+
+  {
+    // Test math transform WKT (record_id 2111) written via write_wkt with the
+    // math_transform_wkt flag. The writer includes a trailing null byte.
+    const std::string math_wkt = "MATH_TRANSFORM_WKT";
+    std::stringstream stream;
+    {
+      LASWriter writer(stream, 0, 0);
+
+      // Write coordinate WKT first so we can verify wkt() returns it preferentially
+      writer.write_wkt("COORDINATE_WKT");
+      writer.write_wkt(math_wkt, true);
+
+      std::vector<LASPointFormat0> points(1);
+      writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    LASReader reader(stream);
+    LASPP_ASSERT_EQ(reader.coordinate_wkt().value(), "COORDINATE_WKT");
+    LASPP_ASSERT_EQ(reader.math_wkt().value(), math_wkt);
+    // wkt() should return coordinate_wkt when both are present
+    LASPP_ASSERT_EQ(reader.wkt().value(), "COORDINATE_WKT");
+  }
+
+  {
+    // Math transform WKT without a trailing null byte (record_id 2111), matching
+    // the no-null-byte pattern tested for record_id 2112 above.
+    const std::string math_wkt = "MATH_WKT_NO_NULL";
+    std::stringstream stream;
+    {
+      LASWriter writer(stream, 0, 0);
+
+      LASVLR wkt_vlr;
+      wkt_vlr.reserved = 0;
+      string_to_arr("LASF_Projection", wkt_vlr.user_id);
+      wkt_vlr.record_id = 2111;
+      wkt_vlr.record_length_after_header = static_cast<uint16_t>(math_wkt.size());
+      string_to_arr("OGC WKT", wkt_vlr.description);
+      writer.write_vlr(
+          wkt_vlr, std::span(reinterpret_cast<const std::byte*>(math_wkt.data()), math_wkt.size()));
+
+      std::vector<LASPointFormat0> points(1);
+      writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    LASReader reader(stream);
+    LASPP_ASSERT_EQ(reader.math_wkt().value(), math_wkt);
+    LASPP_ASSERT(!reader.coordinate_wkt().has_value());
+    // wkt() falls back to math_wkt when coordinate_wkt is absent
+    LASPP_ASSERT_EQ(reader.wkt().value(), math_wkt);
+  }
+
+  {
     // Format 5 includes WavePacketData which is not supported in compressed mode
     // So we only test uncompressed format 5
     for (uint8_t format : {uint8_t{5}}) {

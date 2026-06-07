@@ -147,6 +147,8 @@ class LASGeoKeys {
 };
 
 // Fixed-width LAS string (user_id, description, ...): may omit a trailing NUL.
+// Also used for WKT VLR payloads where some writers omit the trailing null and
+// store the WKT in the full record_length_after_header bytes.
 inline std::string_view las_packed_string(std::string_view raw) {
   const auto z = raw.find('\0');
   return z == std::string_view::npos ? raw : raw.substr(0, z);
