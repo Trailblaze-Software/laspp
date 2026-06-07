@@ -116,14 +116,14 @@ class LASReader {
           if (record.is_ogc_math_transform_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
             LASPP_CHECK_READ(*m_input_stream, wkt.data(), record.record_length_after_header);
-            std::string wkt_string(wkt.begin(), wkt.end());
+            std::string wkt_string(las_packed_string(std::string_view(wkt.data(), wkt.size())));
             LASPP_ASSERT(!m_math_wkt.has_value(), "Multiple math WKTs found in header");
             m_math_wkt.emplace(wkt_string);
           }
           if (record.is_ogc_coordinate_system_wkt()) {
             std::vector<char> wkt(record.record_length_after_header);
             LASPP_CHECK_READ(*m_input_stream, wkt.data(), record.record_length_after_header);
-            std::string wkt_string(wkt.data(), wkt.size() - 1);
+            std::string wkt_string(las_packed_string(std::string_view(wkt.data(), wkt.size())));
             LASPP_ASSERT(!m_coordinate_wkt.has_value(), "Multiple coordinate WKTs found in header");
             m_coordinate_wkt.emplace(wkt_string);
           }

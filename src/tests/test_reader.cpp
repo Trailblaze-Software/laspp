@@ -101,6 +101,32 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   }
 
   {
+    // Some LAS writers store WKT without a trailing null byte, using the full
+    // VLR record length for the WKT text (record_id 2112).
+    const std::string wkt = "WKT_WITHOUT_NULL_BYTE";
+    std::stringstream stream;
+    {
+      LASWriter writer(stream, 0, 0);
+
+      LASVLR wkt_vlr;
+      wkt_vlr.reserved = 0;
+      string_to_arr("LASF_Projection", wkt_vlr.user_id);
+      wkt_vlr.record_id = 2112;
+      wkt_vlr.record_length_after_header = static_cast<uint16_t>(wkt.size());
+      string_to_arr("OGC WKT", wkt_vlr.description);
+      writer.write_vlr(wkt_vlr,
+                       std::span(reinterpret_cast<const std::byte*>(wkt.data()), wkt.size()));
+
+      std::vector<LASPointFormat0> points(1);
+      writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    LASReader reader(stream);
+    LASPP_ASSERT_EQ(reader.coordinate_wkt().value(), wkt);
+    LASPP_ASSERT(!reader.math_wkt().has_value());
+  }
+
+  {
     // Format 5 includes WavePacketData which is not supported in compressed mode
     // So we only test uncompressed format 5
     for (uint8_t format : {uint8_t{5}}) {
