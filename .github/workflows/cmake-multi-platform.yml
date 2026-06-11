@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
 # SPDX-License-Identifier: MIT
 
-name: Multi-platform Build
+name: Build and Test
 on:
   push:
     branches: ["main"]
@@ -9,44 +9,60 @@ on:
     branches: ["main"]
 jobs:
   build:
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        build_type: [Release, Debug, Profile]
-        cpp_compiler: [g++, clang++, cl]
         include:
-          - os: windows-latest
-            cpp_compiler: cl
-          - os: ubuntu-latest
-            cpp_compiler: g++
-          - os: ubuntu-latest
-            cpp_compiler: clang++
-        exclude:
-          - os: windows-latest
-            cpp_compiler: g++
-          - os: windows-latest
-            cpp_compiler: clang++
-          - os: ubuntu-latest
-            cpp_compiler: cl
-          - os: windows-latest
-            build_type: Profile
+          - name: Ubuntu GCC Release
+            os: ubuntu-24.04
+            cxx: g++-14
+            build-type: Release
+          - name: Ubuntu GCC Debug
+            os: ubuntu-24.04
+            cxx: g++-14
+            build-type: Debug
+          - name: Ubuntu Clang Release
+            os: ubuntu-24.04
+            cxx: clang++-18
+            build-type: Release
+          - name: Ubuntu Clang Debug
+            os: ubuntu-24.04
+            cxx: clang++-18
+            build-type: Debug
+          - name: macOS Release
+            os: macos-14
+            cxx: clang++
+            build-type: Release
+          - name: macOS Debug
+            os: macos-14
+            cxx: clang++
+            build-type: Debug
+          - name: Windows MSVC Release
+            os: windows-latest
+            cxx: cl
+            build-type: Release
+          - name: Windows MSVC Debug
+            os: windows-latest
+            cxx: cl
+            build-type: Debug
     steps:
       - uses: actions/checkout@v4
-      - name: Set reusable strings
-        id: strings
-        shell: bash
-        run: |
-          echo "build-output-dir=${{ github.workspace }}/build" >> \
-          "$GITHUB_OUTPUT"
-      - name: Configure CMake
+      - name: Install GCC 14
+        if: matrix.cxx == 'g++-14'
+        run: sudo apt-get update && sudo apt-get install -y g++-14
+      - name: Install Clang 18
+        if: matrix.cxx == 'clang++-18'
+        run: sudo apt-get update && sudo apt-get install -y clang-18
+      - name: Configure
+        env:
+          CXX: ${{ matrix.cxx }}
         run: >
-          cmake -B ${{ steps.strings.outputs.build-output-dir }}  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -S ${{ github.workspace }}
+          cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -DLASPP_BUILD_TESTS=ON -DLASPP_BUILD_BENCHMARK=OFF -DLASPP_AGGRESSIVE_OPTIMIZATIONS=OFF
 
       - name: Build
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} -j 2
+        run: cmake --build build --config ${{ matrix.build-type }} --parallel
       - name: Test
-        working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        run: ctest --output-on-failure --build-config ${{ matrix.build_type }}
+        run: ctest --test-dir build --output-on-failure --build-config ${{ matrix.build-type }}

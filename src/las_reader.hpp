@@ -59,6 +59,12 @@ class LASReader {
   std::vector<LASVLRWithGlobalOffset> m_vlr_headers;
   std::vector<LASEVLRWithGlobalOffset> m_evlr_headers;
 
+  // Optional progress callback: called with fraction [0,1] as chunks are processed.
+  // Serialised under m_progress_mutex so callers do not need to provide a
+  // thread-safe callback.
+  std::function<void(double)> m_progress_callback;
+  mutable std::mutex m_progress_mutex;
+
   // Unified I/O helper: zero-copy view for memory-mapped path, owned buffer for stream path.
   // The returned object is non-copyable; its `data` span is always valid for its lifetime.
   struct ReadBuffer {
@@ -288,6 +294,13 @@ class LASReader {
 
   const LASHeader& header() const { return m_header; }
 
+  // Set a progress callback that will be called with fraction [0,1] during
+  // read_chunks / read_chunks_list. Invocations are serialised under a mutex
+  // so the callback does not need to be thread-safe.
+  void set_progress_callback(std::function<void(double)> cb) {
+    m_progress_callback = std::move(cb);
+  }
+
   const std::vector<LASVLRWithGlobalOffset>& vlr_headers() const { return m_vlr_headers; }
   const std::vector<LASEVLRWithGlobalOffset>& evlr_headers() const { return m_evlr_headers; }
 
@@ -340,7 +353,11 @@ class LASReader {
       const auto* las_point =
           reinterpret_cast<const PointType*>(buf.data.data() + i * point_record_length);
       copy_if_possible<LASPointFormat0>(*las_point, points[i]);
+      copy_if_possible<LASPointFormat6>(*las_point, points[i]);
       copy_if_possible<GPSTime>(*las_point, points[i]);
+      copy_if_possible<ColorData>(*las_point, points[i]);
+      copy_if_possible<NIRData>(*las_point, points[i]);
+      copy_if_possible<WavePacketData>(*las_point, points[i]);
     }
   }
 
@@ -404,7 +421,9 @@ class LASReader {
         size_t file_data_offset = header().offset_to_point_data() + compressed_start_offset;
         auto buf = get_bytes(file_data_offset, total_compressed_size);
 
-        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
+        size_t chunks_done = 0;
+        const size_t total_chunks = chunk_indices.size();
+        utilities::parallel_for(size_t{0}, total_chunks, [&](size_t idx) {
           size_t chunk_index = chunk_indices[idx];
           size_t start_offset = chunk_table.chunk_offset(chunk_index) - compressed_start_offset;
           size_t compressed_chunk_size = chunk_table.compressed_chunk_size(chunk_index);
@@ -415,16 +434,24 @@ class LASReader {
                                 chunk_table.decompressed_chunk_offsets()[chunk_indexes.first];
           size_t n_points = chunk_table.points_per_chunk()[chunk_index];
           if (chunk_index == 0) {
-            LASPP_ASSERT_EQ(point_offset, 0u);
+            LASPP_ASSERT_EQ(point_offset, 0U);
           }
           m_laz_reader->decompress_chunk(compressed_chunk,
                                          output_location.subspan(point_offset, n_points));
+
+          if (m_progress_callback) {
+            std::lock_guard<std::mutex> lock(m_progress_mutex);
+            size_t done = ++chunks_done;
+            m_progress_callback(static_cast<double>(done) / static_cast<double>(total_chunks));
+          }
         });
       } else {
         // Stream-based path: read chunks in parallel (with mutex protection) and decompress.
         // This overlaps I/O and decompression - while one thread decompresses, others can read.
         std::mutex stream_mutex;
-        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t idx) {
+        size_t chunks_done = 0;
+        const size_t total_chunks = chunk_indices.size();
+        utilities::parallel_for(size_t{0}, total_chunks, [&](size_t idx) {
           size_t chunk_index = chunk_indices[idx];
           size_t file_data_offset =
               header().offset_to_point_data() + chunk_table.chunk_offset(chunk_index);
@@ -443,17 +470,28 @@ class LASReader {
                                 chunk_table.decompressed_chunk_offsets()[chunk_indexes.first];
           size_t n_points = chunk_table.points_per_chunk()[chunk_index];
           if (chunk_index == 0) {
-            LASPP_ASSERT_EQ(point_offset, 0u);
+            LASPP_ASSERT_EQ(point_offset, 0U);
           }
           m_laz_reader->decompress_chunk(std::span<const std::byte>(compressed_buffer),
                                          output_location.subspan(point_offset, n_points));
+
+          if (m_progress_callback) {
+            std::lock_guard<std::mutex> lock(m_progress_mutex);
+            size_t done = ++chunks_done;
+            m_progress_callback(static_cast<double>(done) / static_cast<double>(total_chunks));
+          }
         });
       }
       return output_location.subspan(0, total_n_points);
     }
     LASPP_ASSERT(chunk_indexes.first == 0);
     LASPP_ASSERT(chunk_indexes.second == 1);
-    return read_chunk(output_location, 0);
+    auto result = read_chunk(output_location, 0);
+    if (m_progress_callback) {
+      std::lock_guard<std::mutex> lock(m_progress_mutex);
+      m_progress_callback(1.0);
+    }
+    return result;
   }
 
   std::vector<std::byte> read_vlr_data(const LASVLRWithGlobalOffset& vlr) {
@@ -547,7 +585,9 @@ class LASReader {
       if (m_mapped_file.has_value()) {
         // Memory-mapped path: get_bytes is zero-copy and thread-safe.
         // Decompress all chunks in parallel — each call uses only local state.
-        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t i) {
+        size_t chunks_done = 0;
+        const size_t total_chunks = chunk_indices.size();
+        utilities::parallel_for(size_t{0}, total_chunks, [&](size_t i) {
           const size_t chunk_idx = chunk_indices[i];
           const size_t file_data_offset =
               header().offset_to_point_data() + chunk_table.chunk_offset(chunk_idx);
@@ -555,12 +595,20 @@ class LASReader {
           m_laz_reader->decompress_chunk(
               buf.data,
               output_location.subspan(output_offsets[i], points_per_chunk_vec[chunk_idx]));
+
+          if (m_progress_callback) {
+            std::lock_guard<std::mutex> lock(m_progress_mutex);
+            size_t done = ++chunks_done;
+            m_progress_callback(static_cast<double>(done) / static_cast<double>(total_chunks));
+          }
         });
       } else {
         // Stream-based path: read chunks in parallel (with mutex protection) and decompress.
         // This overlaps I/O and decompression - while one thread decompresses, others can read.
         std::mutex stream_mutex;
-        utilities::parallel_for(size_t{0}, chunk_indices.size(), [&](size_t i) {
+        size_t chunks_done = 0;
+        const size_t total_chunks = chunk_indices.size();
+        utilities::parallel_for(size_t{0}, total_chunks, [&](size_t i) {
           const size_t chunk_idx = chunk_indices[i];
           const size_t file_data_offset =
               header().offset_to_point_data() + chunk_table.chunk_offset(chunk_idx);
@@ -578,6 +626,12 @@ class LASReader {
           m_laz_reader->decompress_chunk(
               std::span<const std::byte>(compressed_buffer),
               output_location.subspan(output_offsets[i], points_per_chunk_vec[chunk_idx]));
+
+          if (m_progress_callback) {
+            std::lock_guard<std::mutex> lock(m_progress_mutex);
+            size_t done = ++chunks_done;
+            m_progress_callback(static_cast<double>(done) / static_cast<double>(total_chunks));
+          }
         });
       }
 
@@ -586,7 +640,12 @@ class LASReader {
       // For non-LAZ files, there's only one chunk
       LASPP_ASSERT(chunk_indices.size() == 1 && chunk_indices[0] == 0,
                    "Non-LAZ files should only have chunk index 0");
-      return read_chunk<T>(output_location, 0);
+      auto result = read_chunk<T>(output_location, 0);
+      if (m_progress_callback) {
+        std::lock_guard<std::mutex> lock(m_progress_mutex);
+        m_progress_callback(1.0);
+      }
+      return result;
     }
   }
 };

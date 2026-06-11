@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
+# SPDX-License-Identifier: MIT
+
+name: Sanitizers
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  asan-ubsan:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC ASan+UBSan
+            cxx: g++-14
+          - name: Clang ASan+UBSan
+            cxx: clang++-18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GCC
+        if: matrix.cxx == 'g++-14'
+        run: sudo apt-get update && sudo apt-get install -y g++-14
+      - name: Install Clang
+        if: matrix.cxx == 'clang++-18'
+        run: sudo apt-get update && sudo apt-get install -y clang-18
+      - name: Configure
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug -DLASPP_BUILD_TESTS=ON -DLASPP_BUILD_BENCHMARK=OFF -DLASPP_AGGRESSIVE_OPTIMIZATIONS=OFF -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure

@@ -130,7 +130,7 @@ class IntegerEncoder {
 
     if (k < 32) {
       if (k == 0) {
-        m_symbol_encoders->encode(stream, k, static_cast<uint32_t>(integer));
+        m_symbol_encoders->encode(stream, k, static_cast<uint_fast16_t>(integer));
         return;
       }
       if (integer < 0) {

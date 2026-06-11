@@ -59,7 +59,8 @@ function(setup_laszip)
   # Quiet warnings coming from LASzip itself.
   if(NOT MSVC)
     # Common flags for both GCC and Clang
-    set(_common_flags -Wno-format -Wno-format-security -Wno-switch)
+    set(_common_flags -Wno-format -Wno-format-security -Wno-switch
+                      -Wno-deprecated-declarations -fno-sanitize=undefined)
     # GCC-specific flags
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       list(APPEND _common_flags -Wno-maybe-uninitialized

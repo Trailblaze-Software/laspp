@@ -128,7 +128,7 @@ class RGB12EncoderT {
     uint8_t cur[6];
     to_bytes(color_data, cur);
 
-    uint32_t sym = 0;
+    uint_fast16_t sym = 0;
     sym |= (last[0] != cur[0]) ? (1u << 0u) : 0u;
     sym |= (last[1] != cur[1]) ? (1u << 1u) : 0u;
     sym |= (last[2] != cur[2]) ? (1u << 2u) : 0u;

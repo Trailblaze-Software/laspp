@@ -262,13 +262,13 @@ if(LASPP_BUILD_TESTS)
         ${LASZIP_WRAPPER_SOURCES}
         PROPERTIES COMPILE_FLAGS
                    "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion \
--Wno-conversion -Wno-useless-cast")
+-Wno-conversion -Wno-useless-cast -Wno-deprecated-declarations")
     else()
       set_source_files_properties(
         ${LASZIP_WRAPPER_SOURCES}
         PROPERTIES COMPILE_FLAGS
                    "-Wno-old-style-cast -Wno-shadow -Wno-sign-conversion \
--Wno-conversion")
+-Wno-conversion -Wno-deprecated-declarations")
     endif()
 
     link_target_to_laszip(test_laszip_interop)
