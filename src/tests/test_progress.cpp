@@ -1,16 +1,11 @@
 /*
- * SPDX-FileCopyrightText: (c) 2026 Trailblaze Software, all rights reserved
+ * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
  * SPDX-License-Identifier: MIT
  */
 
-/*
- * SPDX-FileCopyrightText: (c) 2025-2026 Trailblaze Software, all rights reserved
- * SPDX-License-Identifier: MIT
- *
- * Tests for LASReader::set_progress_callback — verifies the callback fires
- * correctly with both single-chunk and multi-chunk files, across memory-mapped
- * and stream-based I/O paths, and with multiple threads.
- */
+// Tests for LASReader::set_progress_callback — verifies the callback fires
+// correctly with both single-chunk and multi-chunk files, across memory-mapped
+// and stream-based I/O paths, and with multiple threads.
 
 #include <algorithm>
 #include <atomic>
