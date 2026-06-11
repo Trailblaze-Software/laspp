@@ -319,6 +319,52 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     }
   }
 
+  // Test that format 3 round-trips preserve ColorData (regression test)
+  {
+    std::stringstream input_stream;
+    {
+      LASWriter writer(input_stream, 3, 0);  // Format 3: XYZ + GPS + RGB
+      writer.copy_header_metadata(LASHeader());
+      writer.header().transform() = Transform({0.001, 0.001, 0.001}, {0.0, 0.0, 0.0});
+
+      std::vector<LASPointFormat3> points;
+      for (int i = 0; i < 50; ++i) {
+        LASPointFormat3 point;
+        point.x = i * 1000;
+        point.y = i * 1000;
+        point.z = i * 100;
+        point.intensity = 100;
+        point.bit_byte = 0;
+        point.classification_byte = 0;
+        point.scan_angle_rank = 0;
+        point.user_data = 0;
+        point.point_source_id = 0;
+        point.gps_time = GPSTime(static_cast<double>(i)).gps_time;
+        point.red = static_cast<uint16_t>(i * 100);
+        point.green = static_cast<uint16_t>(i * 200);
+        point.blue = static_cast<uint16_t>(i * 300);
+        points.push_back(point);
+      }
+      writer.write_points(std::span<const LASPointFormat3>(points));
+    }
+
+    input_stream.seekg(0);
+    LASReader reader(input_stream);
+    LASPP_ASSERT_EQ(reader.header().num_points(), 50u);
+    LASPP_ASSERT_EQ(reader.header().point_format(), 3);
+
+    // Read back and verify colors
+    std::vector<LASPointFormat3> output_points(50);
+    reader.read_chunks<LASPointFormat3>(output_points, {0, reader.num_chunks()});
+
+    for (size_t i = 0; i < 50; ++i) {
+      LASPP_ASSERT_EQ(output_points[i].red, static_cast<uint16_t>(i * 100));
+      LASPP_ASSERT_EQ(output_points[i].green, static_cast<uint16_t>(i * 200));
+      LASPP_ASSERT_EQ(output_points[i].blue, static_cast<uint16_t>(i * 300));
+      LASPP_ASSERT_EQ(output_points[i].gps_time.f64, static_cast<double>(i));
+    }
+  }
+
   // Test copy_from_reader with LAZ compression
   {
     std::stringstream input_stream;
