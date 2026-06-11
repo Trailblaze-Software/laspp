@@ -125,7 +125,31 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     LASPP_ASSERT_EQ(fractions[0], 1.0);
   }
 
-  // ── Test 2: LAZ multi-chunk read_chunks — monotonic and complete ──
+  // ── Test 2: Non-LAZ read_chunks_list → single callback with 1.0 ──
+  {
+    std::stringstream stream;
+    {
+      LASWriter writer(stream, 0, 0);
+      std::vector<LASPointFormat0> points(40);
+      for (size_t i = 0; i < 40; ++i) points[i].x = static_cast<int32_t>(i);
+      writer.write_points(std::span<const LASPointFormat0>(points));
+    }
+
+    LASReader reader(stream);
+    LASPP_ASSERT_EQ(reader.num_chunks(), 1u);
+    LASPP_ASSERT(!reader.header().is_laz_compressed());
+
+    std::vector<double> fractions;
+    reader.set_progress_callback([&](double f) { fractions.push_back(f); });
+
+    std::vector<LASPointFormat0> points(40);
+    reader.read_chunks_list<LASPointFormat0>(points, {0});
+
+    LASPP_ASSERT_EQ(fractions.size(), 1u);
+    LASPP_ASSERT_EQ(fractions[0], 1.0);
+  }
+
+  // ── Test 3: LAZ multi-chunk read_chunks — monotonic and complete ──
   {
     std::stringstream stream;
     write_multi_chunk_laz_stream(stream, 4);
