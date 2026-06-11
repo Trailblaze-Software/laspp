@@ -47,13 +47,12 @@ class TempFile {
 
 void set_env(const char* name, const char* value) {
 #ifdef _WIN32
-  _putenv_s(name, value);
+  _putenv_s(name, value ? value : "");
 #else
-  if (value != nullptr && *value != '\0') {
+  if (value && *value)
     setenv(name, value, 1);
-  } else {
+  else
     unsetenv(name);
-  }
 #endif
 }
 
