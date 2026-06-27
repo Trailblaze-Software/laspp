@@ -83,14 +83,16 @@ struct LASPP_PACKED sGeoKeys {
   };
 };
 
+#pragma pack(pop)
+
 struct GeoKeys : sGeoKeys {
-  std::vector<sKeyEntry> keys;
+  std::vector<sGeoKeys::sKeyEntry> keys;
 
   GeoKeys(std::istream& in_stream) {
-    in_stream.read(reinterpret_cast<char*>(this), sizeof(sGeoKeys));
+    in_stream.read(reinterpret_cast<char*>(static_cast<sGeoKeys*>(this)), sizeof(sGeoKeys));
     keys.resize(wNumberOfKeys);
     in_stream.read(reinterpret_cast<char*>(keys.data()),
-                   static_cast<std::streamsize>(sizeof(sKeyEntry) * wNumberOfKeys));
+                   static_cast<std::streamsize>(sizeof(sGeoKeys::sKeyEntry) * wNumberOfKeys));
   }
 
   friend std::ostream& operator<<(std::ostream& os, const GeoKeys& geo_keys) {
@@ -105,8 +107,6 @@ struct GeoKeys : sGeoKeys {
   }
 };
 
-#pragma pack(pop)
-
 struct GeoKeyValue {
   enum class Type : uint8_t { U16, Doubles, String };
 
@@ -117,11 +117,12 @@ struct GeoKeyValue {
 
   GeoKeyValue() = default;
 
-  GeoKeyValue(uint16_t value) : type(Type::U16), u16(value) {}
+  explicit GeoKeyValue(uint16_t value) : type(Type::U16), u16(value) {}
 
-  GeoKeyValue(std::vector<double> value) : type(Type::Doubles), doubles(std::move(value)) {}
+  explicit GeoKeyValue(std::vector<double> value)
+      : type(Type::Doubles), doubles(std::move(value)) {}
 
-  GeoKeyValue(std::string value) : type(Type::String), str(std::move(value)) {}
+  explicit GeoKeyValue(std::string value) : type(Type::String), str(std::move(value)) {}
 };
 
 class LASGeoKeys {
@@ -137,7 +138,9 @@ class LASGeoKeys {
         m_key_revision(key_revision),
         m_minor_revision(minor_revision) {}
 
-  void add_key(uint16_t key_id, uint16_t value) { keys.insert_or_assign(key_id, value); }
+  void add_key(uint16_t key_id, uint16_t value) {
+    keys.insert_or_assign(key_id, GeoKeyValue(value));
+  }
 
   void add_key(uint16_t key_id, std::vector<double> value) {
     keys.insert_or_assign(key_id, GeoKeyValue(std::move(value)));
