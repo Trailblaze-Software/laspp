@@ -14,7 +14,6 @@
 #include <map>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 #include "utilities/macros.hpp"
@@ -108,12 +107,29 @@ struct GeoKeys : sGeoKeys {
 
 #pragma pack(pop)
 
+struct GeoKeyValue {
+  enum class Type : uint8_t { U16, Doubles, String };
+
+  Type type = Type::U16;
+  uint16_t u16 = 0;
+  std::vector<double> doubles;
+  std::string str;
+
+  GeoKeyValue() = default;
+
+  GeoKeyValue(uint16_t value) : type(Type::U16), u16(value) {}
+
+  GeoKeyValue(std::vector<double> value) : type(Type::Doubles), doubles(std::move(value)) {}
+
+  GeoKeyValue(std::string value) : type(Type::String), str(std::move(value)) {}
+};
+
 class LASGeoKeys {
   uint16_t m_key_directory_version;
   uint16_t m_key_revision;
   uint16_t m_minor_revision;
 
-  std::map<uint16_t, std::variant<uint16_t, std::vector<double>, std::string>> keys;
+  std::map<uint16_t, GeoKeyValue> keys;
 
  public:
   LASGeoKeys(uint16_t key_directory_version, uint16_t key_revision, uint16_t minor_revision)
@@ -121,8 +137,14 @@ class LASGeoKeys {
         m_key_revision(key_revision),
         m_minor_revision(minor_revision) {}
 
-  void add_key(uint16_t key_id, std::variant<uint16_t, std::vector<double>, std::string> value) {
-    keys[key_id] = value;
+  void add_key(uint16_t key_id, uint16_t value) { keys.insert_or_assign(key_id, value); }
+
+  void add_key(uint16_t key_id, std::vector<double> value) {
+    keys.insert_or_assign(key_id, GeoKeyValue(std::move(value)));
+  }
+
+  void add_key(uint16_t key_id, std::string value) {
+    keys.insert_or_assign(key_id, GeoKeyValue(std::move(value)));
   }
 
   friend std::ostream& operator<<(std::ostream& os, const LASGeoKeys& geo_keys) {
@@ -131,19 +153,24 @@ class LASGeoKeys {
     os << "Minor Revision: " << geo_keys.m_minor_revision << std::endl;
     for (const auto& [key_id, value] : geo_keys.keys) {
       os << "Key ID: " << key_id << std::endl;
-      std::visit([&os](const auto& value_t) { os << "Value: " << value_t << std::endl; }, value);
+      switch (value.type) {
+        case GeoKeyValue::Type::U16:
+          os << "Value: " << value.u16 << std::endl;
+          break;
+        case GeoKeyValue::Type::Doubles:
+          os << "Value: " << value.doubles << std::endl;
+          break;
+        case GeoKeyValue::Type::String:
+          os << "Value: " << value.str << std::endl;
+          break;
+      }
     }
     return os;
   }
 
-  const std::variant<uint16_t, std::vector<double>, std::string>& get_key(uint16_t key_id) const {
-    return keys.at(key_id);
-  }
+  const GeoKeyValue& get_key(uint16_t key_id) const { return keys.at(key_id); }
 
-  const std::map<uint16_t, std::variant<uint16_t, std::vector<double>, std::string>>& get_keys()
-      const {
-    return keys;
-  }
+  const std::map<uint16_t, GeoKeyValue>& get_keys() const { return keys; }
 };
 
 // Fixed-width LAS string (user_id, description, ...): may omit a trailing NUL.
